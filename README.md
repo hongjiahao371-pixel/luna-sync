@@ -38,6 +38,15 @@ docker compose up -d --build
 
 浏览器访问 `http://设备IP:8765`。
 
+也可以直接使用 Docker Hub 镜像：
+
+```bash
+docker pull jvsheng/luna-sync:latest
+```
+
+仓库的 `main` 分支和 `v*` 标签更新后，会通过 GitHub Actions 自动发布 amd64
+和 arm64 镜像。
+
 ## 项目结构
 
 ```text
