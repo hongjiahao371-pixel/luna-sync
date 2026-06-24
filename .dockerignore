@@ -1,0 +1,9 @@
+.git
+.gitignore
+config.json
+downloads
+media
+state
+__pycache__
+*.py[cod]
+.DS_Store

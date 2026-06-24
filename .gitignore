@@ -1,0 +1,8 @@
+config.json
+downloads/
+media/
+state/
+*.part
+__pycache__/
+*.py[cod]
+.DS_Store

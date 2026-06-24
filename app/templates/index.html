@@ -1,0 +1,95 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>Luna Sync</title>
+<style>body{margin:0;font:14px system-ui,sans-serif;background:#181a1f;color:#e6e6e6;padding-bottom:130px}.bar{background:#23262e;padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #333}.bar b{font-size:16px}.bar button{padding:7px 13px;border:0;border-radius:5px;background:#3b6fd4;color:#fff;cursor:pointer;font-size:13px}.bar button.g{background:#2e7d32}.bar button.r{background:#b23b3b}.bar button.k{background:#3a3f4b}.bar button:disabled{opacity:.5}.bar select,.bar input{background:#2a2d34;color:#e6e6e6;border:1px solid #444;padding:6px;border-radius:4px}#st{font-weight:700}.on{color:#4caf50}.off{color:#ef5350}.w{color:#fdd835}.wifibox{background:#1c1f26;padding:10px 14px;border-bottom:1px solid #2a2d34}.wifibox button{padding:6px 12px;border:0;border-radius:5px;background:#3b6fd4;color:#fff;cursor:pointer}.wifibox input{background:#2a2d34;color:#e6e6e6;border:1px solid #444;padding:6px;border-radius:4px}.wnet{display:inline-block;background:#2a2d34;padding:6px 10px;margin:3px;border-radius:5px;cursor:pointer;border:1px solid #3a3f4b}.wnet:hover{border-color:#3b6fd4}.wnet.cam{border-color:#2e7d32;background:#1e3024}table{width:100%;border-collapse:collapse}th,td{padding:5px 8px;text-align:left;border-bottom:1px solid #2c2f36;font-size:12.5px;vertical-align:middle}th{background:#23262e;position:sticky;top:0;z-index:1}tr:hover td{background:#1f2229;cursor:pointer}.nm{font-family:monospace}.thumb{width:48px;height:48px;object-fit:cover;border-radius:4px;background:#0f1115}.vic{font-size:26px;text-align:center;width:48px}#prog{position:fixed;bottom:0;left:0;right:0;background:#23262e;padding:8px 14px;border-top:2px solid #333}.pb{height:7px;background:#3a3f4b;border-radius:4px;overflow:hidden;margin:2px 0}.pb>i{display:block;height:100%;background:#3b6fd4;width:0}#lg{background:#111;padding:5px 14px;max-height:80px;overflow:auto;font:11px monospace;color:#8f8}small{color:#777}#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:50;align-items:center;justify-content:center;flex-direction:column}#ov img{max-width:92vw;max-height:88vh;border-radius:6px}#ov video{max-width:92vw;max-height:88vh}#ovc{position:absolute;top:12px;right:24px;color:#fff;font-size:34px;cursor:pointer}#ovn{color:#ccc;margin-top:8px;font-family:monospace}</style></head><body>
+<div class="bar"><b>📷 Luna Sync</b><span id="st">初始化…</span><button class="g" id="bScan">🔄 扫描相机文件</button><button class="k" id="bAll">全选/反选</button>筛选<select id="fl"><option value="">全部</option><option value="MP4">仅 MP4</option><option value="LRV">仅 LRV</option><option value="JPG">仅 JPG</option><option value="LIV">仅 LIV</option></select><button id="bDl">⬇ 下载选中</button><button class="r" id="bCan">⏹ 取消</button><small>存到 89:/home/jvsheng/luna-sync/downloads</small></div>
+<div class="wifibox">当前WiFi: <b id="curwifi">—</b> <span id="savedtag"></span> <button id="bWifi">📡 扫描WiFi</button> <button class="k" id="bForget">清除记住</button><br><span id="wifilist"></span><br><small>连接:</small> <input id="ssid" placeholder="SSID(点网络自动填)" style="width:220px"> <input id="pw" type="password" placeholder="密码" style="width:140px"> <label style="color:#aaa"><input type="checkbox" id="rem"> 记住密码</label> <button class="g" id="bConn">🔗 连接</button></div>
+<table id="t"><thead><tr><th>预览</th><th><input type="checkbox" id="cAll"></th><th>文件名</th><th>类型</th><th>日期</th><th>大小</th><th>状态</th></tr></thead><tbody></tbody></table>
+<div id="lg"></div>
+<div id="prog"><div id="cur">空闲</div><div class="pb"><i id="pf"></i></div><div id="tot"></div><div class="pb"><i id="pt"></i></div></div>
+<div id="ov"><div id="ovc">✕</div><div id="ovc2"></div><div id="ovn"></div></div>
+<script>
+var FILES=[],SEL=new Set();
+function $(i){return document.getElementById(i)}
+function fmt(b){if(b===null||b===undefined)return '—';var u=['B','KB','MB','GB'];var i=0;while(b>=1024&&i<3){b/=1024;i++}return b.toFixed(b<10&&i?1:0)+' '+u[i]}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
+function vis(){var f=$('fl').value;return FILES.filter(function(x){return !f||x.kind===f})}
+function isImg(k){return k==='JPG'||k==='INSP'||k==='LIV'||k==='JPEG'}
+function isVid(k){return k==='MP4'||k==='LRV'}
+function render(){
+  var tb=$('t').querySelector('tbody');tb.innerHTML='';
+  vis().forEach(function(it){
+    var tr=document.createElement('tr');
+    var cprev=document.createElement('td');
+    if(isImg(it.kind)){var im=document.createElement('img');im.className='thumb';im.src='/thumb/'+encodeURIComponent(it.name);im.loading='lazy';cprev.appendChild(im)}
+    else if(isVid(it.kind)){cprev.innerHTML='<div class="vic">🎬</div>'}
+    else{cprev.innerHTML='<div class="vic">📄</div>'}
+    tr.appendChild(cprev);
+    var ck=document.createElement('input');ck.type='checkbox';ck.checked=SEL.has(it.name);ck.onclick=function(e){e.stopPropagation()};ck.onchange=function(){ck.checked?SEL.add(it.name):SEL.delete(it.name)};
+    var c1=document.createElement('td');c1.appendChild(ck);tr.appendChild(c1);
+    [['name',it.name,'nm'],['kind',it.kind,''],['date',(it.date||'')+' '+(it.time||''),''],['size',fmt(it.bytes),''],['status',it.status||'','']].forEach(function(e){var td=document.createElement('td');td.textContent=e[1];if(e[2])td.className=e[2];if(e[0]==='name')td.title=e[1];tr.appendChild(td)});
+    tr.onclick=function(){openPrev(it)};
+    tb.appendChild(tr);
+  });
+}
+function openPrev(it){
+  var box=$('ovc2');var nm=$('ovn');nm.textContent=it.name+' ('+fmt(it.bytes)+')';
+  if(isImg(it.kind)){box.innerHTML='<img src="/img/'+encodeURIComponent(it.name)+'">'}
+  else if(isVid(it.kind)){openVideo(it.name)}
+  else{box.innerHTML='<div style="color:#ccc">此类型无预览</div>'}
+  $('ov').style.display='flex';
+}
+function closePrev(){$('ov').style.display='none';$('ovc2').innerHTML=''}
+function openVideo(name){
+  var box=$('ovc2');$('ovn').textContent=name+' [准备转码...]';
+  box.innerHTML='<div style="color:#ccc;padding:40px;text-align:center">⏳ H.265→H.264 转码中,首次需等待<br><small>(LRV低清快,MP4高清较慢)</small></div>';
+  $('ov').style.display='flex';
+  fetch('/api/transcode/'+encodeURIComponent(name),{method:'POST'});
+  var iv=setInterval(async function(){
+    try{var d=await(await fetch('/api/transcode/status/'+encodeURIComponent(name))).json();
+      if(d.status==='done'){clearInterval(iv);box.innerHTML='<video src="/play/'+encodeURIComponent(name)+'" controls autoplay style="max-width:92vw;max-height:88vh"></video>';$('ovn').textContent=name+' (已转码,可播放)'}
+      else if(d.status==='failed'){clearInterval(iv);box.innerHTML='<div style="color:#f88;padding:40px;text-align:center">转码失败:'+(d.msg||'未知')+'<br><small>可下载后用VLC播放</small></div>'}
+      else{$('ovn').textContent=name+' ['+({downloading:'下载中',encoding:'转码中',pending:'排队'}[d.status]||'处理中')+'...]'}}
+    catch(e){}},2000);
+}
+$('ovc').onclick=closePrev;$('ov').onclick=function(e){if(e.target===$('ov'))closePrev()};
+async function scan(){
+  $('bScan').textContent='扫描中…';$('bScan').disabled=true;$('st').textContent='扫描中…';$('st').className='w';
+  try{var r=await fetch('/api/files');var d=await r.json();FILES=d.items;$('st').textContent=d.connected?('🟢 相机在线 · '+d.items.length+' 项'):('🔴 相机离线 · 本地 '+d.items.length+' 项');$('st').className=d.connected?'on':'off';render()}
+  catch(e){$('st').textContent='错误:'+e;$('st').className='off'}
+  finally{$('bScan').textContent='🔄 扫描相机文件';$('bScan').disabled=false}
+}
+async function scanWifi(){
+  $('bWifi').textContent='扫描中…';$('wifilist').innerHTML='';
+  try{var r=await fetch('/api/wifi/scan');var d=await r.json();$('curwifi').textContent=d.current||'未连接';
+    var html='';d.nets.forEach(function(n){var mark=n.is_camera?' 📷相机':'';var sig=n.signal?('('+n.signal+'%)'):'';html+='<span class="wnet'+(n.is_camera?' cam':'')+'" data-ssid="'+esc(n.ssid)+'">'+esc(n.ssid)+mark+' '+sig+'</span>'});
+    $('wifilist').innerHTML=html||'<small>没扫到网络</small>';
+    var nodes=document.querySelectorAll('.wnet');for(var i=0;i<nodes.length;i++){nodes[i].onclick=function(){$('ssid').value=this.getAttribute('data-ssid')}}}
+  catch(e){$('wifilist').innerHTML='错误:'+e}
+  finally{$('bWifi').textContent='📡 扫描WiFi'}
+}
+async function connWifi(){
+  var ssid=$('ssid').value.trim();if(!ssid)return alert('请输入或点选 SSID');var pw=$('pw').value;var remember=$('rem').checked;
+  $('bConn').textContent='连接中…';$('bConn').disabled=true;
+  try{await fetch('/api/wifi/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:ssid,password:pw,remember:remember})});setTimeout(scan,5000)}
+  catch(e){alert('错误:'+e)}
+  finally{$('bConn').textContent='🔗 连接';$('bConn').disabled=false}
+}
+$('bScan').onclick=scan;
+$('bAll').onclick=function(){var v=vis();var all=!v.every(function(x){return SEL.has(x.name)});v.forEach(function(x){all?SEL.add(x.name):SEL.delete(x.name)});render()};
+$('cAll').onchange=$('bAll').onclick;$('fl').onchange=render;
+$('bDl').onclick=async function(){if(!SEL.size)return alert('请先勾选文件');await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:Array.from(SEL)})});alert('已加入下载队列 '+SEL.size+' 个')};
+$('bCan').onclick=function(){fetch('/api/cancel',{method:'POST'})};
+$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;
+$('bForget').onclick=async function(){if(!confirm('清除记住的WiFi密码?'))return;await fetch('/api/wifi/forget',{method:'POST'});alert('已清除')};
+async function poll(){
+  try{var d=await(await fetch('/api/state')).json();$('curwifi').textContent=d.wifi_current||'未连接';
+    $('savedtag').innerHTML=d.wifi_saved?'<small style="color:#4caf50">⭐已记住</small>':'';
+    if(d.wifi_conn&&!d.connected){$('st').textContent='连接WiFi中…';$('st').className='w'}
+    else if(!FILES.length&&!d.connected){$('st').textContent='🔴 离线 · 先扫描WiFi连相机';$('st').className='off'}
+    if(d.current){var c=d.current;var pc=c.total?Math.round(c.downloaded/c.total*100):0;$('cur').textContent='下载 '+c.name+' '+pc+'% ('+fmt(c.downloaded)+'/'+fmt(c.total)+', '+fmt(c.speed)+'/s)';$('pf').style.width=pc+'%'}
+    else{$('cur').textContent=d.queue_len?('队列 '+d.queue_len+' 个'):'空闲';$('pf').style.width=0}
+    $('tot').textContent='本次完成 '+d.completed;$('pt').style.width=FILES.length?Math.round(d.completed/FILES.length*100)+'%':0;
+    $('lg').innerHTML=d.log.map(function(l){return '<div>'+esc(l)+'</div>'}).join('')}
+  catch(e){}
+}
+poll();setInterval(poll,1500);
+</script></body></html>

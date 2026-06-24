@@ -1,0 +1,8 @@
+{
+  "camera_host": "192.168.42.1",
+  "camera_ssid": "YOUR_CAMERA_WIFI",
+  "camera_password": "YOUR_CAMERA_PASSWORD",
+  "wifi_iface": null,
+  "download_dir": "/downloads",
+  "web_port": 8765
+}
