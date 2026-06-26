@@ -44,6 +44,12 @@ docker compose up -d --build
 docker pull jvsheng/luna-sync:latest
 ```
 
+或使用 GitHub Container Registry 镜像：
+
+```bash
+docker pull ghcr.io/hongjiahao371-pixel/luna-sync:latest
+```
+
 仓库的 `main` 分支和 `v*` 标签更新后，会通过 GitHub Actions 自动发布 amd64
 和 arm64 镜像。
 
