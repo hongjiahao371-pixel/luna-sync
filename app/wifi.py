@@ -2,7 +2,10 @@ import subprocess
 
 
 def run(args, timeout=30):
-    return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(args, 127, '', 'nmcli not found')
 
 
 def detect_interface(preferred=None):

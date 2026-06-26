@@ -1,4 +1,4 @@
-import os, sys, json, time, threading, socket, subprocess, logging, io
+import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes
 import urllib.request, urllib.error
 from flask import Flask, jsonify, request, render_template, send_file, Response, abort
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,16 +19,19 @@ DLDIR = CFG['download_dir']
 IFACE = wifi.detect_interface(CFG.get('wifi_iface'))
 CAM_SSID = CFG.get('camera_ssid', '')
 DEF_PW = CFG.get('camera_password')
-THUMB_DIR = '/state/thumbs'
-ENC_DIR = '/state/encoded'
-WIFI_FILE = '/state/wifi.json'
+AUTO_INTERVAL = max(10, int(CFG.get('auto_sync_interval_sec', 30)))
+STATE_DIR = CFG.get('state_dir', '/state')
+THUMB_DIR = os.path.join(STATE_DIR, 'thumbs')
+ENC_DIR = os.path.join(STATE_DIR, 'encoded')
+WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
 for d in (DLDIR, THUMB_DIR, ENC_DIR):
     os.makedirs(d, exist_ok=True)
 
 lk = threading.Lock()
 ST = {'connected': False, 'wifi_conn': False, 'files': [], 'queue': [], 'current': None,
       'completed': 0, 'log': [], 'wifi_current': '', 'wifi_target': CAM_SSID, 'wifi_password': None,
-      'wifi_saved': False, 'transcodes': {}}
+      'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool(CFG.get('auto_sync', True)),
+      'last_auto_sync': ''}
 cancel = threading.Event()
 
 def addlog(m):
@@ -115,6 +118,17 @@ def local_files():
                 out[f] = os.path.getsize(p)
     return out
 
+def safe_path(base, name):
+    root = os.path.abspath(base)
+    path = os.path.abspath(os.path.join(root, name))
+    if path == root or not path.startswith(root + os.sep):
+        abort(400)
+    return path
+
+def local_path(name):
+    path = safe_path(DLDIR, name)
+    return path if os.path.isfile(path) else None
+
 def refresh():
     if not (wifi_on_target() and cam_on()):
         with lk:
@@ -137,6 +151,42 @@ def refresh():
         with lk:
             ST['connected'] = False
         return False
+
+def enqueue(names):
+    loc = local_files()
+    added = 0
+    with lk:
+        current = ST['current']['name'] if ST['current'] else None
+        known = {f['name'] for f in ST['files']}
+        for name in names:
+            if name in loc or name in ST['queue'] or name == current or name not in known:
+                continue
+            ST['queue'].append(name)
+            added += 1
+    return added
+
+def auto_sync_once():
+    if not refresh():
+        return 0
+    with lk:
+        names = [f['name'] for f in ST['files']]
+    added = enqueue(names)
+    with lk:
+        ST['last_auto_sync'] = time.strftime('%H:%M:%S')
+    if added:
+        addlog('自动同步加入 ' + str(added) + ' 个新文件')
+    return added
+
+def auto_sync_worker():
+    while True:
+        try:
+            with lk:
+                enabled = ST['auto_sync']
+            if enabled:
+                auto_sync_once()
+        except Exception as e:
+            log.warning('auto_sync:' + str(e)[:60])
+        time.sleep(AUTO_INTERVAL)
 
 def dl_worker():
     while True:
@@ -175,8 +225,8 @@ def dl_worker():
 
 
 def transcode_worker(name):
-    out = os.path.join(ENC_DIR, name + '.mp4')
-    src_file = os.path.join(DLDIR, name)
+    out = safe_path(ENC_DIR, name + '.mp4')
+    src_file = safe_path(DLDIR, name)
     try:
         if not os.path.exists(src_file):
             url = file_url(name)
@@ -232,7 +282,7 @@ def api_tc_start(name):
 
 @app.route('/play/<path:name>')
 def play(name):
-    out = os.path.join(ENC_DIR, name + '.mp4')
+    out = safe_path(ENC_DIR, name + '.mp4')
     if not os.path.exists(out):
         abort(404)
     return send_file(out, mimetype='video/mp4')
@@ -248,7 +298,20 @@ def api_state():
             'wifi_current': ST['wifi_current'], 'wifi_saved': ST['wifi_saved'],
             'file_count': len(ST['files']), 'queue_len': len(ST['queue']),
             'current': ST['current'], 'completed': ST['completed'],
-            'log': ST['log'][-12:], 'camera_ssid': CAM_SSID, 'wifi_iface': IFACE})
+            'log': ST['log'][-12:], 'camera_ssid': CAM_SSID, 'wifi_iface': IFACE,
+            'auto_sync': ST['auto_sync'], 'auto_interval': AUTO_INTERVAL,
+            'last_auto_sync': ST['last_auto_sync']})
+
+@app.route('/api/auto-sync', methods=['POST'])
+def api_auto_sync():
+    data = request.json or {}
+    enabled = bool(data.get('enabled'))
+    with lk:
+        ST['auto_sync'] = enabled
+    addlog('自动同步已' + ('开启' if enabled else '关闭'))
+    if enabled:
+        threading.Thread(target=auto_sync_once, daemon=True).start()
+    return jsonify({'ok': True, 'auto_sync': enabled})
 
 @app.route('/api/wifi/scan')
 def wifi_scan():
@@ -320,13 +383,10 @@ def api_files():
 
 @app.route('/api/download', methods=['POST'])
 def api_dl():
-    ns = request.json.get('files', [])
-    with lk:
-        for n in ns:
-            if n not in ST['queue']:
-                ST['queue'].append(n)
-    addlog('队列 +' + str(len(ns)))
-    return jsonify({'queued': len(ns)})
+    ns = (request.json or {}).get('files', [])
+    added = enqueue(ns)
+    addlog('队列 +' + str(added))
+    return jsonify({'queued': added})
 
 @app.route('/api/cancel', methods=['POST'])
 def api_can():
@@ -335,31 +395,38 @@ def api_can():
 
 @app.route('/api/file/<path:name>', methods=['DELETE'])
 def api_del(name):
-    p = os.path.join(DLDIR, name)
+    p = safe_path(DLDIR, name)
     if os.path.exists(p):
         os.remove(p)
     if os.path.exists(p + '.part'):
         os.remove(p + '.part')
+    for extra in (safe_path(ENC_DIR, name + '.mp4'), safe_path(THUMB_DIR, name + '.jpg')):
+        if os.path.exists(extra):
+            os.remove(extra)
     addlog('删除 ' + name)
     return jsonify({'ok': True})
 
 @app.route('/thumb/<path:name>')
 def thumb(name):
-    tp = os.path.join(THUMB_DIR, name + '.jpg')
+    tp = safe_path(THUMB_DIR, name + '.jpg')
     if os.path.exists(tp):
         return send_file(tp, mimetype='image/jpeg')
     low = name.lower()
-    if not low.endswith(('.jpg', '.jpeg', '.insp', '.liv')):
-        return ('', 204)
-    url = file_url(name)
-    if not url:
+    if not low.endswith(('.jpg', '.jpeg', '.insp', '.liv', '.gif', '.png', '.webp')):
         return ('', 204)
     try:
-        cli = LunaClient(HOST); cli.connect()
-        try:
-            data = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'L'}), timeout=20).read()
-        finally:
-            cli.close()
+        p = local_path(name)
+        if p:
+            data = open(p, 'rb').read()
+        else:
+            url = file_url(name)
+            if not url:
+                return ('', 204)
+            cli = LunaClient(HOST); cli.connect()
+            try:
+                data = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'L'}), timeout=20).read()
+            finally:
+                cli.close()
         if Image is None:
             return Response(data, mimetype='image/jpeg')
         im = Image.open(io.BytesIO(data)); im.thumbnail((220, 220)); im.convert('RGB').save(tp, 'JPEG', quality=75)
@@ -370,6 +437,10 @@ def thumb(name):
 
 @app.route('/img/<path:name>')
 def img(name):
+    mime = mimetypes.guess_type(name)[0] or 'image/jpeg'
+    p = local_path(name)
+    if p:
+        return send_file(p, mimetype=mime)
     url = file_url(name)
     if not url:
         abort(404)
@@ -378,10 +449,13 @@ def img(name):
         data = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'L'}), timeout=60).read()
     finally:
         cli.close()
-    return Response(data, mimetype='image/jpeg')
+    return Response(data, mimetype=mime)
 
 @app.route('/video/<path:name>')
 def video(name):
+    local = local_path(name)
+    if local:
+        return send_file(local, mimetype=mimetypes.guess_type(name)[0] or 'video/mp4', conditional=True)
     url = file_url(name)
     if not url:
         abort(404)
@@ -428,5 +502,6 @@ if saved and saved.get('ssid') and saved.get('password'):
 if __name__ == '__main__':
     threading.Thread(target=keeper, daemon=True).start()
     threading.Thread(target=dl_worker, daemon=True).start()
+    threading.Thread(target=auto_sync_worker, daemon=True).start()
     addlog('Luna Sync 启动，无线网卡: ' + (IFACE or '未检测到'))
     app.run(host='0.0.0.0', port=CFG.get('web_port', 8765), threaded=True)

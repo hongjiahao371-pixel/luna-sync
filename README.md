@@ -7,9 +7,10 @@ Luna Sync 是一个部署在 Linux 设备上的相机媒体同步工具。它通
 
 - 自动识别宿主机无线网卡，也可手动指定
 - 扫描并连接相机 Wi-Fi
+- 连上相机 Wi-Fi 后自动增量同步新文件
 - 浏览、下载和删除本地媒体
 - 断点续传
-- 图片缩略图与视频转码
+- 图片、动图与视频预览，H.265 视频可生成 H.264 兼容预览
 - Docker Compose 部署
 
 ## 环境要求
@@ -74,7 +75,10 @@ config.example.json
 | `camera_ssid` | 相机 Wi-Fi 名称 |
 | `camera_password` | 相机 Wi-Fi 密码 |
 | `wifi_iface` | 无线网卡名；`null` 时自动识别 |
+| `auto_sync` | 是否自动增量同步 |
+| `auto_sync_interval_sec` | 自动同步检查间隔，最低 10 秒 |
 | `download_dir` | 容器内下载目录 |
+| `state_dir` | 容器内运行状态、缩略图和转码缓存目录 |
 | `web_port` | Web 服务端口 |
 
 `config.json`、媒体文件和运行状态已被 Git 忽略。记住 Wi-Fi 功能会将凭据保存在

@@ -20,7 +20,7 @@ def parse_size(text):
 
 def file_kind(name):
     s = name.rsplit('.', 1)[-1].upper() if '.' in name else ''
-    if s in ('MP4', 'LRV', 'JPG', 'LIV', 'INSP'):
+    if s in ('MP4', 'LRV', 'MOV', 'JPG', 'JPEG', 'PNG', 'WEBP', 'GIF', 'LIV', 'INSP'):
         return s
     return s or 'FILE'
 

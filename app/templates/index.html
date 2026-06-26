@@ -1,95 +1,150 @@
-<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>Luna Sync</title>
-<style>body{margin:0;font:14px system-ui,sans-serif;background:#181a1f;color:#e6e6e6;padding-bottom:130px}.bar{background:#23262e;padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #333}.bar b{font-size:16px}.bar button{padding:7px 13px;border:0;border-radius:5px;background:#3b6fd4;color:#fff;cursor:pointer;font-size:13px}.bar button.g{background:#2e7d32}.bar button.r{background:#b23b3b}.bar button.k{background:#3a3f4b}.bar button:disabled{opacity:.5}.bar select,.bar input{background:#2a2d34;color:#e6e6e6;border:1px solid #444;padding:6px;border-radius:4px}#st{font-weight:700}.on{color:#4caf50}.off{color:#ef5350}.w{color:#fdd835}.wifibox{background:#1c1f26;padding:10px 14px;border-bottom:1px solid #2a2d34}.wifibox button{padding:6px 12px;border:0;border-radius:5px;background:#3b6fd4;color:#fff;cursor:pointer}.wifibox input{background:#2a2d34;color:#e6e6e6;border:1px solid #444;padding:6px;border-radius:4px}.wnet{display:inline-block;background:#2a2d34;padding:6px 10px;margin:3px;border-radius:5px;cursor:pointer;border:1px solid #3a3f4b}.wnet:hover{border-color:#3b6fd4}.wnet.cam{border-color:#2e7d32;background:#1e3024}table{width:100%;border-collapse:collapse}th,td{padding:5px 8px;text-align:left;border-bottom:1px solid #2c2f36;font-size:12.5px;vertical-align:middle}th{background:#23262e;position:sticky;top:0;z-index:1}tr:hover td{background:#1f2229;cursor:pointer}.nm{font-family:monospace}.thumb{width:48px;height:48px;object-fit:cover;border-radius:4px;background:#0f1115}.vic{font-size:26px;text-align:center;width:48px}#prog{position:fixed;bottom:0;left:0;right:0;background:#23262e;padding:8px 14px;border-top:2px solid #333}.pb{height:7px;background:#3a3f4b;border-radius:4px;overflow:hidden;margin:2px 0}.pb>i{display:block;height:100%;background:#3b6fd4;width:0}#lg{background:#111;padding:5px 14px;max-height:80px;overflow:auto;font:11px monospace;color:#8f8}small{color:#777}#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:50;align-items:center;justify-content:center;flex-direction:column}#ov img{max-width:92vw;max-height:88vh;border-radius:6px}#ov video{max-width:92vw;max-height:88vh}#ovc{position:absolute;top:12px;right:24px;color:#fff;font-size:34px;cursor:pointer}#ovn{color:#ccc;margin-top:8px;font-family:monospace}</style></head><body>
-<div class="bar"><b>📷 Luna Sync</b><span id="st">初始化…</span><button class="g" id="bScan">🔄 扫描相机文件</button><button class="k" id="bAll">全选/反选</button>筛选<select id="fl"><option value="">全部</option><option value="MP4">仅 MP4</option><option value="LRV">仅 LRV</option><option value="JPG">仅 JPG</option><option value="LIV">仅 LIV</option></select><button id="bDl">⬇ 下载选中</button><button class="r" id="bCan">⏹ 取消</button><small>存到 89:/home/jvsheng/luna-sync/downloads</small></div>
-<div class="wifibox">当前WiFi: <b id="curwifi">—</b> <span id="savedtag"></span> <button id="bWifi">📡 扫描WiFi</button> <button class="k" id="bForget">清除记住</button><br><span id="wifilist"></span><br><small>连接:</small> <input id="ssid" placeholder="SSID(点网络自动填)" style="width:220px"> <input id="pw" type="password" placeholder="密码" style="width:140px"> <label style="color:#aaa"><input type="checkbox" id="rem"> 记住密码</label> <button class="g" id="bConn">🔗 连接</button></div>
-<table id="t"><thead><tr><th>预览</th><th><input type="checkbox" id="cAll"></th><th>文件名</th><th>类型</th><th>日期</th><th>大小</th><th>状态</th></tr></thead><tbody></tbody></table>
-<div id="lg"></div>
-<div id="prog"><div id="cur">空闲</div><div class="pb"><i id="pf"></i></div><div id="tot"></div><div class="pb"><i id="pt"></i></div></div>
-<div id="ov"><div id="ovc">✕</div><div id="ovc2"></div><div id="ovn"></div></div>
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Luna Sync</title>
+<style>
+:root{color-scheme:dark;--bg:#101216;--panel:#171a20;--panel2:#1f232b;--line:#303641;--text:#eef1f5;--muted:#9ba4b2;--blue:#4b82f0;--green:#31b56b;--amber:#e6a23c;--red:#d85c56;--cyan:#43c6c6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0;padding-bottom:108px}
+button,input,select{font:inherit}button{height:34px;border:0;border-radius:7px;background:var(--blue);color:white;padding:0 12px;cursor:pointer;white-space:nowrap}button:hover{filter:brightness(1.08)}button:disabled{opacity:.5;cursor:not-allowed}.secondary{background:#313844}.danger{background:var(--red)}.success{background:var(--green)}.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}input,select{height:34px;background:#11141a;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:0 10px}label{color:var(--muted)}
+.appbar{position:sticky;top:0;z-index:5;background:rgba(16,18,22,.94);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}.appbar-inner{display:flex;align-items:center;gap:14px;padding:13px 18px}.brand{display:flex;align-items:center;gap:10px;min-width:180px}.logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--blue),var(--cyan));display:grid;place-items:center;font-weight:800}.brand h1{font-size:18px;margin:0}.brand small{display:block;color:var(--muted);font-size:12px}.statusline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pill{height:28px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:#141820}.pill.ok{color:#baf3d2;border-color:#23633f}.pill.warn{color:#ffe0a8;border-color:#775829}.pill.bad{color:#ffbbb7;border-color:#79413f}.actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.main{display:grid;grid-template-columns:340px minmax(0,1fr);gap:16px;padding:16px 18px 26px}.panel{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px}.panel h2{margin:0;padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}.panel-body{padding:12px 14px}.wifi-grid{display:grid;gap:9px}.wifi-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifi-row input[type=password],.wifi-row input[type=text]{flex:1;min-width:0}.netlist{display:flex;gap:7px;flex-wrap:wrap;max-height:150px;overflow:auto}.net{border:1px solid var(--line);background:#11141a;color:var(--text);border-radius:7px;padding:7px 9px;cursor:pointer}.net.cam{border-color:var(--green);color:#c9f7dc}.metric{display:grid;grid-template-columns:1fr 1fr;gap:8px}.metric div{background:#11141a;border:1px solid var(--line);border-radius:8px;padding:10px}.metric b{display:block;font-size:18px}.metric span{color:var(--muted);font-size:12px}.log{height:168px;overflow:auto;background:#0c0f13;border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:#9ee7b8;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--panel)}.tools .grow{flex:1}.table-wrap{overflow:auto}.file-table{width:100%;border-collapse:collapse;min-width:760px}.file-table th,.file-table td{border-bottom:1px solid #252b34;padding:9px 10px;text-align:left;vertical-align:middle}.file-table th{position:sticky;top:61px;background:#151920;color:var(--muted);font-size:12px;z-index:2}.file-table tr:hover td{background:#1b2028}.thumb{width:58px;height:42px;border-radius:7px;background:#0c0f13;object-fit:cover;display:block}.thumb-fallback{width:58px;height:42px;border-radius:7px;background:#0c0f13;display:grid;place-items:center;color:var(--muted);font-size:18px}.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.muted{color:var(--muted)}.tag{display:inline-flex;align-items:center;height:24px;border-radius:999px;padding:0 8px;background:#252b34;color:#cfd6e1;font-size:12px}.tag.done{background:#173727;color:#adf1c8}.empty{padding:56px 16px;text-align:center;color:var(--muted)}
+.queue{position:fixed;left:0;right:0;bottom:0;background:rgba(23,26,32,.96);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:10px 18px;z-index:6}.queue-grid{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,280px);gap:12px;align-items:center}.bar{height:8px;background:#303641;border-radius:999px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--green))}.queue small{color:var(--muted)}
+.overlay{display:none;position:fixed;inset:0;background:rgba(5,7,10,.94);z-index:20;align-items:center;justify-content:center;padding:28px;flex-direction:column}.overlay.open{display:flex}.close{position:absolute;right:22px;top:18px;width:38px;height:38px;border-radius:999px;background:#252b34;font-size:22px}.viewer{max-width:94vw;max-height:84vh;display:grid;place-items:center}.viewer img,.viewer video{max-width:94vw;max-height:84vh;border-radius:8px;background:#05070a}.viewer-note{margin-top:10px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center}.viewer-actions{margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+@media (max-width:900px){.appbar-inner{align-items:flex-start;flex-direction:column}.actions{margin-left:0}.main{grid-template-columns:1fr;padding:12px}.file-table th{top:0}.queue-grid{grid-template-columns:1fr}.name{max-width:220px}}
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand"><div class="logo">L</div><div><h1>Luna Sync</h1><small id="subtitle">等待状态</small></div></div>
+    <div class="statusline">
+      <span id="cameraPill" class="pill">相机: 检查中</span>
+      <span id="wifiPill" class="pill">Wi-Fi: -</span>
+      <span id="autoPill" class="pill">自动同步: -</span>
+    </div>
+    <div class="actions">
+      <button id="bScan" class="success">扫描相机文件</button>
+      <button id="bAuto" class="ghost">自动同步</button>
+      <button id="bDl">下载选中</button>
+      <button id="bCan" class="danger">取消下载</button>
+    </div>
+  </div>
+</header>
+<main class="main">
+  <aside class="panel">
+    <h2>连接</h2>
+    <div class="panel-body wifi-grid">
+      <div class="wifi-row"><span class="muted">当前 Wi-Fi</span><b id="curwifi">-</b><span id="savedtag"></span></div>
+      <div class="wifi-row"><button id="bWifi" class="secondary">扫描 Wi-Fi</button><button id="bForget" class="ghost">清除记住</button></div>
+      <div id="wifilist" class="netlist"></div>
+      <div class="wifi-row"><input id="ssid" type="text" placeholder="SSID"><input id="pw" type="password" placeholder="密码"></div>
+      <div class="wifi-row"><label><input type="checkbox" id="rem"> 记住密码</label><button id="bConn" class="success">连接</button></div>
+    </div>
+    <h2>概览</h2>
+    <div class="panel-body">
+      <div class="metric">
+        <div><b id="mFiles">0</b><span>文件</span></div>
+        <div><b id="mSelected">0</b><span>已选</span></div>
+        <div><b id="mQueue">0</b><span>队列</span></div>
+        <div><b id="mDone">0</b><span>本次完成</span></div>
+      </div>
+    </div>
+    <h2>日志</h2>
+    <div class="panel-body"><div id="lg" class="log"></div></div>
+  </aside>
+  <section class="panel">
+    <div class="tools">
+      <button id="bAll" class="secondary">全选/反选</button>
+      <label>类型 <select id="fl"><option value="">全部</option><option value="MP4">MP4</option><option value="LRV">LRV</option><option value="JPG">JPG</option><option value="JPEG">JPEG</option><option value="LIV">LIV</option><option value="INSP">INSP</option><option value="GIF">GIF</option></select></label>
+      <label>状态 <select id="fs"><option value="">全部</option><option value="done">已下载</option><option value="ready">未下载</option></select></label>
+      <input id="q" class="grow" type="text" placeholder="搜索文件名">
+    </div>
+    <div class="table-wrap">
+      <table class="file-table">
+        <thead><tr><th>预览</th><th><input type="checkbox" id="cAll"></th><th>文件名</th><th>类型</th><th>日期</th><th>大小</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="empty" class="empty" style="display:none">暂无文件</div>
+    </div>
+  </section>
+</main>
+<footer class="queue">
+  <div class="queue-grid">
+    <div><div id="cur">空闲</div><div class="bar"><i id="pf"></i></div></div>
+    <div><small id="tot">本次完成 0</small><div class="bar"><i id="pt"></i></div></div>
+  </div>
+</footer>
+<div id="ov" class="overlay">
+  <button id="ovc" class="close" aria-label="关闭预览">x</button>
+  <div id="ovc2" class="viewer"></div>
+  <div id="ovn" class="viewer-note"></div>
+  <div id="ova" class="viewer-actions"></div>
+</div>
 <script>
-var FILES=[],SEL=new Set();
+var FILES=[],SEL=new Set(),STATE={};
 function $(i){return document.getElementById(i)}
-function fmt(b){if(b===null||b===undefined)return '—';var u=['B','KB','MB','GB'];var i=0;while(b>=1024&&i<3){b/=1024;i++}return b.toFixed(b<10&&i?1:0)+' '+u[i]}
+function fmt(b){if(b===null||b===undefined)return '-';var u=['B','KB','MB','GB'];var i=0;while(b>=1024&&i<3){b/=1024;i++}return b.toFixed(b<10&&i?1:0)+' '+u[i]}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
-function vis(){var f=$('fl').value;return FILES.filter(function(x){return !f||x.kind===f})}
-function isImg(k){return k==='JPG'||k==='INSP'||k==='LIV'||k==='JPEG'}
-function isVid(k){return k==='MP4'||k==='LRV'}
+function isImg(k){return ['JPG','JPEG','PNG','WEBP','GIF','INSP','LIV'].indexOf(k)>=0}
+function isGif(k){return k==='GIF'}
+function isVid(k){return k==='MP4'||k==='LRV'||k==='MOV'}
+function done(it){return (it.status||'').indexOf('完成')>=0}
+function visible(){var f=$('fl').value,s=$('fs').value,q=$('q').value.trim().toLowerCase();return FILES.filter(function(x){if(f&&x.kind!==f)return false;if(s==='done'&&!done(x))return false;if(s==='ready'&&done(x))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
+function setPill(el, text, cls){el.className='pill '+(cls||'');el.textContent=text}
+function updateMetrics(){var v=visible();$('mFiles').textContent=FILES.length;$('mSelected').textContent=SEL.size;$('mQueue').textContent=STATE.queue_len||0;$('mDone').textContent=STATE.completed||0;$('subtitle').textContent=v.length+' 个可见 · '+(STATE.last_auto_sync?('上次自动 '+STATE.last_auto_sync):'自动同步待命')}
 function render(){
-  var tb=$('t').querySelector('tbody');tb.innerHTML='';
-  vis().forEach(function(it){
+  var tb=$('tbody'),list=visible();tb.innerHTML='';$('empty').style.display=list.length?'none':'block';
+  list.forEach(function(it){
     var tr=document.createElement('tr');
-    var cprev=document.createElement('td');
-    if(isImg(it.kind)){var im=document.createElement('img');im.className='thumb';im.src='/thumb/'+encodeURIComponent(it.name);im.loading='lazy';cprev.appendChild(im)}
-    else if(isVid(it.kind)){cprev.innerHTML='<div class="vic">🎬</div>'}
-    else{cprev.innerHTML='<div class="vic">📄</div>'}
-    tr.appendChild(cprev);
-    var ck=document.createElement('input');ck.type='checkbox';ck.checked=SEL.has(it.name);ck.onclick=function(e){e.stopPropagation()};ck.onchange=function(){ck.checked?SEL.add(it.name):SEL.delete(it.name)};
-    var c1=document.createElement('td');c1.appendChild(ck);tr.appendChild(c1);
-    [['name',it.name,'nm'],['kind',it.kind,''],['date',(it.date||'')+' '+(it.time||''),''],['size',fmt(it.bytes),''],['status',it.status||'','']].forEach(function(e){var td=document.createElement('td');td.textContent=e[1];if(e[2])td.className=e[2];if(e[0]==='name')td.title=e[1];tr.appendChild(td)});
-    tr.onclick=function(){openPrev(it)};
+    var prev=isImg(it.kind)?'<img class="thumb" src="/thumb/'+encodeURIComponent(it.name)+'" loading="lazy" alt="">':(isVid(it.kind)?'<div class="thumb-fallback">vid</div>':'<div class="thumb-fallback">file</div>');
+    tr.innerHTML='<td>'+prev+'</td><td><input type="checkbox" '+(SEL.has(it.name)?'checked':'')+'></td><td><div class="name" title="'+esc(it.name)+'">'+esc(it.name)+'</div></td><td><span class="tag">'+esc(it.kind)+'</span></td><td class="muted">'+esc(((it.date||'')+' '+(it.time||'')).trim()||'-')+'</td><td>'+fmt(it.bytes)+'</td><td><span class="tag '+(done(it)?'done':'')+'">'+esc(it.status||'就绪')+'</span></td><td><button class="ghost">预览</button></td>';
+    tr.querySelector('input').onclick=function(e){e.stopPropagation()};tr.querySelector('input').onchange=function(){this.checked?SEL.add(it.name):SEL.delete(it.name);updateMetrics()};
+    tr.querySelector('button').onclick=function(e){e.stopPropagation();openPrev(it)};tr.onclick=function(){openPrev(it)};
     tb.appendChild(tr);
   });
+  updateMetrics();
+}
+async function scan(){
+  $('bScan').disabled=true;$('bScan').textContent='扫描中';
+  try{var d=await(await fetch('/api/files')).json();FILES=d.items;setPill($('cameraPill'),d.connected?'相机: 在线':'相机: 离线',d.connected?'ok':'bad');render()}
+  catch(e){setPill($('cameraPill'),'相机: 错误','bad')}
+  finally{$('bScan').disabled=false;$('bScan').textContent='扫描相机文件'}
 }
 function openPrev(it){
-  var box=$('ovc2');var nm=$('ovn');nm.textContent=it.name+' ('+fmt(it.bytes)+')';
-  if(isImg(it.kind)){box.innerHTML='<img src="/img/'+encodeURIComponent(it.name)+'">'}
-  else if(isVid(it.kind)){openVideo(it.name)}
-  else{box.innerHTML='<div style="color:#ccc">此类型无预览</div>'}
-  $('ov').style.display='flex';
+  $('ov').classList.add('open');$('ovn').textContent=it.name+' · '+fmt(it.bytes);$('ova').innerHTML='';var box=$('ovc2');
+  if(isImg(it.kind)){box.innerHTML='<img src="/img/'+encodeURIComponent(it.name)+'" alt="">';return}
+  if(isVid(it.kind)){box.innerHTML='<video src="/video/'+encodeURIComponent(it.name)+'" controls autoplay playsinline></video>';var b=document.createElement('button');b.textContent='生成兼容预览';b.onclick=function(){startTranscode(it.name)};$('ova').appendChild(b);box.querySelector('video').onerror=function(){startTranscode(it.name)};return}
+  box.innerHTML='<div class="empty">此类型暂无预览</div>';
 }
-function closePrev(){$('ov').style.display='none';$('ovc2').innerHTML=''}
-function openVideo(name){
-  var box=$('ovc2');$('ovn').textContent=name+' [准备转码...]';
-  box.innerHTML='<div style="color:#ccc;padding:40px;text-align:center">⏳ H.265→H.264 转码中,首次需等待<br><small>(LRV低清快,MP4高清较慢)</small></div>';
-  $('ov').style.display='flex';
+function startTranscode(name){
+  $('ovc2').innerHTML='<div class="empty">正在生成兼容视频预览</div>';
   fetch('/api/transcode/'+encodeURIComponent(name),{method:'POST'});
-  var iv=setInterval(async function(){
-    try{var d=await(await fetch('/api/transcode/status/'+encodeURIComponent(name))).json();
-      if(d.status==='done'){clearInterval(iv);box.innerHTML='<video src="/play/'+encodeURIComponent(name)+'" controls autoplay style="max-width:92vw;max-height:88vh"></video>';$('ovn').textContent=name+' (已转码,可播放)'}
-      else if(d.status==='failed'){clearInterval(iv);box.innerHTML='<div style="color:#f88;padding:40px;text-align:center">转码失败:'+(d.msg||'未知')+'<br><small>可下载后用VLC播放</small></div>'}
-      else{$('ovn').textContent=name+' ['+({downloading:'下载中',encoding:'转码中',pending:'排队'}[d.status]||'处理中')+'...]'}}
-    catch(e){}},2000);
+  var iv=setInterval(async function(){try{var d=await(await fetch('/api/transcode/status/'+encodeURIComponent(name))).json();if(d.status==='done'){clearInterval(iv);$('ovc2').innerHTML='<video src="/play/'+encodeURIComponent(name)+'" controls autoplay playsinline></video>';$('ovn').textContent=name+' · 兼容预览已生成'}else if(d.status==='failed'){clearInterval(iv);$('ovc2').innerHTML='<div class="empty">转码失败: '+esc(d.msg||'未知错误')+'</div>'}else{$('ovn').textContent=name+' · '+({'downloading':'下载中','encoding':'转码中','pending':'排队'}[d.status]||'处理中')}}catch(e){}},1800)
 }
-$('ovc').onclick=closePrev;$('ov').onclick=function(e){if(e.target===$('ov'))closePrev()};
-async function scan(){
-  $('bScan').textContent='扫描中…';$('bScan').disabled=true;$('st').textContent='扫描中…';$('st').className='w';
-  try{var r=await fetch('/api/files');var d=await r.json();FILES=d.items;$('st').textContent=d.connected?('🟢 相机在线 · '+d.items.length+' 项'):('🔴 相机离线 · 本地 '+d.items.length+' 项');$('st').className=d.connected?'on':'off';render()}
-  catch(e){$('st').textContent='错误:'+e;$('st').className='off'}
-  finally{$('bScan').textContent='🔄 扫描相机文件';$('bScan').disabled=false}
-}
+function closePrev(){$('ov').classList.remove('open');$('ovc2').innerHTML='';$('ova').innerHTML=''}
 async function scanWifi(){
-  $('bWifi').textContent='扫描中…';$('wifilist').innerHTML='';
-  try{var r=await fetch('/api/wifi/scan');var d=await r.json();$('curwifi').textContent=d.current||'未连接';
-    var html='';d.nets.forEach(function(n){var mark=n.is_camera?' 📷相机':'';var sig=n.signal?('('+n.signal+'%)'):'';html+='<span class="wnet'+(n.is_camera?' cam':'')+'" data-ssid="'+esc(n.ssid)+'">'+esc(n.ssid)+mark+' '+sig+'</span>'});
-    $('wifilist').innerHTML=html||'<small>没扫到网络</small>';
-    var nodes=document.querySelectorAll('.wnet');for(var i=0;i<nodes.length;i++){nodes[i].onclick=function(){$('ssid').value=this.getAttribute('data-ssid')}}}
-  catch(e){$('wifilist').innerHTML='错误:'+e}
-  finally{$('bWifi').textContent='📡 扫描WiFi'}
+  $('bWifi').disabled=true;$('bWifi').textContent='扫描中';
+  try{var d=await(await fetch('/api/wifi/scan')).json();$('curwifi').textContent=d.current||'未连接';var html='';d.nets.forEach(function(n){html+='<span class="net '+(n.is_camera?'cam':'')+'" data-ssid="'+esc(n.ssid)+'">'+esc(n.ssid)+(n.signal?' '+esc(n.signal)+'%':'')+'</span>'});$('wifilist').innerHTML=html||'<span class="muted">没扫到网络</span>';document.querySelectorAll('.net').forEach(function(n){n.onclick=function(){$('ssid').value=this.getAttribute('data-ssid')}})}
+  catch(e){$('wifilist').innerHTML='<span class="muted">扫描失败</span>'}
+  finally{$('bWifi').disabled=false;$('bWifi').textContent='扫描 Wi-Fi'}
 }
 async function connWifi(){
-  var ssid=$('ssid').value.trim();if(!ssid)return alert('请输入或点选 SSID');var pw=$('pw').value;var remember=$('rem').checked;
-  $('bConn').textContent='连接中…';$('bConn').disabled=true;
-  try{await fetch('/api/wifi/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:ssid,password:pw,remember:remember})});setTimeout(scan,5000)}
-  catch(e){alert('错误:'+e)}
-  finally{$('bConn').textContent='🔗 连接';$('bConn').disabled=false}
+  var ssid=$('ssid').value.trim();if(!ssid)return alert('请输入 SSID');$('bConn').disabled=true;$('bConn').textContent='连接中';
+  try{await fetch('/api/wifi/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:ssid,password:$('pw').value,remember:$('rem').checked})});setTimeout(scan,5000)}
+  finally{$('bConn').disabled=false;$('bConn').textContent='连接'}
 }
-$('bScan').onclick=scan;
-$('bAll').onclick=function(){var v=vis();var all=!v.every(function(x){return SEL.has(x.name)});v.forEach(function(x){all?SEL.add(x.name):SEL.delete(x.name)});render()};
-$('cAll').onchange=$('bAll').onclick;$('fl').onchange=render;
-$('bDl').onclick=async function(){if(!SEL.size)return alert('请先勾选文件');await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:Array.from(SEL)})});alert('已加入下载队列 '+SEL.size+' 个')};
-$('bCan').onclick=function(){fetch('/api/cancel',{method:'POST'})};
-$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;
-$('bForget').onclick=async function(){if(!confirm('清除记住的WiFi密码?'))return;await fetch('/api/wifi/forget',{method:'POST'});alert('已清除')};
 async function poll(){
-  try{var d=await(await fetch('/api/state')).json();$('curwifi').textContent=d.wifi_current||'未连接';
-    $('savedtag').innerHTML=d.wifi_saved?'<small style="color:#4caf50">⭐已记住</small>':'';
-    if(d.wifi_conn&&!d.connected){$('st').textContent='连接WiFi中…';$('st').className='w'}
-    else if(!FILES.length&&!d.connected){$('st').textContent='🔴 离线 · 先扫描WiFi连相机';$('st').className='off'}
-    if(d.current){var c=d.current;var pc=c.total?Math.round(c.downloaded/c.total*100):0;$('cur').textContent='下载 '+c.name+' '+pc+'% ('+fmt(c.downloaded)+'/'+fmt(c.total)+', '+fmt(c.speed)+'/s)';$('pf').style.width=pc+'%'}
-    else{$('cur').textContent=d.queue_len?('队列 '+d.queue_len+' 个'):'空闲';$('pf').style.width=0}
-    $('tot').textContent='本次完成 '+d.completed;$('pt').style.width=FILES.length?Math.round(d.completed/FILES.length*100)+'%':0;
-    $('lg').innerHTML=d.log.map(function(l){return '<div>'+esc(l)+'</div>'}).join('')}
+  try{STATE=await(await fetch('/api/state')).json();$('curwifi').textContent=STATE.wifi_current||'未连接';$('savedtag').innerHTML=STATE.wifi_saved?'<span class="tag done">已记住</span>':'';setPill($('wifiPill'),'Wi-Fi: '+(STATE.wifi_current||'未连接'),STATE.wifi_current?'ok':'warn');setPill($('autoPill'),'自动同步: '+(STATE.auto_sync?'开':'关'),STATE.auto_sync?'ok':'warn');$('bAuto').textContent=STATE.auto_sync?'关闭自动同步':'开启自动同步';if(STATE.connected)setPill($('cameraPill'),'相机: 在线','ok');if(STATE.wifi_conn&&!STATE.connected)setPill($('cameraPill'),'相机: 连接中','warn');if(STATE.current){var c=STATE.current,pc=c.total?Math.round(c.downloaded/c.total*100):0;$('cur').textContent='下载 '+c.name+' '+pc+'% ('+fmt(c.downloaded)+'/'+fmt(c.total)+', '+fmt(c.speed)+'/s)';$('pf').style.width=pc+'%'}else{$('cur').textContent=STATE.queue_len?('队列 '+STATE.queue_len+' 个'):'空闲';$('pf').style.width=0}$('tot').textContent='本次完成 '+STATE.completed;$('pt').style.width=FILES.length?Math.round((STATE.completed||0)/FILES.length*100)+'%':'0';$('lg').innerHTML=(STATE.log||[]).map(function(l){return '<div>'+esc(l)+'</div>'}).join('');updateMetrics()}
   catch(e){}
 }
-poll();setInterval(poll,1500);
-</script></body></html>
+$('bScan').onclick=scan;$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;$('bCan').onclick=function(){fetch('/api/cancel',{method:'POST'})};$('bForget').onclick=async function(){if(confirm('清除记住的 Wi-Fi 密码?')){await fetch('/api/wifi/forget',{method:'POST'});poll()}};$('bAuto').onclick=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!STATE.auto_sync})});poll()};$('bDl').onclick=async function(){if(!SEL.size)return alert('请先勾选文件');var d=await(await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:Array.from(SEL)})})).json();alert('已加入下载队列 '+d.queued+' 个')};$('bAll').onclick=function(){var v=visible(),all=!v.every(function(x){return SEL.has(x.name)});v.forEach(function(x){all?SEL.add(x.name):SEL.delete(x.name)});render()};$('cAll').onchange=$('bAll').onclick;$('fl').onchange=render;$('fs').onchange=render;$('q').oninput=render;$('ovc').onclick=closePrev;$('ov').onclick=function(e){if(e.target===$('ov'))closePrev()};
+poll();scan();setInterval(poll,1500);
+</script>
+</body>
+</html>
