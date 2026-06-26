@@ -1,0 +1,16 @@
+services:
+  luna-sync:
+    image: jvsheng/luna-sync:latest
+    container_name: luna-sync
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    environment:
+      - LUNA_CONFIG=/app/config.json
+      - TZ=Asia/Shanghai
+    volumes:
+      - /run/dbus:/run/dbus
+      - /run/NetworkManager:/run/NetworkManager
+      - ./downloads:/downloads
+      - ./state:/state
+      - ./config.json:/app/config.json:ro

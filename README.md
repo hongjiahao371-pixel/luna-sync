@@ -42,7 +42,7 @@ docker compose up -d --build
 也可以直接使用 Docker Hub 镜像：
 
 ```bash
-docker pull jvsheng/luna-sync:latest
+docker compose -f docker-compose.hub.yml up -d
 ```
 
 或使用 GitHub Container Registry 镜像：
@@ -63,6 +63,7 @@ app/
   luna_client.py   相机通信
   downloader.py    媒体下载
 docker-compose.yml
+docker-compose.hub.yml
 Dockerfile
 config.example.json
 ```
