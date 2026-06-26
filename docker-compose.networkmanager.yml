@@ -1,0 +1,7 @@
+services:
+  luna-sync:
+    environment:
+      - LUNA_WIFI_BACKEND=networkmanager
+    volumes:
+      - /run/dbus:/run/dbus
+      - /run/NetworkManager:/run/NetworkManager

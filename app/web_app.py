@@ -16,6 +16,12 @@ log = logging.getLogger('luna')
 app = Flask(__name__)
 HOST = CFG['camera_host']
 DLDIR = CFG['download_dir']
+WIFI_BACKEND = wifi.configure(
+    os.environ.get('LUNA_WIFI_BACKEND_RESOLVED') or
+    os.environ.get('LUNA_WIFI_BACKEND') or
+    CFG.get('wifi_backend', 'auto'),
+    CFG.get('wpa_ctrl'),
+)
 IFACE = wifi.detect_interface(CFG.get('wifi_iface'))
 CAM_SSID = CFG.get('camera_ssid', '')
 DEF_PW = CFG.get('camera_password')
@@ -46,6 +52,10 @@ def current_ssid():
     return wifi.current_ssid(IFACE)
 
 def wifi_on_target():
+    if not CAM_SSID:
+        return cam_on()
+    if not wifi.requires_target_ssid():
+        return cam_on()
     cur = current_ssid()
     return bool(cur and CAM_SSID and cur == CAM_SSID)
 
@@ -75,6 +85,9 @@ def save_wifi(ssid, pw):
         log.warning('save_wifi:' + str(e)[:50])
 
 def try_connect(ssid, pw):
+    if not wifi.can_control():
+        addlog('当前为手动连接模式，不管理 WiFi')
+        return cam_on()
     if not IFACE:
         addlog('未检测到无线网卡')
         return False
@@ -99,12 +112,12 @@ def keeper():
             cur = current_ssid()
             with lk:
                 ST['wifi_current'] = cur
-            if target and cur != target and pw is not None:
+            if wifi.can_control() and target and cur != target and pw is not None:
                 try_connect(target, pw); cur = current_ssid()
                 with lk:
                     ST['wifi_current'] = cur
             with lk:
-                ST['connected'] = (CAM_SSID and cur == CAM_SSID and cam_on()) or (not CAM_SSID and cam_on())
+                ST['connected'] = wifi_on_target() and cam_on()
         except Exception as e:
             log.warning('keeper:' + str(e)[:50])
         time.sleep(12)
@@ -299,6 +312,7 @@ def api_state():
             'file_count': len(ST['files']), 'queue_len': len(ST['queue']),
             'current': ST['current'], 'completed': ST['completed'],
             'log': ST['log'][-12:], 'camera_ssid': CAM_SSID, 'wifi_iface': IFACE,
+            'wifi_backend': WIFI_BACKEND, 'wifi_control': wifi.can_control(),
             'auto_sync': ST['auto_sync'], 'auto_interval': AUTO_INTERVAL,
             'last_auto_sync': ST['last_auto_sync']})
 
@@ -315,9 +329,14 @@ def api_auto_sync():
 
 @app.route('/api/wifi/scan')
 def wifi_scan():
+    if not wifi.can_control():
+        return jsonify({'nets': [], 'current': '', 'camera_ssid': CAM_SSID,
+                        'wifi_iface': IFACE, 'wifi_backend': WIFI_BACKEND,
+                        'error': '当前为手动连接模式'}), 503
     if not IFACE:
         return jsonify({'nets': [], 'current': '', 'camera_ssid': CAM_SSID,
-                        'wifi_iface': None, 'error': '未检测到无线网卡'}), 503
+                        'wifi_iface': None, 'wifi_backend': WIFI_BACKEND,
+                        'error': '未检测到无线网卡'}), 503
     wifi.rescan(IFACE)
     r = wifi.scan(IFACE)
     nets = []; seen = set()
@@ -335,10 +354,13 @@ def wifi_scan():
     with lk:
         ST['wifi_current'] = current_ssid()
     return jsonify({'nets': nets, 'current': ST['wifi_current'],
-                    'camera_ssid': CAM_SSID, 'wifi_iface': IFACE})
+                    'camera_ssid': CAM_SSID, 'wifi_iface': IFACE,
+                    'wifi_backend': WIFI_BACKEND})
 
 @app.route('/api/wifi/connect', methods=['POST'])
 def wifi_connect():
+    if not wifi.can_control():
+        return jsonify({'ok': False, 'msg': '当前为手动连接模式'}), 400
     data = request.json or {}
     ssid = data.get('ssid', '').strip(); pw = data.get('password', '')
     remember = data.get('remember', False)
@@ -503,5 +525,5 @@ if __name__ == '__main__':
     threading.Thread(target=keeper, daemon=True).start()
     threading.Thread(target=dl_worker, daemon=True).start()
     threading.Thread(target=auto_sync_worker, daemon=True).start()
-    addlog('Luna Sync 启动，无线网卡: ' + (IFACE or '未检测到'))
+    addlog('Luna Sync 启动，WiFi 后端: ' + WIFI_BACKEND + '，无线网卡: ' + (IFACE or '未检测到'))
     app.run(host='0.0.0.0', port=CFG.get('web_port', 8765), threaded=True)

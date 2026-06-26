@@ -1,14 +1,116 @@
+import glob
+import os
+import shutil
 import subprocess
+
+
+BACKEND = 'auto'
+RESOLVED_BACKEND = 'none'
+WPA_CTRL = '/run/wpa_supplicant'
 
 
 def run(args, timeout=30):
     try:
         return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
-        return subprocess.CompletedProcess(args, 127, '', 'nmcli not found')
+        return subprocess.CompletedProcess(args, 127, '', args[0] + ' not found')
+    except subprocess.TimeoutExpired as e:
+        return subprocess.CompletedProcess(args, 124, e.stdout or '', e.stderr or 'timeout')
+
+
+def configure(backend='auto', wpa_ctrl=None):
+    global BACKEND, RESOLVED_BACKEND, WPA_CTRL
+    BACKEND = (backend or 'auto').strip().lower()
+    WPA_CTRL = wpa_ctrl or WPA_CTRL
+    RESOLVED_BACKEND = resolve_backend(BACKEND)
+    return RESOLVED_BACKEND
+
+
+def resolve_backend(backend=None):
+    backend = (backend or BACKEND or 'auto').strip().lower()
+    aliases = {
+        'nm': 'networkmanager',
+        'network-manager': 'networkmanager',
+        'manual': 'none',
+        'off': 'none',
+        'disabled': 'none',
+        'wpa': 'wpa_supplicant',
+        'wpasupplicant': 'wpa_supplicant',
+    }
+    backend = aliases.get(backend, backend)
+    if backend != 'auto':
+        return backend if backend in ('networkmanager', 'wpa_supplicant', 'none') else 'none'
+    if shutil.which('nmcli') and os.path.exists('/run/NetworkManager') and os.path.exists('/run/dbus/system_bus_socket'):
+        return 'networkmanager'
+    if shutil.which('iw') and shutil.which('wpa_cli') and wireless_interfaces():
+        return 'wpa_supplicant'
+    return 'none'
+
+
+def backend():
+    return RESOLVED_BACKEND
+
+
+def can_control():
+    return RESOLVED_BACKEND in ('networkmanager', 'wpa_supplicant')
+
+
+def requires_target_ssid():
+    return can_control()
+
+
+def wireless_interfaces():
+    out = []
+    seen = set()
+    for path in glob.glob('/sys/class/net/*/wireless'):
+        name = os.path.basename(os.path.dirname(path))
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
 
 
 def detect_interface(preferred=None):
+    if RESOLVED_BACKEND == 'networkmanager':
+        return nm_detect_interface(preferred)
+    if RESOLVED_BACKEND == 'wpa_supplicant':
+        return wpa_detect_interface(preferred)
+    return None
+
+
+def current_ssid(interface):
+    if RESOLVED_BACKEND == 'networkmanager':
+        return nm_current_ssid(interface)
+    if RESOLVED_BACKEND == 'wpa_supplicant':
+        return wpa_current_ssid(interface)
+    return ''
+
+
+def scan(interface=None):
+    if RESOLVED_BACKEND == 'networkmanager':
+        return nm_scan(interface)
+    if RESOLVED_BACKEND == 'wpa_supplicant':
+        return wpa_scan(interface)
+    return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='wifi backend disabled')
+
+
+def rescan(interface=None):
+    if RESOLVED_BACKEND == 'networkmanager':
+        return nm_rescan(interface)
+    if RESOLVED_BACKEND == 'wpa_supplicant':
+        return wpa_rescan(interface)
+    return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='wifi backend disabled')
+
+
+def connect(interface, ssid, password):
+    if RESOLVED_BACKEND == 'networkmanager':
+        return nm_connect(interface, ssid, password)
+    if RESOLVED_BACKEND == 'wpa_supplicant':
+        return wpa_connect(interface, ssid, password)
+    return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='wifi backend disabled')
+
+
+def nm_detect_interface(preferred=None):
     result = run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE', 'device', 'status'], 10)
     devices = []
     for line in result.stdout.splitlines():
@@ -21,7 +123,7 @@ def detect_interface(preferred=None):
     return connected or (devices[0][0] if devices else None)
 
 
-def current_ssid(interface):
+def nm_current_ssid(interface):
     if not interface:
         return ''
     result = run(
@@ -32,24 +134,128 @@ def current_ssid(interface):
     return line.split(':', 1)[1].strip() if ':' in line else line
 
 
-def scan(interface=None):
+def nm_scan(interface=None):
     args = ['nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list']
     if interface:
         args.extend(['ifname', interface])
     return run(args, 20)
 
 
-def rescan(interface=None):
+def nm_rescan(interface=None):
     args = ['nmcli', 'device', 'wifi', 'rescan']
     if interface:
         args.extend(['ifname', interface])
     return run(args, 25)
 
 
-def connect(interface, ssid, password):
+def nm_connect(interface, ssid, password):
     args = ['nmcli', 'device', 'wifi', 'connect', ssid]
     if password:
         args.extend(['password', password])
     if interface:
         args.extend(['ifname', interface])
     return run(args, 30)
+
+
+def wpa_detect_interface(preferred=None):
+    devices = wireless_interfaces()
+    if preferred and preferred in devices:
+        return preferred
+    return devices[0] if devices else None
+
+
+def wpa_current_ssid(interface):
+    if not interface:
+        return ''
+    result = run(['wpa_cli', '-i', interface, '-p', WPA_CTRL, 'status'], 6)
+    for line in result.stdout.splitlines():
+        if line.startswith('ssid='):
+            return line.split('=', 1)[1].strip()
+    return ''
+
+
+def wpa_scan(interface=None):
+    if not interface:
+        interface = wpa_detect_interface()
+    if not interface:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    result = run(['iw', 'dev', interface, 'scan', 'ap-force'], 25)
+    tries = 0
+    while result.returncode != 0 and ('progress' in (result.stderr or '').lower() or 'busy' in (result.stderr or '').lower()) and tries < 4:
+        import time
+        time.sleep(2)
+        result = run(['iw', 'dev', interface, 'scan', 'ap-force'], 25)
+        tries += 1
+    networks = []
+    ssid = ''
+    signal = ''
+    secure = ''
+    for line in result.stdout.splitlines():
+        text = line.strip()
+        if text.startswith('BSS '):
+            if ssid:
+                networks.append((ssid, signal, secure))
+            ssid = ''
+            signal = ''
+            secure = ''
+        elif text.startswith('SSID: '):
+            ssid = text[6:].strip()
+        elif text.startswith('signal:'):
+            try:
+                signal = str(int(float(text.split(':', 1)[1].split()[0])))
+            except Exception:
+                signal = ''
+        elif text.startswith('capability:') and 'privacy' in text.lower():
+            secure = 'yes'
+        elif text.startswith('capability: ESS') and not secure:
+            secure = 'no'
+    if ssid:
+        networks.append((ssid, signal, secure))
+    best = {}
+    for ssid, signal, secure in networks:
+        try:
+            score = int(signal) if signal else -200
+        except ValueError:
+            score = -200
+        if ssid not in best or score > best[ssid][0]:
+            best[ssid] = (score, '%s:%s:%s' % (ssid, signal, secure))
+    out = '\n'.join(item[1] for item in best.values())
+    return subprocess.CompletedProcess(args=['iw', 'scan'], returncode=result.returncode, stdout=out, stderr=result.stderr)
+
+
+def wpa_rescan(interface=None):
+    return subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr='')
+
+
+def wpa_value(value):
+    return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def wpa_connect(interface, ssid, password):
+    if not interface:
+        interface = wpa_detect_interface()
+    if not interface:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    base = ['wpa_cli', '-i', interface, '-p', WPA_CTRL]
+    commands = [
+        base + ['remove_network', 'all'],
+        base + ['add_network'],
+        base + ['set_network', '0', 'ssid', wpa_value(ssid)],
+    ]
+    if password:
+        commands.append(base + ['set_network', '0', 'psk', wpa_value(password)])
+    else:
+        commands.append(base + ['set_network', '0', 'key_mgmt', 'NONE'])
+    commands.extend([
+        base + ['enable_network', '0'],
+        base + ['select_network', '0'],
+    ])
+    last = subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr='')
+    for command in commands:
+        last = run(command, 6)
+        if last.returncode != 0:
+            return last
+    return last
+
+
+configure(os.environ.get('LUNA_WIFI_BACKEND') or os.environ.get('LUNA_WIFI_BACKEND_RESOLVED') or 'auto')

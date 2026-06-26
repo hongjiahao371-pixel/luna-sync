@@ -10,8 +10,6 @@ services:
       - LUNA_CONFIG=/app/config.json
       - TZ=Asia/Shanghai
     volumes:
-      - /run/dbus:/run/dbus
-      - /run/NetworkManager:/run/NetworkManager
       - ./downloads:/downloads
       - ./state:/state
       - ./config.json:/app/config.json:ro
