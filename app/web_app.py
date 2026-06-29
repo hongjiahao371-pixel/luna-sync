@@ -1,4 +1,4 @@
-import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes
+import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress
 import urllib.request, urllib.error
 from flask import Flask, jsonify, request, render_template, send_file, Response, abort
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +23,8 @@ WIFI_BACKEND = wifi.configure(
     CFG.get('wpa_ctrl'),
 )
 IFACE = wifi.detect_interface(CFG.get('wifi_iface'))
-CAM_SSID = CFG.get('camera_ssid', '')
+raw_camera_ssid = str(CFG.get('camera_ssid', '') or '').strip()
+CAM_SSID = '' if raw_camera_ssid.upper().startswith('YOUR_') else raw_camera_ssid
 DEF_PW = CFG.get('camera_password')
 AUTO_INTERVAL = max(10, int(CFG.get('auto_sync_interval_sec', 30)))
 STATE_DIR = CFG.get('state_dir', '/state')
@@ -51,13 +52,49 @@ def run(args, t=30):
 def current_ssid():
     return wifi.current_ssid(IFACE)
 
+def camera_client_cidr():
+    configured = CFG.get('camera_client_cidr') or CFG.get('camera_client_ip')
+    if configured:
+        return configured if '/' in str(configured) else str(configured) + '/24'
+    try:
+        host = ipaddress.ip_address(HOST)
+        network = ipaddress.ip_network(str(host) + '/24', strict=False)
+        last = int(str(host).rsplit('.', 1)[1])
+        client_last = 2 if last != 2 else 3
+        return str(ipaddress.ip_address(int(network.network_address) + client_last)) + '/24'
+    except Exception:
+        return ''
+
+def ensure_camera_ipv4():
+    if WIFI_BACKEND != 'wpa_supplicant' or not IFACE:
+        return
+    cidr = camera_client_cidr()
+    if not cidr:
+        return
+    ip = cidr.split('/', 1)[0]
+    try:
+        current = run(['ip', '-4', 'addr', 'show', 'dev', IFACE], 5)
+        if ip in current.stdout:
+            return
+        result = run(['ip', 'addr', 'replace', cidr, 'dev', IFACE], 8)
+        if result.returncode == 0:
+            addlog('已配置相机网段地址 ' + cidr)
+        else:
+            addlog('配置相机网段地址失败: ' + (result.stderr or result.stdout).strip()[:80])
+    except Exception as e:
+        log.warning('camera_ipv4:' + str(e)[:60])
+
 def wifi_on_target():
     if not CAM_SSID:
+        ensure_camera_ipv4()
         return cam_on()
     if not wifi.requires_target_ssid():
         return cam_on()
     cur = current_ssid()
-    return bool(cur and CAM_SSID and cur == CAM_SSID)
+    ok = bool(cur and CAM_SSID and cur == CAM_SSID)
+    if ok:
+        ensure_camera_ipv4()
+    return ok
 
 def cam_on():
     try:
@@ -101,6 +138,8 @@ def try_connect(ssid, pw):
         addlog('连接失败: ' + (result.stderr or result.stdout).strip()[:80])
     time.sleep(4)
     ok = (current_ssid() == ssid)
+    if ok:
+        ensure_camera_ipv4()
     addlog('已连 ' + ssid if ok else '连接 ' + ssid + ' 失败')
     return ok
 

@@ -47,7 +47,8 @@ docker compose -f docker-compose.hub.yml -f docker-compose.networkmanager.yml up
 ```
 
 `wpa_supplicant` 模式会在容器内启动自己的 `wpa_supplicant` 管理无线网卡，不依赖
-宿主机安装 `nmcli`。请确保没有其他服务同时控制同一块无线网卡。
+宿主机安装 `nmcli`。请确保没有其他服务同时控制同一块无线网卡。连接成功后会给无线网卡
+配置 `camera_client_cidr`，默认示例为 `192.168.42.2/24`，用于访问 `camera_host`。
 
 `none` 模式适合路由桥接、宿主机手动连接、或只想浏览/管理本地已下载文件的场景。
 只要部署设备可以访问 `camera_host`，扫描、下载和自动增量同步仍可工作。
@@ -107,6 +108,7 @@ config.example.json
 | `camera_host` | 相机热点中的相机地址 |
 | `camera_ssid` | 相机 Wi-Fi 名称 |
 | `camera_password` | 相机 Wi-Fi 密码 |
+| `camera_client_cidr` | wpa_supplicant 模式下为无线网卡配置的相机网段地址 |
 | `wifi_backend` | `auto`、`networkmanager`、`wpa_supplicant` 或 `none` |
 | `wifi_iface` | 无线网卡名；`null` 时自动识别 |
 | `wpa_ctrl` | wpa_supplicant 控制 socket 目录 |

@@ -2,6 +2,7 @@
   "camera_host": "192.168.42.1",
   "camera_ssid": "YOUR_CAMERA_WIFI",
   "camera_password": "YOUR_CAMERA_PASSWORD",
+  "camera_client_cidr": "192.168.42.2/24",
   "wifi_backend": "auto",
   "wifi_iface": null,
   "wpa_ctrl": "/run/wpa_supplicant",
