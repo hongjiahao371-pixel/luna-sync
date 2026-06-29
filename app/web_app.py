@@ -467,12 +467,64 @@ def api_del(name):
     addlog('删除 ' + name)
     return jsonify({'ok': True})
 
+def _wipe_dir(d):
+    """删除目录下所有缓存文件，返回 (文件数, 释放字节数)。目录保留。"""
+    n = t = 0
+    if not os.path.isdir(d):
+        return (0, 0)
+    for fn in os.listdir(d):
+        fp = os.path.join(d, fn)
+        try:
+            if os.path.isfile(fp) or os.path.islink(fp):
+                t += os.path.getsize(fp)
+                os.remove(fp)
+                n += 1
+        except Exception as e:
+            log.warning('wipe ' + fn + ':' + str(e)[:60])
+    return (n, t)
+
+@app.route('/api/cache/clear', methods=['POST'])
+def api_cache_clear():
+    data = request.json or {}
+    scope = (data.get('scope') or 'all').lower()
+    files = space = 0
+    if scope in ('all', 'thumb'):
+        n, t = _wipe_dir(THUMB_DIR); files += n; space += t
+    if scope in ('all', 'encoded'):
+        n, t = _wipe_dir(ENC_DIR); files += n; space += t
+        with lk:
+            ST['transcodes'] = {}
+    msg = '清理缓存 ' + str(files) + ' 个文件 / ' + _human(space)
+    addlog(msg)
+    return jsonify({'ok': True, 'files': files, 'bytes': space, 'msg': msg})
+
+def _human(b):
+    for u in ('B', 'KB', 'MB', 'GB'):
+        if b < 1024:
+            return ('%.0f' % b if u == 'B' else '%.1f' % b) + ' ' + u
+        b /= 1024
+    return '%.1f TB' % b
+
 @app.route('/thumb/<path:name>')
 def thumb(name):
     tp = safe_path(THUMB_DIR, name + '.jpg')
     if os.path.exists(tp):
         return send_file(tp, mimetype='image/jpeg')
     low = name.lower()
+    # 视频：用 ffmpeg 抽第 1 秒一帧（仅本地文件）
+    if low.endswith(('.mp4', '.lrv', '.mov', '.m4v')):
+        p = local_path(name)
+        if not p:
+            return ('', 204)
+        try:
+            run(['ffmpeg', '-y', '-ss', '1', '-i', p, '-frames:v', '1',
+                 '-vf', 'scale=320:-2', '-q:v', '4', tp], 30)
+            if os.path.exists(tp) and os.path.getsize(tp) > 0:
+                return send_file(tp, mimetype='image/jpeg')
+            return ('', 204)
+        except Exception as e:
+            log.warning('thumb(video) ' + name + ':' + str(e)[:60])
+            return ('', 204)
     if not low.endswith(('.jpg', '.jpeg', '.insp', '.liv', '.gif', '.png', '.webp')):
         return ('', 204)
     try:
