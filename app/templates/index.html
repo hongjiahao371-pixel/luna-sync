@@ -127,7 +127,7 @@ button,input,select{font:inherit}button{height:34px;border:1px solid transparent
   <div id="ova" class="viewer-actions"></div>
 </div>
 <script>
-var FILES=[],SEL=new Set(),STATE={};
+var FILES=[],LOCAL=[],SEL=new Set(),STATE={};
 function $(i){return document.getElementById(i)}
 function fmt(b){if(b===null||b===undefined)return '-';var u=['B','KB','MB','GB'];var i=0;while(b>=1024&&i<3){b/=1024;i++}return b.toFixed(b<10&&i?1:0)+' '+u[i]}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
@@ -136,7 +136,7 @@ function isGif(k){return k==='GIF'}
 function isVid(k){return k==='MP4'||k==='LRV'||k==='MOV'}
 function done(it){return (it.status||'').indexOf('完成')>=0}
 var TAB='cam',LFIL='all',LMODE='grid';
-function localFiles(){return FILES.filter(done)}
+function localFiles(){return LOCAL}
 function localVisible(){var q=$('lq').value.trim().toLowerCase();return localFiles().filter(function(x){if(LFIL==='img'&&!isImg(x.kind))return false;if(LFIL==='vid'&&!isVid(x.kind))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
 function visible(){var f=$('fl').value,s=$('fs').value,q=$('q').value.trim().toLowerCase();return FILES.filter(function(x){if(f&&x.kind!==f)return false;if(s==='done'&&!done(x))return false;if(s==='ready'&&done(x))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
 function setPill(el, text, cls){el.className='pill '+(cls||'');el.textContent=text}
@@ -200,7 +200,12 @@ async function delLocal(name){if(confirm('删除本地副本和预览缓存?')){
 function switchTab(t){TAB=t;$('tabCam').classList.toggle('active',t==='cam');$('tabLocal').classList.toggle('active',t==='local');$('viewCam').style.display=t==='cam'?'block':'none';$('viewLocal').style.display=t==='local'?'flex':'none';renderLocal()}
 async function scan(){
   $('bScan').disabled=true;$('bScan').textContent='扫描中';
-  try{var d=await(await fetch('/api/files')).json();FILES=d.items;setPill($('cameraPill'),d.connected?'相机: 在线':'相机: 离线',d.connected?'ok':'bad');render()}
+  try{
+    var rs=await Promise.all([fetch('/api/files'),fetch('/api/local-files')]);
+    var d=await rs[0].json(), l=await rs[1].json();
+    FILES=d.items;LOCAL=l.items||[];
+    setPill($('cameraPill'),d.connected?'相机: 在线':'相机: 离线',d.connected?'ok':'bad');render()
+  }
   catch(e){setPill($('cameraPill'),'相机: 错误','bad')}
   finally{$('bScan').disabled=false;$('bScan').textContent='扫描相机文件'}
 }

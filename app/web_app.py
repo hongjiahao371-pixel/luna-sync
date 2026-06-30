@@ -243,6 +243,18 @@ def local_files():
                 out[f] = os.path.getsize(p)
     return out
 
+def local_items():
+    loc = local_files()
+    with lk:
+        meta = {f['name']: dict(f) for f in ST['files']}
+    items = []
+    for name, size in sorted(loc.items()):
+        item = meta.get(name, {'name': name, 'kind': file_kind(name), 'date': '', 'time': '', 'size_text': ''})
+        item['bytes'] = size
+        item['status'] = '完成(本地)'
+        items.append(item)
+    return items
+
 def safe_path(base, name):
     root = os.path.abspath(base)
     path = os.path.abspath(os.path.join(root, name))
@@ -530,14 +542,14 @@ def wifi_forget():
 
 @app.route('/api/files')
 def api_files():
-    ok = refresh(); loc = local_files()
+    ok = refresh()
     with lk:
-        files = list(ST['files'])
-    cn = set(f['name'] for f in files)
-    for n, sz in loc.items():
-        if n not in cn:
-            files.append({'name': n, 'kind': file_kind(n), 'date': '', 'time': '', 'size_text': '', 'bytes': sz, 'status': '完成(本地)'})
+        files = list(ST['files']) if ok else []
     return jsonify({'connected': ok, 'items': files})
+
+@app.route('/api/local-files')
+def api_local_files():
+    return jsonify({'items': local_items()})
 
 @app.route('/api/download', methods=['POST'])
 def api_dl():
