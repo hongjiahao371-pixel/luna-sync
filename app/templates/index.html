@@ -49,7 +49,7 @@ button,input,select{font:inherit}button{height:34px;border:1px solid transparent
       <div class="wifi-row"><button id="bWifi" class="secondary">扫描 Wi-Fi</button><button id="bForget" class="ghost">清除记住</button></div>
       <div id="wifilist" class="netlist"></div>
       <div class="wifi-row"><input id="ssid" type="text" placeholder="SSID"><input id="pw" type="password" placeholder="密码"></div>
-      <div class="wifi-row"><label><input type="checkbox" id="rem"> 记住密码</label><button id="bConn" class="success">连接</button></div>
+      <div class="wifi-row"><label><input type="checkbox" id="rem" checked> 记住密码</label><button id="bConn" class="success">连接</button></div>
     </div>
     <h2>概览</h2>
     <div class="panel-body">
@@ -69,7 +69,7 @@ button,input,select{font:inherit}button{height:34px;border:1px solid transparent
       <button class="tab active" id="tabCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>相机文件<span class="cnt" id="camCnt">0</span></button>
       <button class="tab" id="tabLocal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>本地已下载<span class="cnt" id="localCnt">0</span></button>
     </div></div>
-    <!-- 相机文件视图 -->
+    <!-- Camera files view -->
     <div id="viewCam">
     <div class="tools">
       <button id="bAll" class="secondary">全选/反选</button>
@@ -87,7 +87,7 @@ button,input,select{font:inherit}button{height:34px;border:1px solid transparent
       <div id="empty" class="empty">等待扫描相机文件</div>
     </div>
     </div><!-- /viewCam -->
-    <!-- 本地已下载视图 -->
+    <!-- Local downloads view -->
     <div id="viewLocal" style="display:none;flex-direction:column;flex:1;min-height:0">
       <div class="locbar">
         <div class="seg">
@@ -228,7 +228,7 @@ async function connWifi(){
   finally{$('bConn').disabled=false;$('bConn').textContent='连接'}
 }
 async function poll(){
-  try{STATE=await(await fetch('/api/state')).json();$('curwifi').textContent=STATE.wifi_current||'未连接';$('backend').textContent=STATE.wifi_backend||'none';$('controltag').innerHTML=STATE.wifi_control?'<span class="tag done">可管理</span>':'<span class="tag">手动</span>';$('bWifi').disabled=!STATE.wifi_control;$('bConn').disabled=!STATE.wifi_control;$('savedtag').innerHTML=STATE.wifi_saved?'<span class="tag done">已记住</span>':'';setPill($('wifiPill'),'Wi-Fi: '+(STATE.wifi_current||'未连接'),STATE.wifi_current?'ok':'warn');setPill($('autoPill'),'自动同步: '+(STATE.auto_sync?'开':'关'),STATE.auto_sync?'ok':'warn');$('bAuto').textContent=STATE.auto_sync?'关闭自动同步':'开启自动同步';if(STATE.connected)setPill($('cameraPill'),'相机: 在线','ok');if(STATE.wifi_conn&&!STATE.connected)setPill($('cameraPill'),'相机: 连接中','warn');if(STATE.current){var c=STATE.current,pc=c.total?Math.round(c.downloaded/c.total*100):0;$('cur').textContent='下载 '+c.name+' '+pc+'% ('+fmt(c.downloaded)+'/'+fmt(c.total)+', '+fmt(c.speed)+'/s)';$('pf').style.width=pc+'%'}else{$('cur').textContent=STATE.queue_len?('队列 '+STATE.queue_len+' 个'):'空闲';$('pf').style.width=0}$('tot').textContent='本次完成 '+STATE.completed;$('pt').style.width=FILES.length?Math.round((STATE.completed||0)/FILES.length*100)+'%':'0';$('lg').innerHTML=(STATE.log||[]).map(function(l){return '<div>'+esc(l)+'</div>'}).join('');updateMetrics()}
+  try{STATE=await(await fetch('/api/state')).json();$('curwifi').textContent=STATE.wifi_current||'未连接';$('backend').textContent=STATE.wifi_backend||'none';$('controltag').innerHTML=STATE.wifi_control?'<span class="tag done">可管理</span>':'<span class="tag">手动</span>';$('bWifi').disabled=!STATE.wifi_control;$('bConn').disabled=!STATE.wifi_control;$('savedtag').innerHTML=STATE.wifi_saved?'<span class="tag done">已记住</span>':'<span class="tag">未记住</span>';setPill($('wifiPill'),'Wi-Fi: '+(STATE.wifi_current||'未连接'),STATE.wifi_current?'ok':'warn');setPill($('autoPill'),'自动同步: '+(STATE.auto_sync?'开':'关'),STATE.auto_sync?'ok':'warn');$('bAuto').textContent=STATE.auto_sync?'关闭自动同步':'开启自动同步';if(STATE.connected)setPill($('cameraPill'),'相机: 在线','ok');if(STATE.wifi_conn&&!STATE.connected)setPill($('cameraPill'),'相机: 连接中','warn');if(STATE.current){var c=STATE.current,pc=c.total?Math.round(c.downloaded/c.total*100):0;$('cur').textContent='下载 '+c.name+' '+pc+'% ('+fmt(c.downloaded)+'/'+fmt(c.total)+', '+fmt(c.speed)+'/s)';$('pf').style.width=pc+'%'}else{$('cur').textContent=STATE.queue_len?('队列 '+STATE.queue_len+' 个'):'空闲';$('pf').style.width=0}$('tot').textContent='本次完成 '+STATE.completed;$('pt').style.width=FILES.length?Math.round((STATE.completed||0)/FILES.length*100)+'%':'0';$('lg').innerHTML=(STATE.log||[]).map(function(l){return '<div>'+esc(l)+'</div>'}).join('');updateMetrics()}
   catch(e){}
 }
 $('bScan').onclick=scan;$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;$('bCan').onclick=function(){fetch('/api/cancel',{method:'POST'})};$('bForget').onclick=async function(){if(confirm('清除记住的 Wi-Fi 密码?')){await fetch('/api/wifi/forget',{method:'POST'});poll()}};$('bAuto').onclick=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!STATE.auto_sync})});poll()};$('bDl').onclick=function(){if(!SEL.size)return alert('请先勾选文件');queueFiles(Array.from(SEL))};$('bVisible').onclick=function(){var ns=visible().filter(function(x){return !done(x)}).map(function(x){return x.name});if(!ns.length)return alert('当前可见文件都已下载');queueFiles(ns)};$('bMissing').onclick=function(){SEL.clear();visible().filter(function(x){return !done(x)}).forEach(function(x){SEL.add(x.name)});render()};$('bAll').onclick=function(){var v=visible(),all=!v.every(function(x){return SEL.has(x.name)});v.forEach(function(x){all?SEL.add(x.name):SEL.delete(x.name)});render()};$('cAll').onchange=$('bAll').onclick;$('fl').onchange=render;$('fs').onchange=render;$('q').oninput=render;$('ovc').onclick=closePrev;$('ov').onclick=function(e){if(e.target===$('ov'))closePrev()};

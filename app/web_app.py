@@ -23,9 +23,13 @@ WIFI_BACKEND = wifi.configure(
     CFG.get('wpa_ctrl'),
 )
 IFACE = wifi.detect_interface(CFG.get('wifi_iface'))
-raw_camera_ssid = str(CFG.get('camera_ssid', '') or '').strip()
-CAM_SSID = '' if raw_camera_ssid.upper().startswith('YOUR_') else raw_camera_ssid
-DEF_PW = CFG.get('camera_password')
+
+def config_value(value):
+    text = str(value or '').strip()
+    return '' if text.upper().startswith('YOUR_') else text
+
+CAM_SSID = config_value(CFG.get('camera_ssid'))
+DEF_PW = config_value(CFG.get('camera_password')) or None
 AUTO_INTERVAL = max(10, int(CFG.get('auto_sync_interval_sec', 30)))
 STATE_DIR = CFG.get('state_dir', '/state')
 THUMB_DIR = os.path.join(STATE_DIR, 'thumbs')
@@ -35,11 +39,30 @@ for d in (DLDIR, THUMB_DIR, ENC_DIR):
     os.makedirs(d, exist_ok=True)
 
 lk = threading.Lock()
+scan_lk = threading.Lock()
+_scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
+SCAN_CACHE_TTL = 8
+SCAN_RESCAN_INTERVAL = 12
+
+def _triggered_scan():
+    now = time.time()
+    with scan_lk:
+        if _scan_cache['data'] is not None and now - _scan_cache['ts'] < SCAN_CACHE_TTL:
+            return _scan_cache['data'], True
+        if now - _scan_cache['rescan_ts'] >= SCAN_RESCAN_INTERVAL:
+            wifi.rescan(IFACE)
+            _scan_cache['rescan_ts'] = now
+        r = wifi.scan(IFACE)
+        _scan_cache['data'] = r.stdout
+        _scan_cache['ts'] = now
+        return r.stdout, False
+
 ST = {'connected': False, 'wifi_conn': False, 'files': [], 'queue': [], 'current': None,
       'completed': 0, 'log': [], 'wifi_current': '', 'wifi_target': CAM_SSID, 'wifi_password': None,
       'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool(CFG.get('auto_sync', True)),
       'last_auto_sync': ''}
 cancel = threading.Event()
+last_auto_notice = 0
 
 def addlog(m):
     with lk:
@@ -68,6 +91,10 @@ def camera_client_cidr():
 def ensure_camera_ipv4():
     if WIFI_BACKEND != 'wpa_supplicant' or not IFACE:
         return
+    try:
+        run(['ip', 'link', 'set', IFACE, 'up'], 8)
+    except Exception:
+        pass
     cidr = camera_client_cidr()
     if not cidr:
         return
@@ -105,21 +132,41 @@ def cam_on():
 def load_saved_wifi():
     try:
         if os.path.exists(WIFI_FILE):
-            return json.load(open(WIFI_FILE))
-    except Exception:
+            data = json.load(open(WIFI_FILE))
+            if data.get('ssid') and data.get('password'):
+                return data
+            if data.get('ssid'):
+                log.warning('saved wifi has no password: ' + data.get('ssid', '')[:60])
+    except Exception as e:
+        log.warning('load_saved_wifi:' + str(e)[:50])
         pass
+    if CAM_SSID and DEF_PW:
+        return {'ssid': CAM_SSID, 'password': DEF_PW, 'source': 'config'}
     return None
 
 def save_wifi(ssid, pw):
     try:
+        existing = load_saved_wifi() or {}
+        if not pw and existing.get('ssid') == ssid and existing.get('password'):
+            pw = existing['password']
+        if not pw:
+            addlog('未保存 WiFi: 密码为空')
+            return
+        os.makedirs(STATE_DIR, exist_ok=True)
         with open(WIFI_FILE, 'w') as f:
             json.dump({'ssid': ssid, 'password': pw}, f)
         os.chmod(WIFI_FILE, 0o600)
         with lk:
-            ST['wifi_saved'] = True
+            ST['wifi_target'] = ssid; ST['wifi_password'] = pw; ST['wifi_saved'] = True
         addlog('已记住 WiFi: ' + ssid)
     except Exception as e:
         log.warning('save_wifi:' + str(e)[:50])
+
+def looks_like_luna_ssid(ssid):
+    return str(ssid or '').strip().lower().startswith('luna ')
+
+def is_camera_ssid(ssid):
+    return bool(ssid and ((CAM_SSID and ssid == CAM_SSID) or (not CAM_SSID and looks_like_luna_ssid(ssid))))
 
 def try_connect(ssid, pw):
     if not wifi.can_control():
@@ -129,18 +176,44 @@ def try_connect(ssid, pw):
         addlog('未检测到无线网卡')
         return False
     addlog('连接 ' + ssid + ' ...')
-    wifi.rescan(IFACE)
-    r = wifi.scan(IFACE)
-    if ssid not in (line.split(':', 1)[0] for line in r.stdout.splitlines()):
-        addlog('未扫到 ' + ssid); return False
+    found = False
+    for _ in range(3):
+        stdout, _ = _triggered_scan()
+        found = ssid in (line.split(':', 1)[0] for line in stdout.splitlines())
+        if found:
+            break
+        time.sleep(2)
+    if not found:
+        if WIFI_BACKEND != 'wpa_supplicant':
+            addlog('未扫到 ' + ssid); return False
+        addlog('本轮未扫到 ' + ssid + '，继续尝试连接')
     result = wifi.connect(IFACE, ssid, pw)
     if result.returncode != 0:
         addlog('连接失败: ' + (result.stderr or result.stdout).strip()[:80])
-    time.sleep(4)
-    ok = (current_ssid() == ssid)
+    ok = False
+    detail = ''
+    for _ in range(35):
+        time.sleep(1)
+        if WIFI_BACKEND == 'wpa_supplicant':
+            state = run(['wpa_cli', '-i', IFACE, '-p', CFG.get('wpa_ctrl', '/run/wpa_supplicant'), 'status'], 6)
+            fields = {}
+            for line in state.stdout.splitlines():
+                if '=' in line:
+                    k, v = line.split('=', 1)
+                    fields[k] = v
+            if fields.get('wpa_state') == 'COMPLETED' and fields.get('ssid') == ssid:
+                ok = True
+                break
+            if fields.get('wpa_state'):
+                detail = '（wpa_state=' + fields['wpa_state'] + '）'
+        elif current_ssid() == ssid:
+            ok = True
+            break
     if ok:
         ensure_camera_ipv4()
-    addlog('已连 ' + ssid if ok else '连接 ' + ssid + ' 失败')
+        addlog('已连 ' + ssid)
+    else:
+        addlog('连接 ' + ssid + ' 失败' + detail)
     return ok
 
 def keeper():
@@ -218,6 +291,8 @@ def enqueue(names):
     return added
 
 def auto_sync_once():
+    if not prepare_auto_sync_connection():
+        return 0
     if not refresh():
         return 0
     with lk:
@@ -228,6 +303,28 @@ def auto_sync_once():
     if added:
         addlog('自动同步加入 ' + str(added) + ' 个新文件')
     return added
+
+def auto_notice(message):
+    global last_auto_notice
+    now = time.time()
+    if now - last_auto_notice > 300:
+        addlog(message)
+        last_auto_notice = now
+
+def prepare_auto_sync_connection():
+    if wifi_on_target() and cam_on():
+        return True
+    with lk:
+        target = ST['wifi_target']; pw = ST['wifi_password'] or DEF_PW; saved = ST['wifi_saved']
+    if wifi.can_control() and target and pw is not None:
+        return try_connect(target, pw) and wifi_on_target() and cam_on()
+    if wifi.can_control() and not target:
+        auto_notice('自动同步等待记住 Luna WiFi')
+    elif not wifi.can_control():
+        auto_notice('自动同步等待手动连接 Luna WiFi')
+    elif not saved:
+        auto_notice('自动同步需要先记住 Luna WiFi 密码')
+    return False
 
 def auto_sync_worker():
     while True:
@@ -352,6 +449,7 @@ def api_state():
             'current': ST['current'], 'completed': ST['completed'],
             'log': ST['log'][-12:], 'camera_ssid': CAM_SSID, 'wifi_iface': IFACE,
             'wifi_backend': WIFI_BACKEND, 'wifi_control': wifi.can_control(),
+            'wifi_target': ST['wifi_target'], 'wifi_has_password': bool(ST['wifi_password'] or DEF_PW),
             'auto_sync': ST['auto_sync'], 'auto_interval': AUTO_INTERVAL,
             'last_auto_sync': ST['last_auto_sync']})
 
@@ -376,10 +474,9 @@ def wifi_scan():
         return jsonify({'nets': [], 'current': '', 'camera_ssid': CAM_SSID,
                         'wifi_iface': None, 'wifi_backend': WIFI_BACKEND,
                         'error': '未检测到无线网卡'}), 503
-    wifi.rescan(IFACE)
-    r = wifi.scan(IFACE)
+    stdout, _ = _triggered_scan()
     nets = []; seen = set()
-    for line in r.stdout.splitlines():
+    for line in stdout.splitlines():
         parts = line.split(':')
         if len(parts) < 2:
             continue
@@ -389,7 +486,7 @@ def wifi_scan():
         seen.add(ssid)
         nets.append({'ssid': ssid, 'signal': parts[1] if len(parts) > 1 else '',
                      'secure': 'yes' if (len(parts) > 2 and parts[2]) else 'no',
-                     'is_camera': ssid == CAM_SSID})
+                     'is_camera': is_camera_ssid(ssid)})
     with lk:
         ST['wifi_current'] = current_ssid()
     return jsonify({'nets': nets, 'current': ST['wifi_current'],
@@ -411,7 +508,7 @@ def wifi_connect():
         save_wifi(ssid, pw)
     def bg():
         try:
-            if try_connect(ssid, pw) and ssid == CAM_SSID:
+            if try_connect(ssid, pw) and is_camera_ssid(ssid):
                 refresh()
         finally:
             with lk:
@@ -425,7 +522,7 @@ def wifi_forget():
         if os.path.exists(WIFI_FILE):
             os.remove(WIFI_FILE)
         with lk:
-            ST['wifi_saved'] = False
+            ST['wifi_saved'] = False; ST['wifi_target'] = CAM_SSID; ST['wifi_password'] = None
         addlog('已清除记住的WiFi')
     except Exception as e:
         log.warning('forget:' + str(e)[:50])
@@ -468,7 +565,6 @@ def api_del(name):
     return jsonify({'ok': True})
 
 def _wipe_dir(d):
-    """删除目录下所有缓存文件，返回 (文件数, 释放字节数)。目录保留。"""
     n = t = 0
     if not os.path.isdir(d):
         return (0, 0)
@@ -511,7 +607,6 @@ def thumb(name):
     if os.path.exists(tp):
         return send_file(tp, mimetype='image/jpeg')
     low = name.lower()
-    # 视频：用 ffmpeg 抽第 1 秒一帧（仅本地文件）
     if low.endswith(('.mp4', '.lrv', '.mov', '.m4v')):
         p = local_path(name)
         if not p:
@@ -604,13 +699,13 @@ def video(name):
         out['Content-Length'] = cl
     return Response(gen(), status=status, headers=out, mimetype='video/mp4')
 
-# 启动时加载记住的WiFi
+# Load remembered Wi-Fi before workers start.
 saved = load_saved_wifi()
 if saved and saved.get('ssid') and saved.get('password'):
     ST['wifi_target'] = saved['ssid']
     ST['wifi_password'] = saved['password']
     ST['wifi_saved'] = True
-    addlog('加载记住的WiFi: ' + saved['ssid'])
+    addlog(('加载配置中的WiFi: ' if saved.get('source') == 'config' else '加载记住的WiFi: ') + saved['ssid'])
 
 if __name__ == '__main__':
     threading.Thread(target=keeper, daemon=True).start()

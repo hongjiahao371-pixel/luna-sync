@@ -164,9 +164,19 @@ def wpa_detect_interface(preferred=None):
     return devices[0] if devices else None
 
 
+def wpa_link_up(interface):
+    if not interface:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    result = run(['ip', 'link', 'set', interface, 'up'], 8)
+    if result.returncode == 0:
+        run(['iw', 'dev', interface, 'set', 'power_save', 'off'], 5)
+    return result
+
+
 def wpa_current_ssid(interface):
     if not interface:
         return ''
+    wpa_link_up(interface)
     result = run(['wpa_cli', '-i', interface, '-p', WPA_CTRL, 'status'], 6)
     for line in result.stdout.splitlines():
         if line.startswith('ssid='):
@@ -174,11 +184,51 @@ def wpa_current_ssid(interface):
     return ''
 
 
+def wpa_parse_scan_results(result):
+    networks = []
+    for line in result.stdout.splitlines()[1:]:
+        parts = line.split('\t')
+        if len(parts) < 5:
+            continue
+        ssid = parts[4].strip()
+        if not ssid:
+            continue
+        signal = parts[2].strip()
+        flags = parts[3].upper()
+        secure = 'yes' if any(token in flags for token in ('WPA', 'WEP', 'SAE')) else 'no'
+        networks.append((ssid, signal, secure))
+    return networks
+
+
 def wpa_scan(interface=None):
     if not interface:
         interface = wpa_detect_interface()
     if not interface:
         return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    link = wpa_link_up(interface)
+    if link.returncode != 0:
+        return link
+    base = ['wpa_cli', '-i', interface, '-p', WPA_CTRL]
+    run(base + ['scan'], 8)
+    import time
+    time.sleep(2)
+    cli_result = run(base + ['scan_results'], 8)
+    cli_networks = wpa_parse_scan_results(cli_result)
+    if cli_networks:
+        best = {}
+        for ssid, signal, secure in cli_networks:
+            try:
+                score = int(signal) if signal else -200
+            except ValueError:
+                score = -200
+            if ssid not in best or score > best[ssid][0]:
+                best[ssid] = (score, '%s:%s:%s' % (ssid, signal, secure))
+        return subprocess.CompletedProcess(
+            args=base + ['scan_results'],
+            returncode=cli_result.returncode,
+            stdout='\n'.join(item[1] for item in best.values()),
+            stderr=cli_result.stderr,
+        )
     result = run(['iw', 'dev', interface, 'scan', 'ap-force'], 25)
     tries = 0
     while result.returncode != 0 and ('progress' in (result.stderr or '').lower() or 'busy' in (result.stderr or '').lower()) and tries < 4:
@@ -224,6 +274,14 @@ def wpa_scan(interface=None):
 
 
 def wpa_rescan(interface=None):
+    if not interface:
+        interface = wpa_detect_interface()
+    if not interface:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    link = wpa_link_up(interface)
+    if link.returncode != 0:
+        return link
+    run(['wpa_cli', '-i', interface, '-p', WPA_CTRL, 'scan'], 8)
     return subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr='')
 
 
@@ -236,6 +294,9 @@ def wpa_connect(interface, ssid, password):
         interface = wpa_detect_interface()
     if not interface:
         return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    link = wpa_link_up(interface)
+    if link.returncode != 0:
+        return link
     base = ['wpa_cli', '-i', interface, '-p', WPA_CTRL]
     commands = [
         base + ['remove_network', 'all'],
