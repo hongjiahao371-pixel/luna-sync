@@ -292,15 +292,23 @@ def refresh():
 def enqueue(names):
     loc = local_files()
     added = 0
+    skipped = []
     with lk:
         current = ST['current']['name'] if ST['current'] else None
         known = {f['name'] for f in ST['files']}
         for name in names:
-            if name in loc or name in ST['queue'] or name == current or name not in known:
+            if name in loc:
+                skipped.append({'name': name, 'reason': 'already_local'})
+                continue
+            if name in ST['queue'] or name == current:
+                skipped.append({'name': name, 'reason': 'already_queued'})
+                continue
+            if name not in known:
+                skipped.append({'name': name, 'reason': 'not_available'})
                 continue
             ST['queue'].append(name)
             added += 1
-    return added
+    return added, skipped
 
 def auto_sync_once():
     if not prepare_auto_sync_connection():
@@ -309,7 +317,7 @@ def auto_sync_once():
         return 0
     with lk:
         names = [f['name'] for f in ST['files']]
-    added = enqueue(names)
+    added, _ = enqueue(names)
     with lk:
         ST['last_auto_sync'] = time.strftime('%H:%M:%S')
     if added:
@@ -554,9 +562,22 @@ def api_local_files():
 @app.route('/api/download', methods=['POST'])
 def api_dl():
     ns = (request.json or {}).get('files', [])
-    added = enqueue(ns)
+    added, skipped = enqueue(ns)
     addlog('队列 +' + str(added))
-    return jsonify({'queued': added})
+    msg = ''
+    if not added:
+        reasons = {s['reason'] for s in skipped}
+        with lk:
+            connected = ST['connected']
+        if 'already_local' in reasons and len(reasons) == 1:
+            msg = '所选文件已在本地'
+        elif not connected:
+            msg = '相机未连接，无法下载新素材'
+        elif 'not_available' in reasons:
+            msg = '所选文件不在当前相机列表'
+        elif 'already_queued' in reasons:
+            msg = '所选文件已在队列中'
+    return jsonify({'queued': added, 'skipped': skipped, 'msg': msg})
 
 @app.route('/api/cancel', methods=['POST'])
 def api_can():

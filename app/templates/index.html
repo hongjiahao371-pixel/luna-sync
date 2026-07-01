@@ -143,7 +143,7 @@ function setPill(el, text, cls){el.className='pill '+(cls||'');el.textContent=te
 function updateMetrics(){var v=visible();$('mFiles').textContent=FILES.length;$('mSelected').textContent=SEL.size;$('mQueue').textContent=STATE.queue_len||0;$('mDone').textContent=STATE.completed||0;$('subtitle').textContent=v.length+' 个可见 · '+(STATE.last_auto_sync?('上次自动 '+STATE.last_auto_sync):'自动同步待命');$('libmeta').textContent=v.length+' 个可见 · '+SEL.size+' 个已选';
   var lf=localFiles(),ni=lf.filter(function(x){return isImg(x.kind)}).length,nv=lf.filter(function(x){return isVid(x.kind)}).length,tot=lf.reduce(function(a,x){return a+(x.bytes||0)},0);
   $('camCnt').textContent=FILES.length;$('localCnt').textContent=lf.length;$('lstat').textContent=lf.length+' 个 · 照片 '+ni+' / 视频 '+nv+' · '+fmt(tot)}
-async function queueFiles(names){var d=await(await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:names})})).json();alert('已加入下载队列 '+d.queued+' 个');poll()}
+async function queueFiles(names){var d=await(await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:names})})).json();alert(d.msg||('已加入下载队列 '+d.queued+' 个'));poll()}
 function render(){
   var tb=$('tbody'),list=visible();tb.innerHTML='';$('empty').style.display=list.length?'none':'grid';
   list.forEach(function(it){
