@@ -1,0 +1,125 @@
+services:
+  luna-sync:
+    image: jvsheng/luna-sync:upk-hotplug-statefix2-20260702
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    environment:
+      LUNA_CONFIG: /app/config.json
+      TZ: Asia/Shanghai
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat > /app/config.json <<'EOF'
+        {
+          "camera_host": "192.168.42.1",
+          "camera_ssid": "",
+          "camera_password": "",
+          "camera_client_cidr": "192.168.42.2/24",
+          "wifi_backend": "auto",
+          "wifi_iface": null,
+          "wpa_ctrl": "/run/wpa_supplicant",
+          "auto_sync": true,
+          "auto_sync_interval_sec": 30,
+          "download_dir": "/downloads",
+          "state_dir": "/state",
+          "web_port": 8766
+        }
+        EOF
+        exec /entrypoint.sh
+    volumes:
+      - ./downloads:/downloads
+      - ./state:/state
+
+  luna-sync-open:
+    image: jvsheng/luna-sync:upk-hotplug-statefix2-20260702
+    restart: unless-stopped
+    depends_on:
+      - luna-sync
+    ports:
+      - "8767:8767"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: Asia/Shanghai
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        python3 - <<'PY'
+        import shutil
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+
+        TARGET = "http://host.docker.internal:8766"
+        HOP_HEADERS = {
+            "connection",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "te",
+            "trailers",
+            "transfer-encoding",
+            "upgrade",
+        }
+
+        class Proxy(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):
+                self.forward()
+
+            def do_POST(self):
+                self.forward()
+
+            def do_PUT(self):
+                self.forward()
+
+            def do_PATCH(self):
+                self.forward()
+
+            def do_DELETE(self):
+                self.forward()
+
+            def do_OPTIONS(self):
+                self.forward()
+
+            def forward(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length) if length else None
+                headers = {
+                    key: value
+                    for key, value in self.headers.items()
+                    if key.lower() not in HOP_HEADERS and key.lower() != "host"
+                }
+                req = Request(TARGET + self.path, data=body, headers=headers, method=self.command)
+                try:
+                    with urlopen(req, timeout=120) as resp:
+                        self.send_response(resp.status)
+                        for key, value in resp.headers.items():
+                            if key.lower() not in HOP_HEADERS:
+                                self.send_header(key, value)
+                        self.end_headers()
+                        shutil.copyfileobj(resp, self.wfile)
+                except HTTPError as err:
+                    self.send_response(err.code)
+                    for key, value in err.headers.items():
+                        if key.lower() not in HOP_HEADERS:
+                            self.send_header(key, value)
+                    self.end_headers()
+                    shutil.copyfileobj(err, self.wfile)
+                except Exception as err:
+                    message = f"Luna Sync gateway unavailable: {err}\n".encode()
+                    self.send_response(502)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Length", str(len(message)))
+                    self.end_headers()
+                    self.wfile.write(message)
+
+            def log_message(self, fmt, *args):
+                return
+
+        ThreadingHTTPServer(("0.0.0.0", 8767), Proxy).serve_forever()
+        PY

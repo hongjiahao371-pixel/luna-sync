@@ -1,0 +1,5 @@
+.DS_Store
+**/.DS_Store
+luna-sync/rootfs_*/images/*.tar
+luna-sync/dist/*.upk
+luna-sync/build_dir/

@@ -1,0 +1,23 @@
+spec_version: 2.1
+app_id: com.jvsheng.lunasync
+version: 1.0.0
+support_arch:
+  - amd64
+is_docker_app: true
+tag_types:
+  - backup
+  - media
+depend_fw_version: 1.0.0
+depend_docker_version: 20.10.0
+open_type: tab
+port: 8767
+
+i18n:
+  zh-CN:
+    name: Luna Sync
+    description: Luna Ultra 素材备份与同步工具
+    author: jvsheng
+  en-US:
+    name: Luna Sync
+    description: Luna Ultra media backup and sync tool
+    author: jvsheng

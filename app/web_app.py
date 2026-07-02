@@ -16,13 +16,12 @@ log = logging.getLogger('luna')
 app = Flask(__name__)
 HOST = CFG['camera_host']
 DLDIR = CFG['download_dir']
-WIFI_BACKEND = wifi.configure(
-    os.environ.get('LUNA_WIFI_BACKEND_RESOLVED') or
-    os.environ.get('LUNA_WIFI_BACKEND') or
-    CFG.get('wifi_backend', 'auto'),
-    CFG.get('wpa_ctrl'),
-)
+def configured_wifi_backend():
+    return os.environ.get('LUNA_WIFI_BACKEND') or CFG.get('wifi_backend', 'auto')
+
+WIFI_BACKEND = wifi.configure(configured_wifi_backend(), CFG.get('wpa_ctrl'))
 IFACE = wifi.detect_interface(CFG.get('wifi_iface'))
+backend_lk = threading.Lock()
 
 def config_value(value):
     text = str(value or '').strip()
@@ -72,7 +71,21 @@ def addlog(m):
 def run(args, t=30):
     return subprocess.run(args, capture_output=True, text=True, timeout=t)
 
+def refresh_wifi_backend(start_wpa=False):
+    global WIFI_BACKEND, IFACE
+    with backend_lk:
+        old_backend, old_iface = WIFI_BACKEND, IFACE
+        WIFI_BACKEND = wifi.configure(configured_wifi_backend(), CFG.get('wpa_ctrl'))
+        IFACE = wifi.detect_interface(CFG.get('wifi_iface'))
+        changed = (old_backend, old_iface) != (WIFI_BACKEND, IFACE)
+    if start_wpa and WIFI_BACKEND == 'wpa_supplicant' and IFACE:
+        wifi.ensure_wpa_supplicant(IFACE)
+    if changed:
+        addlog('WiFi 后端更新: ' + WIFI_BACKEND + '，无线网卡: ' + (IFACE or '未检测到'))
+    return WIFI_BACKEND, IFACE
+
 def current_ssid():
+    refresh_wifi_backend()
     return wifi.current_ssid(IFACE)
 
 def camera_client_cidr():
@@ -169,6 +182,7 @@ def is_camera_ssid(ssid):
     return bool(ssid and ((CAM_SSID and ssid == CAM_SSID) or (not CAM_SSID and looks_like_luna_ssid(ssid))))
 
 def try_connect(ssid, pw):
+    refresh_wifi_backend(start_wpa=True)
     if not wifi.can_control():
         addlog('当前为手动连接模式，不管理 WiFi')
         return cam_on()
@@ -195,7 +209,7 @@ def try_connect(ssid, pw):
     for _ in range(35):
         time.sleep(1)
         if WIFI_BACKEND == 'wpa_supplicant':
-            state = run(['wpa_cli', '-i', IFACE, '-p', CFG.get('wpa_ctrl', '/run/wpa_supplicant'), 'status'], 6)
+            state = run(['wpa_cli', '-i', IFACE, '-p', CFG.get('wpa_ctrl', '/run/wpa_supplicant'), 'status'], 2)
             fields = {}
             for line in state.stdout.splitlines():
                 if '=' in line:
@@ -219,6 +233,7 @@ def try_connect(ssid, pw):
 def keeper():
     while True:
         try:
+            refresh_wifi_backend()
             with lk:
                 target = ST['wifi_target']; pw = ST['wifi_password'] or DEF_PW
             cur = current_ssid()
@@ -332,6 +347,7 @@ def auto_notice(message):
         last_auto_notice = now
 
 def prepare_auto_sync_connection():
+    refresh_wifi_backend(start_wpa=True)
     if wifi_on_target() and cam_on():
         return True
     with lk:
@@ -462,6 +478,7 @@ def idx():
 
 @app.route('/api/state')
 def api_state():
+    refresh_wifi_backend()
     with lk:
         return jsonify({'connected': ST['connected'], 'wifi_conn': ST['wifi_conn'],
             'wifi_current': ST['wifi_current'], 'wifi_saved': ST['wifi_saved'],
@@ -486,6 +503,7 @@ def api_auto_sync():
 
 @app.route('/api/wifi/scan')
 def wifi_scan():
+    refresh_wifi_backend(start_wpa=True)
     if not wifi.can_control():
         return jsonify({'nets': [], 'current': '', 'camera_ssid': CAM_SSID,
                         'wifi_iface': IFACE, 'wifi_backend': WIFI_BACKEND,
@@ -515,6 +533,7 @@ def wifi_scan():
 
 @app.route('/api/wifi/connect', methods=['POST'])
 def wifi_connect():
+    refresh_wifi_backend(start_wpa=True)
     if not wifi.can_control():
         return jsonify({'ok': False, 'msg': '当前为手动连接模式'}), 400
     data = request.json or {}

@@ -2,11 +2,13 @@ import glob
 import os
 import shutil
 import subprocess
+import time
 
 
 BACKEND = 'auto'
 RESOLVED_BACKEND = 'none'
 WPA_CTRL = '/run/wpa_supplicant'
+WPA_START_ATTEMPTS = {}
 
 
 def run(args, timeout=30):
@@ -62,11 +64,26 @@ def requires_target_ssid():
 def wireless_interfaces():
     out = []
     seen = set()
-    for path in glob.glob('/sys/class/net/*/wireless'):
-        name = os.path.basename(os.path.dirname(path))
-        if name not in seen:
+
+    def add(name):
+        if name and name not in seen:
             seen.add(name)
             out.append(name)
+
+    for path in glob.glob('/sys/class/net/*/wireless'):
+        add(os.path.basename(os.path.dirname(path)))
+    for path in glob.glob('/sys/class/net/*/uevent'):
+        name = os.path.basename(os.path.dirname(path))
+        try:
+            data = open(path).read()
+        except Exception:
+            data = ''
+        if 'DEVTYPE=wlan' in data:
+            add(name)
+    for path in glob.glob('/sys/class/net/*'):
+        name = os.path.basename(path)
+        if name.startswith(('wlan', 'wlx', 'wlp', 'wl')):
+            add(name)
     return out
 
 
@@ -159,9 +176,42 @@ def nm_connect(interface, ssid, password):
 
 def wpa_detect_interface(preferred=None):
     devices = wireless_interfaces()
-    if preferred and preferred in devices:
+    if preferred and os.path.exists('/sys/class/net/' + preferred):
         return preferred
     return devices[0] if devices else None
+
+
+def ensure_wpa_supplicant(interface=None):
+    if not shutil.which('wpa_supplicant') or not shutil.which('wpa_cli'):
+        return False
+    if not interface:
+        interface = wpa_detect_interface()
+    if not interface:
+        return False
+    wpa_link_up(interface)
+    base = ['wpa_cli', '-i', interface, '-p', WPA_CTRL]
+    if run(base + ['status'], 1).returncode == 0:
+        return True
+    now = time.time()
+    if now - WPA_START_ATTEMPTS.get(interface, 0) < 15:
+        return False
+    WPA_START_ATTEMPTS[interface] = now
+    os.makedirs(WPA_CTRL, exist_ok=True)
+    try:
+        os.remove(os.path.join(WPA_CTRL, interface))
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+    conf = '/tmp/wpa_supplicant-%s.conf' % interface
+    with open(conf, 'w') as f:
+        f.write('ctrl_interface=%s\nctrl_interface_group=0\nupdate_config=1\nap_scan=1\n' % WPA_CTRL)
+    run(['wpa_supplicant', '-B', '-i', interface, '-c', conf, '-D', 'nl80211,wext'], 5)
+    for _ in range(12):
+        if run(base + ['status'], 1).returncode == 0:
+            return True
+        time.sleep(0.25)
+    return False
 
 
 def wpa_link_up(interface):
@@ -177,7 +227,7 @@ def wpa_current_ssid(interface):
     if not interface:
         return ''
     wpa_link_up(interface)
-    result = run(['wpa_cli', '-i', interface, '-p', WPA_CTRL, 'status'], 6)
+    result = run(['wpa_cli', '-i', interface, '-p', WPA_CTRL, 'status'], 2)
     for line in result.stdout.splitlines():
         if line.startswith('ssid='):
             return line.split('=', 1)[1].strip()
@@ -205,6 +255,7 @@ def wpa_scan(interface=None):
         interface = wpa_detect_interface()
     if not interface:
         return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    ensure_wpa_supplicant(interface)
     link = wpa_link_up(interface)
     if link.returncode != 0:
         return link
@@ -278,6 +329,7 @@ def wpa_rescan(interface=None):
         interface = wpa_detect_interface()
     if not interface:
         return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    ensure_wpa_supplicant(interface)
     link = wpa_link_up(interface)
     if link.returncode != 0:
         return link
@@ -294,6 +346,7 @@ def wpa_connect(interface, ssid, password):
         interface = wpa_detect_interface()
     if not interface:
         return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    ensure_wpa_supplicant(interface)
     link = wpa_link_up(interface)
     if link.returncode != 0:
         return link

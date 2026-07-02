@@ -46,6 +46,12 @@ resolve_backend() {
         for p in /sys/class/net/*/wireless; do
             [ -e "$p" ] && printf '%s\n' "wpa_supplicant" && return
         done
+        for p in /sys/class/net/*/uevent; do
+            [ -e "$p" ] && grep -q '^DEVTYPE=wlan$' "$p" && printf '%s\n' "wpa_supplicant" && return
+        done
+        for p in /sys/class/net/wlan* /sys/class/net/wl*; do
+            [ -e "$p" ] && printf '%s\n' "wpa_supplicant" && return
+        done
     fi
     printf '%s\n' "none"
 }
@@ -57,6 +63,14 @@ detect_iface() {
     fi
     for p in /sys/class/net/*/wireless; do
         [ -e "$p" ] && basename "$(dirname "$p")" && return
+    done
+    for p in /sys/class/net/*/uevent; do
+        if [ -e "$p" ] && grep -q '^DEVTYPE=wlan$' "$p"; then
+            basename "$(dirname "$p")" && return
+        fi
+    done
+    for p in /sys/class/net/wlan* /sys/class/net/wl*; do
+        [ -e "$p" ] && basename "$p" && return
     done
 }
 
@@ -74,7 +88,7 @@ if [ "$BACKEND" = "wpa_supplicant" ]; then
         export LUNA_WIFI_IFACE="$IFACE"
         echo "[entrypoint] wireless interface: $IFACE"
         ip link set "$IFACE" up 2>/dev/null || echo "[entrypoint] warn: cannot set $IFACE up"
-        pkill wpa_supplicant 2>/dev/null || true
+        wpa_cli -i "$IFACE" -p "$CFG_WPA_CTRL" terminate >/dev/null 2>&1 || true
         rm -f "$CFG_WPA_CTRL/$IFACE" 2>/dev/null || true
         mkdir -p "$CFG_WPA_CTRL"
         WPA_CONF=/tmp/wpa_supplicant.conf
