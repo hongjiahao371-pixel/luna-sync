@@ -9,8 +9,21 @@ tag_types:
   - media
 depend_fw_version: 1.0.0
 depend_docker_version: 20.10.0
+allow_add_access_path: true
 open_type: tab
 port: 8767
+parameters:
+  - key: DOWNLOAD_DIR
+    type: path
+    required: false
+    changeable: true
+    i18n:
+      zh-CN:
+        name: 素材保存目录
+        description: 选择 Luna Sync 自动备份素材的保存位置，建议使用 /volume1/LunaSync
+      en-US:
+        name: Media save folder
+        description: Choose where Luna Sync stores downloaded media, for example /volume1/LunaSync
 
 i18n:
   zh-CN:

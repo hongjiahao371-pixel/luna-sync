@@ -15,7 +15,7 @@ logging.basicConfig(level='INFO', format='%(asctime)s %(levelname)s %(message)s'
 log = logging.getLogger('luna')
 app = Flask(__name__)
 HOST = CFG['camera_host']
-DLDIR = CFG['download_dir']
+DLDIR = os.environ.get('DOWNLOAD_DIR') or CFG['download_dir']
 def configured_wifi_backend():
     return os.environ.get('LUNA_WIFI_BACKEND') or CFG.get('wifi_backend', 'auto')
 

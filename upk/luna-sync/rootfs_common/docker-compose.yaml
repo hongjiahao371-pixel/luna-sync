@@ -1,6 +1,6 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-auto-online-trigger-20260702
+    image: jvsheng/luna-sync:upk-custom-download-dir-20260703
     network_mode: host
     privileged: true
     restart: unless-stopped
@@ -22,18 +22,18 @@ services:
           "wpa_ctrl": "/run/wpa_supplicant",
           "auto_sync": true,
           "auto_sync_interval_sec": 30,
-          "download_dir": "/downloads",
+          "download_dir": "/volume1/LunaSync",
           "state_dir": "/state",
           "web_port": 8766
         }
         EOF
         exec /entrypoint.sh
     volumes:
-      - ./downloads:/downloads
+      - /volume1:/volume1
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-auto-online-trigger-20260702
+    image: jvsheng/luna-sync:upk-custom-download-dir-20260703
     restart: unless-stopped
     depends_on:
       - luna-sync
