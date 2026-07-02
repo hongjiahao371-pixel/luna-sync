@@ -39,6 +39,7 @@ for d in (DLDIR, THUMB_DIR, ENC_DIR):
 
 lk = threading.Lock()
 scan_lk = threading.Lock()
+auto_sync_lk = threading.Lock()
 _scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
 SCAN_CACHE_TTL = 8
 SCAN_RESCAN_INTERVAL = 12
@@ -230,6 +231,14 @@ def try_connect(ssid, pw):
         addlog('连接 ' + ssid + ' 失败' + detail)
     return ok
 
+def trigger_auto_sync_check(reason):
+    with lk:
+        enabled = ST['auto_sync']
+    if not enabled:
+        return
+    addlog(reason)
+    threading.Thread(target=auto_sync_once, kwargs={'manual': True}, daemon=True).start()
+
 def keeper():
     while True:
         try:
@@ -243,8 +252,12 @@ def keeper():
                 try_connect(target, pw); cur = current_ssid()
                 with lk:
                     ST['wifi_current'] = cur
+            connected = wifi_on_target() and cam_on()
             with lk:
-                ST['connected'] = wifi_on_target() and cam_on()
+                was_connected = ST['connected']
+                ST['connected'] = connected
+            if connected and not was_connected:
+                trigger_auto_sync_check('检测到 Luna 已连接，开始自动同步检查')
         except Exception as e:
             log.warning('keeper:' + str(e)[:50])
         time.sleep(12)
@@ -326,24 +339,31 @@ def enqueue(names):
     return added, skipped
 
 def auto_sync_once(manual=False):
-    if not prepare_auto_sync_connection():
+    if not auto_sync_lk.acquire(blocking=False):
         if manual:
-            addlog('自动同步未开始: 相机未就绪')
+            addlog('自动同步已在运行')
         return 0
-    if not refresh():
-        if manual:
-            addlog('自动同步未开始: 扫描相机文件失败')
-        return 0
-    with lk:
-        names = [f['name'] for f in ST['files']]
-    added, _ = enqueue(names)
-    with lk:
-        ST['last_auto_sync'] = time.strftime('%H:%M:%S')
-    if added:
-        addlog('自动同步加入 ' + str(added) + ' 个新文件')
-    elif manual:
-        addlog('自动同步检查完成，没有新文件')
-    return added
+    try:
+        if not prepare_auto_sync_connection():
+            if manual:
+                addlog('自动同步未开始: 相机未就绪')
+            return 0
+        if not refresh():
+            if manual:
+                addlog('自动同步未开始: 扫描相机文件失败')
+            return 0
+        with lk:
+            names = [f['name'] for f in ST['files']]
+        added, _ = enqueue(names)
+        with lk:
+            ST['last_auto_sync'] = time.strftime('%H:%M:%S')
+        if added:
+            addlog('自动同步加入 ' + str(added) + ' 个新文件')
+        elif manual:
+            addlog('自动同步检查完成，没有新文件')
+        return added
+    finally:
+        auto_sync_lk.release()
 
 def auto_notice(message):
     global last_auto_notice
@@ -504,7 +524,7 @@ def api_auto_sync():
         ST['auto_sync'] = enabled
     addlog('自动同步已' + ('开启' if enabled else '关闭'))
     if enabled:
-        threading.Thread(target=auto_sync_once, kwargs={'manual': True}, daemon=True).start()
+        trigger_auto_sync_check('自动同步已开启，开始检查')
     return jsonify({'ok': True, 'auto_sync': enabled})
 
 @app.route('/api/wifi/scan')
@@ -555,10 +575,7 @@ def wifi_connect():
         try:
             if try_connect(ssid, pw) and is_camera_ssid(ssid):
                 refresh()
-                with lk:
-                    enabled = ST['auto_sync']
-                if enabled:
-                    auto_sync_once(manual=True)
+                trigger_auto_sync_check('Luna WiFi 已连接，开始自动同步检查')
         finally:
             with lk:
                 ST['wifi_conn'] = False
