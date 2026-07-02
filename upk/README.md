@@ -28,12 +28,12 @@ python3 scripts/docker_archive_from_registry.py \
 python3 scripts/append_image_layer.py \
   --input luna-sync/rootfs_amd64/images/luna-sync-amd64.tar \
   --output luna-sync/rootfs_amd64/images/luna-sync-amd64.tar.tmp \
-  --tag jvsheng/luna-sync:upk-hotplug-statefix2-20260702
+  --tag jvsheng/luna-sync:upk-scroll-autosync-20260702
 mv luna-sync/rootfs_amd64/images/luna-sync-amd64.tar.tmp \
   luna-sync/rootfs_amd64/images/luna-sync-amd64.tar
 ugcli check --path luna-sync
 cd luna-sync
-ugcli pack --arch amd64 --build 7
+ugcli pack --arch amd64 --build 8
 ```
 
 The generated `.upk` will be written to `luna-sync/build_dir/pkgs/upk/`.

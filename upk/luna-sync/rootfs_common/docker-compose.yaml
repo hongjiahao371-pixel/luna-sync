@@ -1,6 +1,6 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-hotplug-statefix2-20260702
+    image: jvsheng/luna-sync:upk-scroll-autosync-20260702
     network_mode: host
     privileged: true
     restart: unless-stopped
@@ -33,7 +33,7 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-hotplug-statefix2-20260702
+    image: jvsheng/luna-sync:upk-scroll-autosync-20260702
     restart: unless-stopped
     depends_on:
       - luna-sync

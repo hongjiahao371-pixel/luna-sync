@@ -325,10 +325,14 @@ def enqueue(names):
             added += 1
     return added, skipped
 
-def auto_sync_once():
+def auto_sync_once(manual=False):
     if not prepare_auto_sync_connection():
+        if manual:
+            addlog('自动同步未开始: 相机未就绪')
         return 0
     if not refresh():
+        if manual:
+            addlog('自动同步未开始: 扫描相机文件失败')
         return 0
     with lk:
         names = [f['name'] for f in ST['files']]
@@ -337,6 +341,8 @@ def auto_sync_once():
         ST['last_auto_sync'] = time.strftime('%H:%M:%S')
     if added:
         addlog('自动同步加入 ' + str(added) + ' 个新文件')
+    elif manual:
+        addlog('自动同步检查完成，没有新文件')
     return added
 
 def auto_notice(message):
@@ -498,7 +504,7 @@ def api_auto_sync():
         ST['auto_sync'] = enabled
     addlog('自动同步已' + ('开启' if enabled else '关闭'))
     if enabled:
-        threading.Thread(target=auto_sync_once, daemon=True).start()
+        threading.Thread(target=auto_sync_once, kwargs={'manual': True}, daemon=True).start()
     return jsonify({'ok': True, 'auto_sync': enabled})
 
 @app.route('/api/wifi/scan')
@@ -549,6 +555,10 @@ def wifi_connect():
         try:
             if try_connect(ssid, pw) and is_camera_ssid(ssid):
                 refresh()
+                with lk:
+                    enabled = ST['auto_sync']
+                if enabled:
+                    auto_sync_once(manual=True)
         finally:
             with lk:
                 ST['wifi_conn'] = False
