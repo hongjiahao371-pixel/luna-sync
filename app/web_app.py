@@ -513,6 +513,7 @@ def api_state():
             'log': ST['log'][-12:], 'camera_ssid': CAM_SSID, 'wifi_iface': IFACE,
             'wifi_backend': WIFI_BACKEND, 'wifi_control': wifi.can_control(),
             'wifi_target': ST['wifi_target'], 'wifi_has_password': bool(ST['wifi_password'] or DEF_PW),
+            'download_dir': DLDIR,
             'auto_sync': ST['auto_sync'], 'auto_interval': AUTO_INTERVAL,
             'last_auto_sync': ST['last_auto_sync']})
 
@@ -791,4 +792,5 @@ if __name__ == '__main__':
     threading.Thread(target=dl_worker, daemon=True).start()
     threading.Thread(target=auto_sync_worker, daemon=True).start()
     addlog('Luna Sync 启动，WiFi 后端: ' + WIFI_BACKEND + '，无线网卡: ' + (IFACE or '未检测到'))
+    addlog('素材保存目录: ' + DLDIR)
     app.run(host='0.0.0.0', port=CFG.get('web_port', 8765), threaded=True)

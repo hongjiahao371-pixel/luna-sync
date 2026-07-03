@@ -1,12 +1,13 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-custom-download-dir-20260703
+    image: jvsheng/luna-sync:upk-pass-download-dir-20260703
     network_mode: host
     privileged: true
     restart: unless-stopped
     environment:
-      LUNA_CONFIG: /app/config.json
-      TZ: Asia/Shanghai
+      - LUNA_CONFIG=/app/config.json
+      - DOWNLOAD_DIR
+      - TZ=Asia/Shanghai
     entrypoint:
       - /bin/sh
       - -c
@@ -33,7 +34,7 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-custom-download-dir-20260703
+    image: jvsheng/luna-sync:upk-pass-download-dir-20260703
     restart: unless-stopped
     depends_on:
       - luna-sync
