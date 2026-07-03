@@ -15,7 +15,7 @@ port: 8767
 parameters:
   - key: DOWNLOAD_DIR
     type: path
-    required: false
+    required: true
     changeable: true
     i18n:
       zh-CN:
