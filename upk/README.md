@@ -37,7 +37,7 @@ mv luna-sync/rootfs_amd64/images/luna-sync-amd64.tar.tmp \
   luna-sync/rootfs_amd64/images/luna-sync-amd64.tar
 ugcli check --path luna-sync
 cd luna-sync
-ugcli pack --arch amd64 --build 13
+ugcli pack --arch amd64 --build 15
 ```
 
 The generated `.upk` will be written to `luna-sync/build_dir/pkgs/upk/`.
