@@ -15,7 +15,26 @@ logging.basicConfig(level='INFO', format='%(asctime)s %(levelname)s %(message)s'
 log = logging.getLogger('luna')
 app = Flask(__name__)
 HOST = CFG['camera_host']
-DLDIR = os.environ.get('DOWNLOAD_DIR') or CFG['download_dir']
+
+def configured_download_dir():
+    value = os.environ.get('DOWNLOAD_DIR')
+    if value:
+        return value
+    try:
+        data = json.load(open(os.environ.get('UGB_CONFIG', '/app/ugb-config.json')))
+        for item in data.get('installParameters', {}).get('list', []):
+            if item.get('key') == 'DOWNLOAD_DIR':
+                value = item.get('value')
+                if value:
+                    return value
+                values = item.get('values') or []
+                if values:
+                    return str(values[0])
+    except Exception as e:
+        log.warning('ugb_config:' + str(e)[:60])
+    return CFG['download_dir']
+
+DLDIR = configured_download_dir()
 def configured_wifi_backend():
     return os.environ.get('LUNA_WIFI_BACKEND') or CFG.get('wifi_backend', 'auto')
 

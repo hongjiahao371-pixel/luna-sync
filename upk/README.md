@@ -12,7 +12,8 @@ to start two services:
 
 The UPK exposes a `DOWNLOAD_DIR` path parameter. Users can choose a normal
 shared folder such as `/volume1/LunaSync`; the app mounts `/volume1` and stores
-downloaded camera media in that selected directory.
+downloaded camera media in that selected directory. The Docker app mounts the
+UGOS app config read-only and reads `DOWNLOAD_DIR` from it at startup.
 
 Build prerequisites:
 
@@ -32,12 +33,12 @@ python3 scripts/docker_archive_from_registry.py \
 python3 scripts/append_image_layer.py \
   --input luna-sync/rootfs_amd64/images/luna-sync-amd64.tar \
   --output luna-sync/rootfs_amd64/images/luna-sync-amd64.tar.tmp \
-  --tag jvsheng/luna-sync:upk-pass-download-dir-20260703
+  --tag jvsheng/luna-sync:upk-read-ugb-download-dir-20260703
 mv luna-sync/rootfs_amd64/images/luna-sync-amd64.tar.tmp \
   luna-sync/rootfs_amd64/images/luna-sync-amd64.tar
 ugcli check --path luna-sync
 cd luna-sync
-ugcli pack --arch amd64 --build 11
+ugcli pack --arch amd64 --build 12
 ```
 
 The generated `.upk` will be written to `luna-sync/build_dir/pkgs/upk/`.

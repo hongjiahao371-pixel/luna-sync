@@ -1,11 +1,12 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-pass-download-dir-20260703
+    image: jvsheng/luna-sync:upk-read-ugb-download-dir-20260703
     network_mode: host
     privileged: true
     restart: unless-stopped
     environment:
       - LUNA_CONFIG=/app/config.json
+      - UGB_CONFIG=/app/ugb-config.json
       - DOWNLOAD_DIR
       - TZ=Asia/Shanghai
     entrypoint:
@@ -31,10 +32,11 @@ services:
         exec /entrypoint.sh
     volumes:
       - /volume1:/volume1
+      - /var/lib/ugb/com.jvsheng.lunasync/config.json:/app/ugb-config.json:ro
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-pass-download-dir-20260703
+    image: jvsheng/luna-sync:upk-read-ugb-download-dir-20260703
     restart: unless-stopped
     depends_on:
       - luna-sync
