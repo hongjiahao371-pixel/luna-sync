@@ -26,18 +26,18 @@ Build:
 ```bash
 python3 scripts/make_icon.py luna-sync/rootfs_common/icon.png
 python3 scripts/docker_archive_from_registry.py \
-  --image jvsheng/luna-sync:sha-9ced331 \
+  --image jvsheng/luna-sync:latest \
   --arch amd64 \
   --output luna-sync/rootfs_amd64/images/luna-sync-amd64.tar
 python3 scripts/append_image_layer.py \
   --input luna-sync/rootfs_amd64/images/luna-sync-amd64.tar \
   --output luna-sync/rootfs_amd64/images/luna-sync-amd64.tar.tmp \
-  --tag jvsheng/luna-sync:upk-path-volume-20260703
+  --tag jvsheng/luna-sync:upk-forget-wifi-20260705
 mv luna-sync/rootfs_amd64/images/luna-sync-amd64.tar.tmp \
   luna-sync/rootfs_amd64/images/luna-sync-amd64.tar
 ugcli check --path luna-sync
 cd luna-sync
-ugcli pack --arch amd64 --build 15
+ugcli pack --arch amd64 --build 16
 ```
 
 The generated `.upk` will be written to `luna-sync/build_dir/pkgs/upk/`.

@@ -154,8 +154,6 @@ def load_saved_wifi():
     except Exception as e:
         log.warning('load_saved_wifi:' + str(e)[:50])
         pass
-    if CAM_SSID and DEF_PW:
-        return {'ssid': CAM_SSID, 'password': DEF_PW, 'source': 'config'}
     return None
 
 def save_wifi(ssid, pw):
@@ -163,6 +161,8 @@ def save_wifi(ssid, pw):
         existing = load_saved_wifi() or {}
         if not pw and existing.get('ssid') == ssid and existing.get('password'):
             pw = existing['password']
+        if not pw and CAM_SSID and DEF_PW and ssid == CAM_SSID:
+            pw = DEF_PW
         if not pw:
             addlog('未保存 WiFi: 密码为空')
             return
@@ -785,7 +785,12 @@ if saved and saved.get('ssid') and saved.get('password'):
     ST['wifi_target'] = saved['ssid']
     ST['wifi_password'] = saved['password']
     ST['wifi_saved'] = True
-    addlog(('加载配置中的WiFi: ' if saved.get('source') == 'config' else '加载记住的WiFi: ') + saved['ssid'])
+    addlog('加载记住的WiFi: ' + saved['ssid'])
+elif CAM_SSID and DEF_PW:
+    ST['wifi_target'] = CAM_SSID
+    ST['wifi_password'] = DEF_PW
+    ST['wifi_saved'] = False
+    addlog('加载配置中的WiFi: ' + CAM_SSID)
 
 if __name__ == '__main__':
     threading.Thread(target=keeper, daemon=True).start()
