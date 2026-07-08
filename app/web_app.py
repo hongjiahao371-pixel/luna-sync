@@ -243,15 +243,9 @@ def keeper():
     while True:
         try:
             refresh_wifi_backend()
-            with lk:
-                target = ST['wifi_target']; pw = ST['wifi_password'] or DEF_PW
             cur = current_ssid()
             with lk:
                 ST['wifi_current'] = cur
-            if wifi.can_control() and target and cur != target and pw is not None:
-                try_connect(target, pw); cur = current_ssid()
-                with lk:
-                    ST['wifi_current'] = cur
             connected = wifi_on_target() and cam_on()
             with lk:
                 was_connected = ST['connected']
