@@ -1,4 +1,5 @@
 import re, socket, threading, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -45,6 +46,25 @@ def parse_luna_index(html, base=DEFAULT_CAMERA_URL, storage='', storage_label=''
             'kind': file_kind(name), 'storage': storage, 'storage_label': storage_label,
         })
     return out
+
+def probe_size(url, timeout=4):
+    try:
+        req = Request(url, headers={'User-Agent': 'LunaDL/0.1', 'Range': 'bytes=0-0'})
+        resp = urlopen(req, timeout=timeout)
+        try:
+            cr = resp.headers.get('Content-Range')
+            if cr:
+                m = re.search(r'/(\d+)', cr)
+                if m:
+                    return int(m.group(1))
+            cl = resp.headers.get('Content-Length')
+            if cl:
+                return int(cl)
+        finally:
+            resp.close()
+    except Exception:
+        return None
+    return None
 
 class LunaAuthSession:
     def __init__(self, host=DEFAULT_HOST, port=6666, timeout=3.0):
@@ -134,7 +154,16 @@ class LunaClient:
                 req = Request(root['url'], headers={'User-Agent': 'LunaDL/0.1'})
                 html = urlopen(req, timeout=8).read().decode('utf-8', 'replace')
                 any_success = True
-                out.extend(parse_luna_index(html, root['url'], root['id'], root['label']))
+                items = parse_luna_index(html, root['url'], root['id'], root['label'])
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    futures = {pool.submit(probe_size, item['url']): item for item in items}
+                    for future in as_completed(futures):
+                        exact = future.result()
+                        if exact is not None:
+                            item = futures[future]
+                            item['bytes'] = exact
+                            item['bytes_exact'] = True
+                out.extend(items)
             except Exception as exc:
                 last_error = exc
         if not any_success and last_error:

@@ -33,9 +33,10 @@ AUTO_INTERVAL = max(10, int(CFG.get('auto_sync_interval_sec', 30)))
 STATE_DIR = CFG.get('state_dir', '/state')
 THUMB_DIR = os.path.join(STATE_DIR, 'thumbs')
 ENC_DIR = os.path.join(STATE_DIR, 'encoded')
+PREVIEW_SRC_DIR = os.path.join(STATE_DIR, 'preview_sources')
 WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
 SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
-for d in (DLDIR, THUMB_DIR, ENC_DIR):
+for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR):
     os.makedirs(d, exist_ok=True)
 
 lk = threading.Lock()
@@ -511,7 +512,8 @@ def dl_worker():
 def transcode_worker(name):
     out = safe_path(ENC_DIR, name + '.mp4')
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    src_file = local_path(name) or safe_path(DLDIR, name)
+    local = local_path(name)
+    src_file = local or safe_path(PREVIEW_SRC_DIR, name)
     os.makedirs(os.path.dirname(src_file), exist_ok=True)
     try:
         if not os.path.exists(src_file):
@@ -727,9 +729,11 @@ def api_del(name):
         os.remove(p)
     if os.path.exists(p + '.part'):
         os.remove(p + '.part')
-    for extra in (safe_path(ENC_DIR, name + '.mp4'), safe_path(THUMB_DIR, name + '.jpg')):
+    for extra in (safe_path(ENC_DIR, name + '.mp4'), safe_path(THUMB_DIR, name + '.jpg'), safe_path(PREVIEW_SRC_DIR, name)):
         if os.path.exists(extra):
             os.remove(extra)
+        if os.path.exists(extra + '.part'):
+            os.remove(extra + '.part')
     addlog('删除 ' + name)
     return jsonify({'ok': True})
 
@@ -764,6 +768,8 @@ def api_cache_clear():
         n, t = _wipe_dir(ENC_DIR); files += n; space += t
         with lk:
             ST['transcodes'] = {}
+    if scope in ('all', 'preview'):
+        n, t = _wipe_dir(PREVIEW_SRC_DIR); files += n; space += t
     msg = '清理缓存 ' + str(files) + ' 个文件 / ' + _human(space)
     addlog(msg)
     return jsonify({'ok': True, 'files': files, 'bytes': space, 'msg': msg})
