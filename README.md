@@ -116,6 +116,7 @@ config.example.json
 | `wifi_iface` | 无线网卡名；`null` 时自动识别 |
 | `wpa_ctrl` | wpa_supplicant 控制 socket 目录 |
 | `auto_sync` | 是否自动增量同步 |
+| `auto_sync_lrv` | 自动同步是否包含 LRV 文件，默认包含；也可在 WebUI 中切换 |
 | `auto_sync_interval_sec` | 自动同步检查间隔，最低 10 秒 |
 | `download_dir` | 容器内下载目录 |
 | `state_dir` | 容器内运行状态、缩略图和转码缓存目录 |
@@ -137,4 +138,3 @@ config.example.json
 ### v1.0.0
 
 - 初始版本：Wi-Fi 自动/手动连接、增量同步、媒体浏览下载、视频转码预览
-

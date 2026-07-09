@@ -34,6 +34,7 @@ STATE_DIR = CFG.get('state_dir', '/state')
 THUMB_DIR = os.path.join(STATE_DIR, 'thumbs')
 ENC_DIR = os.path.join(STATE_DIR, 'encoded')
 WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
+SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
 for d in (DLDIR, THUMB_DIR, ENC_DIR):
     os.makedirs(d, exist_ok=True)
 
@@ -43,6 +44,42 @@ auto_sync_lk = threading.Lock()
 _scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
 SCAN_CACHE_TTL = 8
 SCAN_RESCAN_INTERVAL = 12
+
+def bool_value(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in ('1', 'true', 'yes', 'on'):
+        return True
+    if text in ('0', 'false', 'no', 'off'):
+        return False
+    return default
+
+def load_settings():
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            data = json.load(open(SETTINGS_FILE))
+            return data if isinstance(data, dict) else {}
+    except Exception as e:
+        log.warning('load_settings:' + str(e)[:50])
+    return {}
+
+def save_settings(data):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        current = load_settings()
+        current.update(data)
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(current, f)
+        os.chmod(SETTINGS_FILE, 0o600)
+    except Exception as e:
+        log.warning('save_settings:' + str(e)[:50])
+
+SETTINGS = load_settings()
 
 def _triggered_scan():
     now = time.time()
@@ -59,7 +96,8 @@ def _triggered_scan():
 
 ST = {'connected': False, 'wifi_conn': False, 'files': [], 'queue': [], 'current': None,
       'completed': 0, 'log': [], 'wifi_current': '', 'wifi_target': CAM_SSID, 'wifi_password': None,
-      'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool(CFG.get('auto_sync', True)),
+      'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool_value(CFG.get('auto_sync'), True),
+      'auto_sync_lrv': bool_value(SETTINGS.get('auto_sync_lrv'), bool_value(CFG.get('auto_sync_lrv'), True)),
       'last_auto_sync': ''}
 cancel = threading.Event()
 last_auto_notice = 0
@@ -259,20 +297,26 @@ def keeper():
 def local_files():
     out = {}
     if os.path.isdir(DLDIR):
-        for f in os.listdir(DLDIR):
-            p = os.path.join(DLDIR, f)
-            if os.path.isfile(p) and not f.endswith('.part'):
-                out[f] = os.path.getsize(p)
+        for root, _, files in os.walk(DLDIR):
+            for f in files:
+                if f.endswith('.part'):
+                    continue
+                p = os.path.join(root, f)
+                rel = os.path.relpath(p, DLDIR)
+                out[rel] = {'path': p, 'size': os.path.getsize(p)}
     return out
 
 def local_items():
     loc = local_files()
     with lk:
-        meta = {f['name']: dict(f) for f in ST['files']}
+        meta = {f.get('id', f['name']): dict(f) for f in ST['files']}
     items = []
-    for name, size in sorted(loc.items()):
-        item = meta.get(name, {'name': name, 'kind': file_kind(name), 'date': '', 'time': '', 'size_text': ''})
-        item['bytes'] = size
+    for key, info in sorted(loc.items()):
+        name = os.path.basename(key)
+        item = meta.get(key) or meta.get('internal/' + key) or {'id': key, 'name': name, 'kind': file_kind(name), 'date': '', 'time': '', 'size_text': ''}
+        item = dict(item)
+        item.setdefault('id', key)
+        item['bytes'] = info['size']
         item['status'] = '完成(本地)'
         items.append(item)
     return items
@@ -285,8 +329,28 @@ def safe_path(base, name):
     return path
 
 def local_path(name):
+    loc = local_files()
+    if name in loc:
+        return loc[name]['path']
+    storage, base = split_file_id(name)
+    if storage == 'internal':
+        legacy = safe_path(DLDIR, base)
+        if os.path.isfile(legacy):
+            return legacy
     path = safe_path(DLDIR, name)
     return path if os.path.isfile(path) else None
+
+def split_file_id(value):
+    parts = value.split('/', 1)
+    if len(parts) == 2 and parts[0] in ('internal', 'external') and parts[1]:
+        return parts[0], parts[1]
+    return 'internal', os.path.basename(value)
+
+def file_key(item):
+    return item.get('id') or ((item.get('storage') or 'internal') + '/' + item['name'])
+
+def local_dest_for(item):
+    return safe_path(DLDIR, file_key(item))
 
 def refresh():
     if not (wifi_on_target() and cam_on()):
@@ -301,7 +365,10 @@ def refresh():
             cli.close()
         loc = local_files()
         for f in files:
-            f['status'] = '完成' if f['name'] in loc else '就绪'
+            key = file_key(f)
+            f['id'] = key
+            legacy_done = f.get('storage') == 'internal' and f['name'] in loc
+            f['status'] = '完成' if key in loc or legacy_done else '就绪'
         with lk:
             ST['files'] = files; ST['connected'] = True
         return True
@@ -316,19 +383,23 @@ def enqueue(names):
     added = 0
     skipped = []
     with lk:
-        current = ST['current']['name'] if ST['current'] else None
-        known = {f['name'] for f in ST['files']}
+        current = ST['current'].get('id') if ST['current'] else None
+        known = {file_key(f): f for f in ST['files']}
+        by_name = {f['name']: file_key(f) for f in ST['files']}
         for name in names:
-            if name in loc:
+            key = name if name in known else by_name.get(name, name)
+            item = known.get(key)
+            legacy_done = item and item.get('storage') == 'internal' and item['name'] in loc
+            if key in loc or legacy_done:
                 skipped.append({'name': name, 'reason': 'already_local'})
                 continue
-            if name in ST['queue'] or name == current:
+            if key in ST['queue'] or key == current:
                 skipped.append({'name': name, 'reason': 'already_queued'})
                 continue
-            if name not in known:
+            if key not in known:
                 skipped.append({'name': name, 'reason': 'not_available'})
                 continue
-            ST['queue'].append(name)
+            ST['queue'].append(key)
             added += 1
     return added, skipped
 
@@ -347,7 +418,12 @@ def auto_sync_once(manual=False):
                 addlog('自动同步未开始: 扫描相机文件失败')
             return 0
         with lk:
-            names = [f['name'] for f in ST['files']]
+            include_lrv = ST['auto_sync_lrv']
+            files = list(ST['files'])
+            names = [file_key(f) for f in files if include_lrv or f.get('kind') != 'LRV']
+            skipped_lrv = len(files) - len(names)
+        if skipped_lrv and manual:
+            addlog('自动同步跳过 ' + str(skipped_lrv) + ' 个 LRV 文件')
         added, _ = enqueue(names)
         with lk:
             ST['last_auto_sync'] = time.strftime('%H:%M:%S')
@@ -395,29 +471,32 @@ def auto_sync_worker():
 
 def dl_worker():
     while True:
-        name = None
+        key = None
         with lk:
             if ST['queue']:
-                name = ST['queue'].pop(0)
-        if not name:
+                key = ST['queue'].pop(0)
+        if not key:
             time.sleep(2); continue
         with lk:
-            f = next((x for x in ST['files'] if x['name'] == name), None)
+            f = next((x for x in ST['files'] if file_key(x) == key or x['name'] == key), None)
         if not f:
-            addlog(name + ' 不在列表'); continue
+            addlog(key + ' 不在列表'); continue
+        name = f['name']
+        key = file_key(f)
         if not (wifi_on_target() and cam_on()):
             with lk:
-                ST['queue'].insert(0, name)
+                ST['queue'].insert(0, key)
             time.sleep(15); continue
-        dest = os.path.join(DLDIR, name)
+        dest = local_dest_for(f)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
         with lk:
-            ST['current'] = {'name': name, 'downloaded': 0, 'total': f.get('bytes'), 'speed': 0}
+            ST['current'] = {'id': key, 'name': name, 'downloaded': 0, 'total': f.get('bytes'), 'speed': 0}
         addlog('开始下载 ' + name)
         try:
             cli = LunaClient(HOST); cli.connect()
             def prog(n, d, t, s):
                 with lk:
-                    ST['current'] = {'name': n, 'downloaded': d, 'total': t, 'speed': s}
+                    ST['current'] = {'id': key, 'name': n, 'downloaded': d, 'total': t, 'speed': s}
             download_file(f['url'], dest, on_progress=prog, cancel=cancel)
             with lk:
                 ST['completed'] += 1; ST['current'] = None
@@ -431,7 +510,9 @@ def dl_worker():
 
 def transcode_worker(name):
     out = safe_path(ENC_DIR, name + '.mp4')
-    src_file = safe_path(DLDIR, name)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    src_file = local_path(name) or safe_path(DLDIR, name)
+    os.makedirs(os.path.dirname(src_file), exist_ok=True)
     try:
         if not os.path.exists(src_file):
             url = file_url(name)
@@ -460,7 +541,7 @@ def transcode_worker(name):
 
 def file_url(name):
     with lk:
-        f = next((x for x in ST['files'] if x['name'] == name), None)
+        f = next((x for x in ST['files'] if file_key(x) == name or x['name'] == name), None)
     return f['url'] if f else None
 
 
@@ -468,14 +549,14 @@ def file_url(name):
 def api_tc_status(name):
     with lk:
         st = dict(ST['transcodes'].get(name, {'status': 'pending'}))
-    out = os.path.join(ENC_DIR, name + '.mp4')
+    out = safe_path(ENC_DIR, name + '.mp4')
     if os.path.exists(out):
         st['status'] = 'done'
     return jsonify(st)
 
 @app.route('/api/transcode/<path:name>', methods=['POST'])
 def api_tc_start(name):
-    out = os.path.join(ENC_DIR, name + '.mp4')
+    out = safe_path(ENC_DIR, name + '.mp4')
     if os.path.exists(out):
         return jsonify({'status': 'done'})
     with lk:
@@ -509,18 +590,32 @@ def api_state():
             'wifi_target': ST['wifi_target'], 'wifi_has_password': bool(ST['wifi_password'] or DEF_PW),
             'download_dir': DLDIR,
             'auto_sync': ST['auto_sync'], 'auto_interval': AUTO_INTERVAL,
+            'auto_sync_lrv': ST['auto_sync_lrv'],
             'last_auto_sync': ST['last_auto_sync']})
 
 @app.route('/api/auto-sync', methods=['POST'])
 def api_auto_sync():
     data = request.json or {}
-    enabled = bool(data.get('enabled'))
     with lk:
-        ST['auto_sync'] = enabled
-    addlog('自动同步已' + ('开启' if enabled else '关闭'))
-    if enabled:
+        if 'enabled' in data:
+            enabled = bool_value(data.get('enabled'))
+            ST['auto_sync'] = enabled
+        else:
+            enabled = ST['auto_sync']
+        if 'include_lrv' in data:
+            include_lrv = bool_value(data.get('include_lrv'), True)
+            ST['auto_sync_lrv'] = include_lrv
+        else:
+            include_lrv = ST['auto_sync_lrv']
+    if 'include_lrv' in data:
+        save_settings({'auto_sync_lrv': include_lrv})
+    if 'enabled' in data:
+        addlog('自动同步已' + ('开启' if enabled else '关闭'))
+    if 'include_lrv' in data:
+        addlog('自动同步 LRV 已' + ('开启' if include_lrv else '关闭'))
+    if 'enabled' in data and enabled:
         trigger_auto_sync_check('自动同步已开启，开始检查')
-    return jsonify({'ok': True, 'auto_sync': enabled})
+    return jsonify({'ok': True, 'auto_sync': enabled, 'auto_sync_lrv': include_lrv})
 
 @app.route('/api/wifi/scan')
 def wifi_scan():
@@ -627,7 +722,7 @@ def api_can():
 
 @app.route('/api/file/<path:name>', methods=['DELETE'])
 def api_del(name):
-    p = safe_path(DLDIR, name)
+    p = local_path(name) or safe_path(DLDIR, name)
     if os.path.exists(p):
         os.remove(p)
     if os.path.exists(p + '.part'):
@@ -642,15 +737,20 @@ def _wipe_dir(d):
     n = t = 0
     if not os.path.isdir(d):
         return (0, 0)
-    for fn in os.listdir(d):
-        fp = os.path.join(d, fn)
-        try:
-            if os.path.isfile(fp) or os.path.islink(fp):
+    for root, dirs, files in os.walk(d, topdown=False):
+        for fn in files:
+            fp = os.path.join(root, fn)
+            try:
                 t += os.path.getsize(fp)
                 os.remove(fp)
                 n += 1
-        except Exception as e:
-            log.warning('wipe ' + fn + ':' + str(e)[:60])
+            except Exception as e:
+                log.warning('wipe ' + fn + ':' + str(e)[:60])
+        for dn in dirs:
+            try:
+                os.rmdir(os.path.join(root, dn))
+            except OSError:
+                pass
     return (n, t)
 
 @app.route('/api/cache/clear', methods=['POST'])
@@ -680,6 +780,7 @@ def thumb(name):
     tp = safe_path(THUMB_DIR, name + '.jpg')
     if os.path.exists(tp):
         return send_file(tp, mimetype='image/jpeg')
+    os.makedirs(os.path.dirname(tp), exist_ok=True)
     low = name.lower()
     if low.endswith(('.mp4', '.lrv', '.mov', '.m4v')):
         p = local_path(name)

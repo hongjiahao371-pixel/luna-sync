@@ -5,6 +5,10 @@ from urllib.request import Request, urlopen
 
 DEFAULT_HOST = "192.168.42.1"
 DEFAULT_CAMERA_URL = "http://" + DEFAULT_HOST + "/storage_internal/DCIM/Camera01/"
+STORAGE_ROOTS = [
+    {'id': 'internal', 'label': '内置存储', 'path': '/storage_internal/DCIM/Camera01/'},
+    {'id': 'external', 'label': '存储卡', 'path': '/storage_external/DCIM/Camera01/'},
+]
 AUTH_PAYLOADS = [
     bytes([0x55,0x43,0x44,0x32,0x01,0x0C,0x05,0x0F,0x00,0x00,0x00,0x00,0x37,0x05,0x47,0x7C]),
     bytes([0x55,0x43,0x44,0x32,0x01,0x0C,0x04,0x10,0x0F,0x00,0x00,0x00,0x08,0x00,0x02,0x01,0x00,0x00,0x80,0x00,0x00,0x08,0x30,0x08,0x0F,0x08,0x0B,0x7C,0x00,0x8E,0x7C]),
@@ -24,18 +28,21 @@ def file_kind(name):
         return s
     return s or 'FILE'
 
-def parse_luna_index(html, base=DEFAULT_CAMERA_URL):
+def parse_luna_index(html, base=DEFAULT_CAMERA_URL, storage='', storage_label=''):
     out = []
     for m in INDEX_RE.finditer(html):
         name = unescape(m.group(2))
         href = unescape(m.group(1))
         if name == '../' or href == '../':
             continue
+        if name.endswith('/') or href.endswith('/'):
+            continue
         out.append({
+            'id': (storage + '/' + name) if storage else name,
             'name': name, 'href': href, 'url': urljoin(base, href),
             'date': m.group(3), 'time': m.group(4),
             'size_text': m.group(5), 'bytes': parse_size(m.group(5)),
-            'kind': file_kind(name),
+            'kind': file_kind(name), 'storage': storage, 'storage_label': storage_label,
         })
     return out
 
@@ -97,7 +104,11 @@ class LunaAuthSession:
 class LunaClient:
     def __init__(self, host=DEFAULT_HOST):
         self.host = host
-        self.url = "http://" + host + "/storage_internal/DCIM/Camera01/"
+        self.roots = [
+            dict(root, url="http://" + host + root['path'])
+            for root in STORAGE_ROOTS
+        ]
+        self.url = self.roots[0]['url']
         self.auth = None
         self._lk = threading.RLock()
 
@@ -113,7 +124,19 @@ class LunaClient:
                 self.auth.close()
                 self.auth = None
 
-    def list_files(self):
-        req = Request(self.url, headers={'User-Agent': 'LunaDL/0.1'})
-        html = urlopen(req, timeout=8).read().decode('utf-8', 'replace')
-        return parse_luna_index(html, self.url)
+    def list_files(self, include_external=True):
+        out = []
+        last_error = None
+        any_success = False
+        roots = self.roots if include_external else self.roots[:1]
+        for root in roots:
+            try:
+                req = Request(root['url'], headers={'User-Agent': 'LunaDL/0.1'})
+                html = urlopen(req, timeout=8).read().decode('utf-8', 'replace')
+                any_success = True
+                out.extend(parse_luna_index(html, root['url'], root['id'], root['label']))
+            except Exception as exc:
+                last_error = exc
+        if not any_success and last_error:
+            raise last_error
+        return out
