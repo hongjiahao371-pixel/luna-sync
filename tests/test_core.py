@@ -84,5 +84,11 @@ class SizeCacheTests(unittest.TestCase):
             luna_client._size_cache.clear()
 
 
+class LrvTests(unittest.TestCase):
+    def test_lrv_sidecar_files_are_classified_as_lrv(self):
+        self.assertEqual(luna_client.file_kind('LRV_20260710_101942_062.lrv.3ainfo.bin'), 'LRV')
+        self.assertEqual(luna_client.file_kind('VID_20260710_101942_062.mp4.3ainfo.bin'), 'BIN')
+
+
 if __name__ == '__main__':
     unittest.main()

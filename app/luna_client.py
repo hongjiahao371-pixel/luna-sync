@@ -26,7 +26,13 @@ def parse_size(text):
     mult = {'K': 1024, 'M': 1024**2, 'G': 1024**3}.get(m.group(2), 1)
     return int(float(m.group(1)) * mult)
 
+def is_lrv_name(name):
+    lower = str(name or '').lower()
+    return lower.startswith('lrv_') or lower.endswith('.lrv') or '.lrv.' in lower
+
 def file_kind(name):
+    if is_lrv_name(name):
+        return 'LRV'
     s = name.rsplit('.', 1)[-1].upper() if '.' in name else ''
     if s in ('MP4', 'LRV', 'MOV', 'JPG', 'JPEG', 'PNG', 'WEBP', 'GIF', 'LIV', 'INSP'):
         return s
