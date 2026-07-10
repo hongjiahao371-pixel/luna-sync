@@ -15,6 +15,9 @@ AUTH_PAYLOADS = [
     bytes([0x55,0x43,0x44,0x32,0x01,0x0C,0x04,0x10,0x0F,0x00,0x00,0x00,0x08,0x00,0x02,0x01,0x00,0x00,0x80,0x00,0x00,0x08,0x30,0x08,0x0F,0x08,0x0B,0x7C,0x00,0x8E,0x7C]),
 ]
 INDEX_RE = re.compile(r'<a href="([^"]+)">([^<]+)</a>\s+(\d{2}-[A-Za-z]{3}-\d{4})\s+(\d{2}:\d{2})\s+(\S+)')
+SIZE_CACHE_TTL = 600
+_size_cache = {}
+_size_cache_lk = threading.Lock()
 
 def parse_size(text):
     m = re.fullmatch(r'(\d+(?:\.\d+)?)([KMG])?', text.strip())
@@ -65,6 +68,19 @@ def probe_size(url, timeout=4):
     except Exception:
         return None
     return None
+
+def cached_size(url):
+    with _size_cache_lk:
+        entry = _size_cache.get(url)
+        if entry and time.monotonic() - entry[0] < SIZE_CACHE_TTL:
+            return entry[1]
+    return None
+
+def remember_size(url, size):
+    if size is None:
+        return
+    with _size_cache_lk:
+        _size_cache[url] = (time.monotonic(), size)
 
 class LunaAuthSession:
     def __init__(self, host=DEFAULT_HOST, port=6666, timeout=3.0):
@@ -155,12 +171,21 @@ class LunaClient:
                 html = urlopen(req, timeout=8).read().decode('utf-8', 'replace')
                 any_success = True
                 items = parse_luna_index(html, root['url'], root['id'], root['label'])
+                missing = []
+                for item in items:
+                    exact = cached_size(item['url'])
+                    if exact is None:
+                        missing.append(item)
+                    else:
+                        item['bytes'] = exact
+                        item['bytes_exact'] = True
                 with ThreadPoolExecutor(max_workers=8) as pool:
-                    futures = {pool.submit(probe_size, item['url']): item for item in items}
+                    futures = {pool.submit(probe_size, item['url']): item for item in missing}
                     for future in as_completed(futures):
                         exact = future.result()
                         if exact is not None:
                             item = futures[future]
+                            remember_size(item['url'], exact)
                             item['bytes'] = exact
                             item['bytes_exact'] = True
                 out.extend(items)

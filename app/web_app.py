@@ -14,6 +14,13 @@ CFG = json.load(open(os.environ.get('LUNA_CONFIG', '/app/config.json')))
 logging.basicConfig(level='INFO', format='%(asctime)s %(levelname)s %(message)s', stream=sys.stdout)
 log = logging.getLogger('luna')
 app = Flask(__name__)
+
+@app.after_request
+def disable_home_cache(response):
+    if request.path == '/':
+        response.headers['Cache-Control'] = 'no-store, max-age=0'
+    return response
+
 HOST = CFG['camera_host']
 DLDIR = os.environ.get('DOWNLOAD_DIR') or CFG['download_dir']
 def configured_wifi_backend():
@@ -41,6 +48,7 @@ for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR):
 
 lk = threading.Lock()
 scan_lk = threading.Lock()
+refresh_lk = threading.Lock()
 auto_sync_lk = threading.Lock()
 _scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
 SCAN_CACHE_TTL = 8
@@ -97,7 +105,7 @@ def _triggered_scan():
 
 ST = {'connected': False, 'wifi_conn': False, 'files': [], 'queue': [], 'current': None,
       'completed': 0, 'log': [], 'wifi_current': '', 'wifi_target': CAM_SSID, 'wifi_password': None,
-      'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool_value(CFG.get('auto_sync'), True),
+      'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool_value(SETTINGS.get('auto_sync'), bool_value(CFG.get('auto_sync'), True)),
       'auto_sync_lrv': bool_value(SETTINGS.get('auto_sync_lrv'), bool_value(CFG.get('auto_sync_lrv'), True)),
       'last_auto_sync': ''}
 cancel = threading.Event()
@@ -354,30 +362,31 @@ def local_dest_for(item):
     return safe_path(DLDIR, file_key(item))
 
 def refresh():
-    if not (wifi_on_target() and cam_on()):
-        with lk:
-            ST['connected'] = False
-        return False
-    try:
-        cli = LunaClient(HOST)
+    with refresh_lk:
+        if not (wifi_on_target() and cam_on()):
+            with lk:
+                ST['connected'] = False
+            return False
         try:
-            cli.connect(); files = cli.list_files()
-        finally:
-            cli.close()
-        loc = local_files()
-        for f in files:
-            key = file_key(f)
-            f['id'] = key
-            legacy_done = f.get('storage') == 'internal' and f['name'] in loc
-            f['status'] = '完成' if key in loc or legacy_done else '就绪'
-        with lk:
-            ST['files'] = files; ST['connected'] = True
-        return True
-    except Exception as e:
-        addlog('列文件失败:' + str(e)[:60])
-        with lk:
-            ST['connected'] = False
-        return False
+            cli = LunaClient(HOST)
+            try:
+                cli.connect(); files = cli.list_files()
+            finally:
+                cli.close()
+            loc = local_files()
+            for f in files:
+                key = file_key(f)
+                f['id'] = key
+                legacy_done = f.get('storage') == 'internal' and f['name'] in loc
+                f['status'] = '完成' if key in loc or legacy_done else '就绪'
+            with lk:
+                ST['files'] = files; ST['connected'] = True
+            return True
+        except Exception as e:
+            addlog('列文件失败:' + str(e)[:60])
+            with lk:
+                ST['connected'] = False
+            return False
 
 def enqueue(names):
     loc = local_files()
@@ -478,6 +487,7 @@ def dl_worker():
                 key = ST['queue'].pop(0)
         if not key:
             time.sleep(2); continue
+        cancel.clear()
         with lk:
             f = next((x for x in ST['files'] if file_key(x) == key or x['name'] == key), None)
         if not f:
@@ -493,6 +503,7 @@ def dl_worker():
         with lk:
             ST['current'] = {'id': key, 'name': name, 'downloaded': 0, 'total': f.get('bytes'), 'speed': 0}
         addlog('开始下载 ' + name)
+        cli = None
         try:
             cli = LunaClient(HOST); cli.connect()
             def prog(n, d, t, s):
@@ -501,12 +512,15 @@ def dl_worker():
             download_file(f['url'], dest, on_progress=prog, cancel=cancel)
             with lk:
                 ST['completed'] += 1; ST['current'] = None
-            addlog('完成 ' + name); cli.close()
+            addlog('完成 ' + name)
         except Exception as e:
             addlog('失败 ' + name + ':' + str(e)[:60])
             with lk:
                 ST['current'] = None
-        cancel.clear()
+        finally:
+            if cli:
+                cli.close()
+            cancel.clear()
 
 
 def transcode_worker(name):
@@ -611,6 +625,8 @@ def api_auto_sync():
             include_lrv = ST['auto_sync_lrv']
     if 'include_lrv' in data:
         save_settings({'auto_sync_lrv': include_lrv})
+    if 'enabled' in data:
+        save_settings({'auto_sync': enabled})
     if 'enabled' in data:
         addlog('自动同步已' + ('开启' if enabled else '关闭'))
     if 'include_lrv' in data:
@@ -719,8 +735,13 @@ def api_dl():
 
 @app.route('/api/cancel', methods=['POST'])
 def api_can():
-    cancel.set(); addlog('请求取消')
-    return jsonify({'ok': True})
+    with lk:
+        current = ST['current']
+        if current:
+            cancel.set()
+    if current:
+        addlog('请求取消')
+    return jsonify({'ok': True, 'cancelled': bool(current)})
 
 @app.route('/api/file/<path:name>', methods=['DELETE'])
 def api_del(name):

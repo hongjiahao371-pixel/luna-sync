@@ -3,6 +3,7 @@ app_id: com.jvsheng.lunasync
 version: 1.0.0
 support_arch:
   - amd64
+  - arm64
 is_docker_app: true
 tag_types:
   - backup
@@ -24,7 +25,6 @@ parameters:
       en-US:
         name: Media save folder
         description: Choose where Luna Sync stores downloaded media, for example /volume1/LunaSync
-
 i18n:
   zh-CN:
     name: Luna Sync

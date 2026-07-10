@@ -2,9 +2,12 @@
 import argparse
 import gzip
 import hashlib
+import http.client
 import io
 import json
+import sys
 import tarfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,9 +25,31 @@ def request_json(url, headers=None):
 
 
 def request_bytes(url, headers=None):
-    req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=120) as res:
-        return res.read(), res.headers
+    last = None
+    for attempt in range(4):
+        try:
+            req = urllib.request.Request(url, headers=headers or {})
+            with urllib.request.urlopen(req, timeout=180) as res:
+                total = int(res.headers.get("Content-Length") or 0)
+                data = io.BytesIO()
+                next_report = 64 * 1024 * 1024
+                while True:
+                    chunk = res.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    data.write(chunk)
+                    if total and data.tell() >= next_report:
+                        print(f"downloaded {data.tell() // 1024 // 1024}M / {total // 1024 // 1024}M", file=sys.stderr)
+                        next_report += 64 * 1024 * 1024
+                if total and data.tell() != total:
+                    raise http.client.IncompleteRead(data.getvalue(), total - data.tell())
+                return data.getvalue(), res.headers
+        except (http.client.IncompleteRead, TimeoutError, urllib.error.URLError) as exc:
+            last = exc
+            if attempt == 3:
+                break
+            time.sleep(2 ** attempt)
+    raise last
 
 
 def auth_token(repo):
