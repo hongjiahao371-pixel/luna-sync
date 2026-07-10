@@ -32,7 +32,7 @@ python3 scripts/docker_archive_from_registry.py \
 python3 scripts/append_image_layer.py \
   --input luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar \
   --output luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar.tmp \
-  --tag jvsheng/luna-sync:upk-v121-20260710
+  --tag jvsheng/luna-sync:upk-v121-lrvfix-20260710
 mv luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar.tmp \
   luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar
 ugcli check --path luna-sync

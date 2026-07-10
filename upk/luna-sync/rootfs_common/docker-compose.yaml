@@ -1,6 +1,6 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-v121-20260710
+    image: jvsheng/luna-sync:upk-v121-lrvfix-20260710
     network_mode: host
     privileged: true
     restart: unless-stopped
@@ -34,7 +34,7 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-v121-20260710
+    image: jvsheng/luna-sync:upk-v121-lrvfix-20260710
     restart: unless-stopped
     depends_on:
       - luna-sync
