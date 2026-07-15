@@ -1,0 +1,49 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "windows/**"
+      - "upk/luna-sync/rootfs_common/icon.png"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: windows/requirements.txt
+
+      - name: Install build dependencies
+        run: python -m pip install --disable-pip-version-check -r windows/requirements.txt
+
+      - name: Prepare icon and ffmpeg
+        run: python windows/prepare_assets.py
+
+      - name: Build executable
+        run: python -m PyInstaller --clean --noconfirm windows/luna_sync.spec
+
+      - name: Write checksum
+        shell: pwsh
+        run: (Get-FileHash dist/LunaSync.exe -Algorithm SHA256).Hash + "  LunaSync.exe" | Set-Content dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: LunaSync-Windows-x64
+          path: |
+            dist/LunaSync.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30

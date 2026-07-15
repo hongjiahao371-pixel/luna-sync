@@ -37,7 +37,7 @@ def config_value(value):
 CAM_SSID = config_value(CFG.get('camera_ssid'))
 DEF_PW = config_value(CFG.get('camera_password')) or None
 AUTO_INTERVAL = max(10, int(CFG.get('auto_sync_interval_sec', 30)))
-STATE_DIR = CFG.get('state_dir', '/state')
+STATE_DIR = os.environ.get('STATE_DIR') or CFG.get('state_dir', '/state')
 THUMB_DIR = os.path.join(STATE_DIR, 'thumbs')
 ENC_DIR = os.path.join(STATE_DIR, 'encoded')
 PREVIEW_SRC_DIR = os.path.join(STATE_DIR, 'preview_sources')
@@ -656,8 +656,9 @@ def wifi_scan():
         if not ssid or ssid in seen:
             continue
         seen.add(ssid)
+        secure = len(parts) > 2 and parts[2].strip().lower() not in ('', 'no', '--')
         nets.append({'ssid': ssid, 'signal': parts[1] if len(parts) > 1 else '',
-                     'secure': 'yes' if (len(parts) > 2 and parts[2]) else 'no',
+                     'secure': 'yes' if secure else 'no',
                      'is_camera': is_camera_ssid(ssid)})
     with lk:
         ST['wifi_current'] = current_ssid()
@@ -914,10 +915,26 @@ elif CAM_SSID and DEF_PW:
     ST['wifi_saved'] = False
     addlog('加载配置中的WiFi: ' + CAM_SSID)
 
-if __name__ == '__main__':
+workers_lk = threading.Lock()
+workers_started = False
+
+def start_workers():
+    global workers_started
+    with workers_lk:
+        if workers_started:
+            return
+        workers_started = True
     threading.Thread(target=keeper, daemon=True).start()
     threading.Thread(target=dl_worker, daemon=True).start()
     threading.Thread(target=auto_sync_worker, daemon=True).start()
     addlog('Luna Sync 启动，WiFi 后端: ' + WIFI_BACKEND + '，无线网卡: ' + (IFACE or '未检测到'))
     addlog('素材保存目录: ' + DLDIR)
-    app.run(host='0.0.0.0', port=CFG.get('web_port', 8765), threaded=True)
+
+def run_app(host=None, port=None):
+    start_workers()
+    host = host or os.environ.get('LUNA_BIND_HOST') or '0.0.0.0'
+    port = port or int(os.environ.get('LUNA_WEB_PORT') or CFG.get('web_port', 8765))
+    app.run(host=host, port=port, threaded=True)
+
+if __name__ == '__main__':
+    run_app()

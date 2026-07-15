@@ -1,5 +1,6 @@
 import glob
 import os
+import platform
 import shutil
 import subprocess
 import time
@@ -38,10 +39,13 @@ def resolve_backend(backend=None):
         'disabled': 'none',
         'wpa': 'wpa_supplicant',
         'wpasupplicant': 'wpa_supplicant',
+        'win': 'windows',
     }
     backend = aliases.get(backend, backend)
     if backend != 'auto':
-        return backend if backend in ('networkmanager', 'wpa_supplicant', 'none') else 'none'
+        return backend if backend in ('networkmanager', 'wpa_supplicant', 'windows', 'none') else 'none'
+    if platform.system().lower() == 'windows' and windows_interfaces():
+        return 'windows'
     if shutil.which('nmcli') and os.path.exists('/run/NetworkManager') and os.path.exists('/run/dbus/system_bus_socket'):
         return 'networkmanager'
     if shutil.which('iw') and shutil.which('wpa_cli') and wireless_interfaces():
@@ -54,7 +58,7 @@ def backend():
 
 
 def can_control():
-    return RESOLVED_BACKEND in ('networkmanager', 'wpa_supplicant')
+    return RESOLVED_BACKEND in ('networkmanager', 'wpa_supplicant', 'windows')
 
 
 def requires_target_ssid():
@@ -88,6 +92,8 @@ def wireless_interfaces():
 
 
 def detect_interface(preferred=None):
+    if RESOLVED_BACKEND == 'windows':
+        return windows_detect_interface(preferred)
     if RESOLVED_BACKEND == 'networkmanager':
         return nm_detect_interface(preferred)
     if RESOLVED_BACKEND == 'wpa_supplicant':
@@ -96,6 +102,8 @@ def detect_interface(preferred=None):
 
 
 def current_ssid(interface):
+    if RESOLVED_BACKEND == 'windows':
+        return windows_current_ssid(interface)
     if RESOLVED_BACKEND == 'networkmanager':
         return nm_current_ssid(interface)
     if RESOLVED_BACKEND == 'wpa_supplicant':
@@ -104,6 +112,8 @@ def current_ssid(interface):
 
 
 def scan(interface=None):
+    if RESOLVED_BACKEND == 'windows':
+        return windows_scan(interface)
     if RESOLVED_BACKEND == 'networkmanager':
         return nm_scan(interface)
     if RESOLVED_BACKEND == 'wpa_supplicant':
@@ -112,6 +122,8 @@ def scan(interface=None):
 
 
 def rescan(interface=None):
+    if RESOLVED_BACKEND == 'windows':
+        return windows_rescan(interface)
     if RESOLVED_BACKEND == 'networkmanager':
         return nm_rescan(interface)
     if RESOLVED_BACKEND == 'wpa_supplicant':
@@ -120,11 +132,116 @@ def rescan(interface=None):
 
 
 def connect(interface, ssid, password):
+    if RESOLVED_BACKEND == 'windows':
+        return windows_connect(interface, ssid, password)
     if RESOLVED_BACKEND == 'networkmanager':
         return nm_connect(interface, ssid, password)
     if RESOLVED_BACKEND == 'wpa_supplicant':
         return wpa_connect(interface, ssid, password)
     return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='wifi backend disabled')
+
+
+def windows_interfaces():
+    try:
+        import pywifi
+        return pywifi.PyWiFi().interfaces()
+    except Exception:
+        return []
+
+
+def windows_interface(preferred=None):
+    interfaces = windows_interfaces()
+    if preferred:
+        for interface in interfaces:
+            if interface.name() == preferred:
+                return interface
+    return interfaces[0] if interfaces else None
+
+
+def windows_detect_interface(preferred=None):
+    interface = windows_interface(preferred)
+    return interface.name() if interface else None
+
+
+def windows_current_ssid(interface=None):
+    result = run(['netsh', 'wlan', 'show', 'interfaces'], 10)
+    if result.returncode != 0:
+        return ''
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition(':')
+        if separator and key.strip().lower() == 'ssid':
+            return value.strip()
+    return ''
+
+
+def windows_rescan(interface=None):
+    device = windows_interface(interface)
+    if not device:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    try:
+        device.scan()
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr='')
+    except Exception as e:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr=str(e))
+
+
+def windows_scan(interface=None):
+    device = windows_interface(interface)
+    if not device:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    try:
+        from pywifi import const
+        device.scan()
+        time.sleep(2)
+        best = {}
+        for network in device.scan_results():
+            ssid = str(getattr(network, 'ssid', '') or '').strip()
+            if not ssid:
+                continue
+            signal = str(getattr(network, 'signal', '') or '')
+            akm = getattr(network, 'akm', []) or []
+            secure = 'yes' if any(value != const.AKM_TYPE_NONE for value in akm) else 'no'
+            try:
+                score = int(signal)
+            except ValueError:
+                score = -200
+            if ssid not in best or score > best[ssid][0]:
+                best[ssid] = (score, '%s:%s:%s' % (ssid, signal, secure))
+        return subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='\n'.join(item[1] for item in best.values()), stderr=''
+        )
+    except Exception as e:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr=str(e))
+
+
+def windows_connect(interface, ssid, password):
+    device = windows_interface(interface)
+    if not device:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr='no iface')
+    try:
+        import pywifi
+        from pywifi import const
+
+        for existing in device.network_profiles():
+            if existing.ssid == ssid:
+                device.remove_network_profile(existing)
+        device.disconnect()
+        time.sleep(0.5)
+        profile = pywifi.Profile()
+        profile.ssid = ssid
+        profile.auth = const.AUTH_ALG_OPEN
+        if password:
+            profile.akm = [const.AKM_TYPE_WPA2PSK]
+            profile.cipher = const.CIPHER_TYPE_CCMP
+            profile.key = password
+        else:
+            profile.akm = [const.AKM_TYPE_NONE]
+            profile.cipher = const.CIPHER_TYPE_NONE
+        profile = device.add_network_profile(profile)
+        device.connect(profile)
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr='')
+    except Exception as e:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout='', stderr=str(e))
 
 
 def nm_detect_interface(preferred=None):
