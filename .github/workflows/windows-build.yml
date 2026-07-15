@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "windows-v*"
     paths:
       - "app/**"
       - "windows/**"
@@ -12,7 +14,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -47,3 +49,10 @@ jobs:
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish Windows release
+        if: startsWith(github.ref, 'refs/tags/windows-v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" dist/LunaSync.exe dist/SHA256SUMS.txt --title "Luna Sync for Windows ${{ github.ref_name }}" --notes "Windows x64 executable. Double-click LunaSync.exe to start the local WebUI."
