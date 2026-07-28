@@ -13,6 +13,14 @@ depend_docker_version: 20.10.0
 allow_add_access_path: true
 open_type: tab
 port: 8767
+privacy_policy_link:
+  - https://github.com/hongjiahao371-pixel/luna-sync/blob/main/PRIVACY.md
+license_agreement_link:
+  - https://github.com/hongjiahao371-pixel/luna-sync/blob/main/LICENSE
+source_code_link:
+  - https://github.com/hongjiahao371-pixel/luna-sync
+technical_support_link:
+  - https://github.com/hongjiahao371-pixel/luna-sync/issues
 parameters:
   - key: DOWNLOAD_DIR
     type: path
@@ -21,16 +29,24 @@ parameters:
     i18n:
       zh-CN:
         name: 素材保存目录
-        description: 选择 Luna Sync 自动备份素材的保存位置，建议使用 /volume1/LunaSync
+        description: 请选择专用于 Luna Sync 的独立目录。应用会在该目录写入和管理下载素材，请勿与个人文件或其他应用数据混存，以免卸载、清理或重新配置时发生误删。建议新建空目录，例如 /volume1/LunaSync
       en-US:
         name: Media save folder
-        description: Choose where Luna Sync stores downloaded media, for example /volume1/LunaSync
+        description: Choose a dedicated folder for Luna Sync. The app writes and manages downloaded media in this mounted directory. Do not mix personal files or other app data here, to avoid accidental deletion during cleanup, reconfiguration, or removal. Create an empty folder such as /volume1/LunaSync
 i18n:
   zh-CN:
     name: Luna Sync
-    description: Luna Ultra 素材备份与同步工具
+    description: Luna Sync 是一款面向 Luna Ultra 相机的本地素材备份与管理工具，可通过相机 Wi-Fi 扫描内置存储及存储卡中的照片、视频和 LRV 文件，并将新增素材增量同步到用户指定的 NAS 目录。应用支持断点续传、自动同步、LRV 筛选、本地媒体浏览、图片、动图与视频预览及兼容转码。所有凭据、缓存和素材均保存在用户自己的设备与局域网内，不提供云端上传服务。本应用与 Insta360（影石）不存在官方授权、合作或隶属关系。技术支持请访问 GitHub Issues
     author: jvsheng
+    publisher: jvsheng
+    publisher_link: https://github.com/hongjiahao371-pixel
+    official: https://github.com/hongjiahao371-pixel
+    help: https://github.com/hongjiahao371-pixel/luna-sync#readme
   en-US:
     name: Luna Sync
-    description: Luna Ultra media backup and sync tool
+    description: Luna Sync is a local media backup and management tool for Luna Ultra cameras. It scans photos, videos, and LRV files from internal storage and memory cards over camera Wi-Fi, then incrementally syncs new media to a NAS folder selected by the user. It supports resumable downloads, automatic sync, LRV filtering, a local media library, image, animated image, and video previews, and compatible video transcoding. Credentials, cache, and media stay on the user's own device and local network, with no cloud upload service. Luna Sync is not affiliated with or endorsed by Insta360. Support is available through GitHub Issues
     author: jvsheng
+    publisher: jvsheng
+    publisher_link: https://github.com/hongjiahao371-pixel
+    official: https://github.com/hongjiahao371-pixel
+    help: https://github.com/hongjiahao371-pixel/luna-sync#readme

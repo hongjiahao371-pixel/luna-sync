@@ -11,10 +11,12 @@ from datetime import datetime, timezone
 
 PATCH_FILES = [
     ('entrypoint.sh', 'entrypoint.sh', 0o755),
+    ('app/downloader.py', 'app/downloader.py', 0o644),
     ('app/luna_client.py', 'app/luna_client.py', 0o644),
     ('app/wifi.py', 'app/wifi.py', 0o644),
     ('app/web_app.py', 'app/web_app.py', 0o644),
     ('app/templates/index.html', 'app/templates/index.html', 0o644),
+    ('app/templates/legal.html', 'app/templates/legal.html', 0o644),
 ]
 
 
@@ -39,7 +41,8 @@ def tar_bytes(files):
             info.mtime = 0
             tar.addfile(info)
         for src, dest, mode in files:
-            data = open(src, 'rb').read()
+            with open(src, 'rb') as source_file:
+                data = source_file.read()
             info = tarfile.TarInfo(dest)
             info.size = len(data)
             info.mode = mode

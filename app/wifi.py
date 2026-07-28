@@ -79,7 +79,8 @@ def wireless_interfaces():
     for path in glob.glob('/sys/class/net/*/uevent'):
         name = os.path.basename(os.path.dirname(path))
         try:
-            data = open(path).read()
+            with open(path) as interface_file:
+                data = interface_file.read()
         except Exception:
             data = ''
         if 'DEVTYPE=wlan' in data:

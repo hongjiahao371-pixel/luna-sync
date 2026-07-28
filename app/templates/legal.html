@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% if document == 'privacy' %}Luna Sync 隐私政策{% else %}Luna Sync 用户协议{% endif %}</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#dce3ea;--green:#176b58;--bg:#f4f7f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}main{width:min(860px,calc(100% - 32px));margin:36px auto 64px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:36px 44px}h1{margin:0 0 4px;font-size:28px}h2{margin:30px 0 8px;font-size:18px}p,li{color:#344054}.muted{color:var(--muted)}a{color:var(--green)}.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:24px}.back{white-space:nowrap;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:5px 10px}.en{margin-top:34px;padding-top:28px;border-top:1px solid var(--line)}@media(max-width:600px){main{margin:0;width:100%;border:0;border-radius:0;padding:24px 20px}.top{display:block}.back{display:inline-block;margin-top:14px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>{% if document == 'privacy' %}Luna Sync 隐私政策{% else %}Luna Sync 用户协议{% endif %}</h1>
+      <div class="muted">生效及更新日期：2026年7月22日</div>
+    </div>
+    <a class="back" href="/">返回应用</a>
+  </div>
+  {% if document == 'privacy' %}
+  <h2>1. 处理的信息</h2>
+  <p>Luna Sync 在用户自己的 NAS 或电脑中本地处理相机 Wi-Fi 名称与密码、无线网卡状态、相机媒体目录、下载进度、缩略图和兼容预览缓存。应用不收集账号、手机号、精确位置、通讯录或支付信息。</p>
+  <h2>2. 处理目的与范围</h2>
+  <p>Wi-Fi 凭据仅用于连接用户选择的 Luna 相机；媒体目录仅用于展示、预览和增量备份；运行状态与缓存仅用于恢复任务和提升预览速度。上述信息仅在用户自己的设备和局域网中处理，不会发送给开发者，也不会上传到云端或第三方。</p>
+  <h2>3. 保存位置与期限</h2>
+  <ul>
+    <li>Wi-Fi 名称与密码保存在应用状态目录，直至用户点击“清除记住”、清除应用数据或卸载应用。</li>
+    <li>设置、同步状态与同意记录保留至用户清除应用状态数据或卸载应用。</li>
+    <li>缩略图和转码预览保留至用户点击“清除缓存”、清除应用数据或卸载应用。</li>
+    <li>已下载素材保存在安装时指定的独立目录，直至用户主动删除；卸载应用不会主动删除该目录中的素材。</li>
+  </ul>
+  <h2>4. 用户控制与安全</h2>
+  <p>用户可随时清除记住的 Wi-Fi、预览缓存及已下载素材。Wi-Fi 凭据文件设置为仅容器运行用户可读写。请仅在可信局域网内使用应用，并为素材选择独立目录，避免与其他个人数据混存。</p>
+  <h2>5. 第三方服务与联系</h2>
+  <p>应用不集成广告、分析或数据上报 SDK。开源运行组件受各自许可证约束。隐私问题可通过 <a href="https://github.com/hongjiahao371-pixel/luna-sync/issues" target="_blank" rel="noopener">GitHub Issues</a> 联系开发者。</p>
+  <section class="en" lang="en">
+    <h1>Privacy Policy</h1>
+    <p class="muted">Effective and last updated: July 22, 2026</p>
+    <p>Luna Sync locally processes the selected camera Wi-Fi SSID and password, wireless adapter status, camera media listings, download progress, thumbnails, and compatible preview cache on the user's own NAS or computer. It does not collect accounts, phone numbers, precise location, contacts, or payment information.</p>
+    <p>Credentials are used only to connect to the selected Luna camera. Media listings are used only for browsing, preview, and incremental backup. This information stays on the user's device and local network and is not sent to the developer, cloud services, advertisers, or analytics providers.</p>
+    <p>Saved Wi-Fi credentials remain until the user clears them or removes the app state. Settings and consent records remain until app data is removed. Preview cache remains until cleared. Downloaded media remains in the chosen folder until the user deletes it; uninstalling the app does not remove that external media folder.</p>
+  </section>
+  {% else %}
+  <h2>1. 服务说明</h2>
+  <p>Luna Sync 是开源的本地相机素材备份与管理工具，用于连接用户有权使用的 Luna 相机，并在用户自己的设备上扫描、预览和下载素材。本应用与 Insta360（影石）不存在官方授权、合作或隶属关系。</p>
+  <h2>2. 使用条件</h2>
+  <p>用户应仅连接本人拥有或获授权访问的相机和网络，不得利用本应用访问、复制或破坏他人数据。用户应自行确认无线网卡、NAS、Docker 与相机固件的兼容性，并对网络环境和备份目录权限负责。</p>
+  <h2>3. 数据目录与删除风险</h2>
+  <p>安装时必须选择用于保存素材的目录。请新建并使用 Luna Sync 专用目录，不要将个人文件、其他应用数据与 Luna Sync 数据混存。用户执行删除、清理、重新挂载或卸载操作前，应自行确认目录内容并保留必要备份。</p>
+  <h2>4. 开源许可与免责声明</h2>
+  <p>本应用依据 MIT License 提供。在适用法律允许的最大范围内，软件按现状提供，不承诺适用于所有设备、相机固件或网络环境。源代码、许可证和问题反馈入口均位于 <a href="https://github.com/hongjiahao371-pixel/luna-sync" target="_blank" rel="noopener">GitHub 项目主页</a>。</p>
+  <section class="en" lang="en">
+    <h1>User Agreement</h1>
+    <p class="muted">Effective and last updated: July 22, 2026</p>
+    <p>Luna Sync is an open-source, local camera media backup and management tool. It is not officially authorized by, affiliated with, or endorsed by Insta360.</p>
+    <p>Use the app only with cameras and networks you own or are authorized to access. Select a dedicated media folder during installation and do not mix personal files or other application data with Luna Sync data. Review the directory and keep backups before deleting, cleaning, remounting, or uninstalling.</p>
+    <p>The software is provided under the MIT License and is supplied as-is to the fullest extent permitted by law.</p>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>

@@ -10,10 +10,15 @@ try:
 except Exception:
     Image = None
 
-CFG = json.load(open(os.environ.get('LUNA_CONFIG', '/app/config.json')))
+with open(os.environ.get('LUNA_CONFIG', '/app/config.json')) as config_file:
+    CFG = json.load(config_file)
 logging.basicConfig(level='INFO', format='%(asctime)s %(levelname)s %(message)s', stream=sys.stdout)
 log = logging.getLogger('luna')
 app = Flask(__name__)
+
+PRIVACY_VERSION = '2026-07-22'
+PRIVACY_POLICY_URL = '/privacy'
+TERMS_URL = '/terms'
 
 @app.after_request
 def disable_home_cache(response):
@@ -22,12 +27,13 @@ def disable_home_cache(response):
     return response
 
 HOST = CFG['camera_host']
+CAMERA_CLIENT = LunaClient(HOST)
 DLDIR = os.environ.get('DOWNLOAD_DIR') or CFG['download_dir']
 def configured_wifi_backend():
     return os.environ.get('LUNA_WIFI_BACKEND') or CFG.get('wifi_backend', 'auto')
 
 WIFI_BACKEND = wifi.configure(configured_wifi_backend(), CFG.get('wpa_ctrl'))
-IFACE = wifi.detect_interface(CFG.get('wifi_iface'))
+IFACE = None
 backend_lk = threading.Lock()
 
 def config_value(value):
@@ -71,7 +77,8 @@ def bool_value(value, default=False):
 def load_settings():
     try:
         if os.path.exists(SETTINGS_FILE):
-            data = json.load(open(SETTINGS_FILE))
+            with open(SETTINGS_FILE) as settings_file:
+                data = json.load(settings_file)
             return data if isinstance(data, dict) else {}
     except Exception as e:
         log.warning('load_settings:' + str(e)[:50])
@@ -107,7 +114,9 @@ ST = {'connected': False, 'wifi_conn': False, 'files': [], 'queue': [], 'current
       'completed': 0, 'log': [], 'wifi_current': '', 'wifi_target': CAM_SSID, 'wifi_password': None,
       'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool_value(SETTINGS.get('auto_sync'), bool_value(CFG.get('auto_sync'), True)),
       'auto_sync_lrv': bool_value(SETTINGS.get('auto_sync_lrv'), bool_value(CFG.get('auto_sync_lrv'), True)),
-      'last_auto_sync': ''}
+      'last_auto_sync': '', 'privacy_version': str(SETTINGS.get('privacy_version') or ''),
+      'active_key': None}
+auto_downloads = set()
 cancel = threading.Event()
 last_auto_notice = 0
 
@@ -115,6 +124,10 @@ def addlog(m):
     with lk:
         ST['log'].append(m); ST['log'] = ST['log'][-150:]
     log.info(m)
+
+def privacy_accepted():
+    with lk:
+        return ST['privacy_version'] == PRIVACY_VERSION
 
 def run(args, t=30):
     return subprocess.run(args, capture_output=True, text=True, timeout=t)
@@ -193,7 +206,8 @@ def cam_on():
 def load_saved_wifi():
     try:
         if os.path.exists(WIFI_FILE):
-            data = json.load(open(WIFI_FILE))
+            with open(WIFI_FILE) as wifi_file:
+                data = json.load(wifi_file)
             if data.get('ssid') and data.get('password'):
                 return data
             if data.get('ssid'):
@@ -222,6 +236,32 @@ def save_wifi(ssid, pw):
         addlog('已记住 WiFi: ' + ssid)
     except Exception as e:
         log.warning('save_wifi:' + str(e)[:50])
+
+wifi_state_lk = threading.Lock()
+wifi_state_loaded = False
+
+def load_wifi_state():
+    global wifi_state_loaded
+    with wifi_state_lk:
+        if wifi_state_loaded:
+            return
+        saved = load_saved_wifi()
+        with lk:
+            if saved and saved.get('ssid') and saved.get('password'):
+                ST['wifi_target'] = saved['ssid']
+                ST['wifi_password'] = saved['password']
+                ST['wifi_saved'] = True
+                message = '加载记住的WiFi: ' + saved['ssid']
+            elif CAM_SSID and DEF_PW:
+                ST['wifi_target'] = CAM_SSID
+                ST['wifi_password'] = DEF_PW
+                ST['wifi_saved'] = False
+                message = '加载配置中的WiFi: ' + CAM_SSID
+            else:
+                message = ''
+        wifi_state_loaded = True
+    if message:
+        addlog(message)
 
 def looks_like_luna_ssid(ssid):
     return str(ssid or '').strip().lower().startswith('luna ')
@@ -279,6 +319,8 @@ def try_connect(ssid, pw):
     return ok
 
 def trigger_auto_sync_check(reason):
+    if not privacy_accepted():
+        return
     with lk:
         enabled = ST['auto_sync']
     if not enabled:
@@ -289,6 +331,10 @@ def trigger_auto_sync_check(reason):
 def keeper():
     while True:
         try:
+            if not privacy_accepted():
+                time.sleep(2)
+                continue
+            load_wifi_state()
             refresh_wifi_backend()
             cur = current_ssid()
             with lk:
@@ -302,6 +348,15 @@ def keeper():
         except Exception as e:
             log.warning('keeper:' + str(e)[:50])
         time.sleep(12)
+
+def camera_keepalive_worker():
+    while True:
+        try:
+            if privacy_accepted() and wifi_on_target() and cam_on():
+                CAMERA_CLIENT.keepalive()
+        except Exception as e:
+            log.warning('camera_keepalive:' + str(e)[:60])
+        time.sleep(3)
 
 def local_files():
     out = {}
@@ -362,17 +417,16 @@ def local_dest_for(item):
     return safe_path(DLDIR, file_key(item))
 
 def refresh():
+    if not privacy_accepted():
+        return False
     with refresh_lk:
         if not (wifi_on_target() and cam_on()):
             with lk:
                 ST['connected'] = False
             return False
         try:
-            cli = LunaClient(HOST)
-            try:
-                cli.connect(); files = cli.list_files()
-            finally:
-                cli.close()
+            CAMERA_CLIENT.connect()
+            files = CAMERA_CLIENT.list_files()
             loc = local_files()
             for f in files:
                 key = file_key(f)
@@ -388,11 +442,13 @@ def refresh():
                 ST['connected'] = False
             return False
 
-def enqueue(names):
+def enqueue(names, source='manual'):
     loc = local_files()
     added = 0
     skipped = []
     with lk:
+        if source == 'auto' and not ST['auto_sync']:
+            return 0, [{'name': name, 'reason': 'auto_disabled'} for name in names]
         current = ST['current'].get('id') if ST['current'] else None
         known = {file_key(f): f for f in ST['files']}
         by_name = {f['name']: file_key(f) for f in ST['files']}
@@ -404,21 +460,52 @@ def enqueue(names):
                 skipped.append({'name': name, 'reason': 'already_local'})
                 continue
             if key in ST['queue'] or key == current:
+                if source != 'auto' and key in ST['queue']:
+                    auto_downloads.discard(key)
                 skipped.append({'name': name, 'reason': 'already_queued'})
                 continue
             if key not in known:
                 skipped.append({'name': name, 'reason': 'not_available'})
                 continue
             ST['queue'].append(key)
+            if source == 'auto':
+                auto_downloads.add(key)
             added += 1
     return added, skipped
 
+def stop_auto_sync_downloads():
+    with lk:
+        kept = []
+        removed = 0
+        for key in ST['queue']:
+            if key in auto_downloads:
+                auto_downloads.discard(key)
+                removed += 1
+            else:
+                kept.append(key)
+        ST['queue'] = kept
+        active_key = ST['active_key']
+        current = ST['current']
+        stop_current = active_key in auto_downloads or bool(current and current.get('source') == 'auto')
+        if stop_current:
+            cancel.set()
+    return removed, stop_current
+
 def auto_sync_once(manual=False):
+    if not privacy_accepted():
+        return 0
     if not auto_sync_lk.acquire(blocking=False):
         if manual:
             addlog('自动同步已在运行')
         return 0
     try:
+        with lk:
+            if not ST['auto_sync']:
+                return 0
+            if ST['current'] or ST['queue']:
+                if manual:
+                    addlog('自动同步队列执行中，本轮无需重复扫描')
+                return 0
         if not prepare_auto_sync_connection():
             if manual:
                 addlog('自动同步未开始: 相机未就绪')
@@ -434,8 +521,10 @@ def auto_sync_once(manual=False):
             skipped_lrv = len(files) - len(names)
         if skipped_lrv and manual:
             addlog('自动同步跳过 ' + str(skipped_lrv) + ' 个 LRV 文件')
-        added, _ = enqueue(names)
+        added, _ = enqueue(names, source='auto')
         with lk:
+            if not ST['auto_sync']:
+                return 0
             ST['last_auto_sync'] = time.strftime('%H:%M:%S')
         if added:
             addlog('自动同步加入 ' + str(added) + ' 个新文件')
@@ -453,6 +542,8 @@ def auto_notice(message):
         last_auto_notice = now
 
 def prepare_auto_sync_connection():
+    if not privacy_accepted():
+        return False
     refresh_wifi_backend(start_wpa=True)
     if wifi_on_target() and cam_on():
         return True
@@ -471,6 +562,9 @@ def prepare_auto_sync_connection():
 def auto_sync_worker():
     while True:
         try:
+            if not privacy_accepted():
+                time.sleep(2)
+                continue
             with lk:
                 enabled = ST['auto_sync']
             if enabled:
@@ -482,45 +576,60 @@ def auto_sync_worker():
 def dl_worker():
     while True:
         key = None
+        source = 'manual'
         with lk:
             if ST['queue']:
                 key = ST['queue'].pop(0)
+                source = 'auto' if key in auto_downloads else 'manual'
+                cancel.clear()
+                ST['active_key'] = key
         if not key:
             time.sleep(2); continue
-        cancel.clear()
         with lk:
             f = next((x for x in ST['files'] if file_key(x) == key or x['name'] == key), None)
         if not f:
-            addlog(key + ' 不在列表'); continue
+            addlog(key + ' 不在列表')
+            with lk:
+                ST['active_key'] = None
+                auto_downloads.discard(key)
+            continue
         name = f['name']
         key = file_key(f)
         if not (wifi_on_target() and cam_on()):
             with lk:
-                ST['queue'].insert(0, key)
+                ST['active_key'] = None
+                if source == 'auto' and not ST['auto_sync']:
+                    auto_downloads.discard(key)
+                else:
+                    ST['queue'].insert(0, key)
             time.sleep(15); continue
         dest = local_dest_for(f)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with lk:
-            ST['current'] = {'id': key, 'name': name, 'downloaded': 0, 'total': f.get('bytes'), 'speed': 0}
+            ST['current'] = {'id': key, 'name': name, 'downloaded': 0,
+                             'total': f.get('bytes'), 'speed': 0, 'source': source}
         addlog('开始下载 ' + name)
-        cli = None
         try:
-            cli = LunaClient(HOST); cli.connect()
+            CAMERA_CLIENT.connect()
             def prog(n, d, t, s):
                 with lk:
-                    ST['current'] = {'id': key, 'name': n, 'downloaded': d, 'total': t, 'speed': s}
+                    ST['current'] = {'id': key, 'name': n, 'downloaded': d,
+                                     'total': t, 'speed': s, 'source': source}
             download_file(f['url'], dest, on_progress=prog, cancel=cancel)
             with lk:
-                ST['completed'] += 1; ST['current'] = None
+                ST['completed'] += 1
             addlog('完成 ' + name)
         except Exception as e:
-            addlog('失败 ' + name + ':' + str(e)[:60])
+            if str(e) == 'cancelled':
+                addlog(('自动同步已停止 ' if source == 'auto' else '已取消 ') + name)
+            else:
+                addlog('失败 ' + name + ':' + str(e)[:60])
+        finally:
             with lk:
                 ST['current'] = None
-        finally:
-            if cli:
-                cli.close()
-            cancel.clear()
+                ST['active_key'] = None
+                auto_downloads.discard(key)
+                cancel.clear()
 
 
 def transcode_worker(name):
@@ -536,11 +645,8 @@ def transcode_worker(name):
                 with lk: ST['transcodes'][name] = {'status': 'failed', 'msg': '无URL(先扫描文件)'}
                 return
             with lk: ST['transcodes'][name] = {'status': 'downloading'}
-            cli = LunaClient(HOST); cli.connect()
-            try:
-                download_file(url, src_file)
-            finally:
-                cli.close()
+            CAMERA_CLIENT.connect()
+            download_file(url, src_file)
         with lk: ST['transcodes'][name] = {'status': 'encoding'}
         r = run([
             'ffmpeg', '-y', '-i', src_file, '-c:v', 'libx264', '-preset', 'veryfast',
@@ -593,21 +699,65 @@ def play(name):
 def idx():
     return render_template('index.html')
 
+@app.route('/privacy')
+def privacy_page():
+    return render_template('legal.html', document='privacy')
+
+@app.route('/terms')
+def terms_page():
+    return render_template('legal.html', document='terms')
+
+@app.route('/api/privacy', methods=['GET', 'POST'])
+def api_privacy():
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        if data.get('accepted') is not True:
+            return jsonify({'ok': False, 'error': 'explicit_consent_required'}), 400
+        with lk:
+            ST['privacy_version'] = PRIVACY_VERSION
+        save_settings({'privacy_version': PRIVACY_VERSION})
+        load_wifi_state()
+        addlog('已同意隐私政策与用户协议')
+        trigger_auto_sync_check('隐私授权完成，开始自动同步检查')
+    return jsonify({'ok': True, 'accepted': privacy_accepted(),
+                    'version': PRIVACY_VERSION, 'privacy_url': PRIVACY_POLICY_URL,
+                    'terms_url': TERMS_URL})
+
+@app.before_request
+def require_privacy_consent():
+    public_paths = {'/', '/privacy', '/terms', '/api/privacy', '/api/state'}
+    if request.path in public_paths or request.path.startswith('/static/'):
+        return None
+    if not privacy_accepted():
+        return jsonify({'ok': False, 'error': 'privacy_consent_required'}), 451
+    return None
+
 @app.route('/api/state')
 def api_state():
-    refresh_wifi_backend()
+    accepted = privacy_accepted()
+    if accepted:
+        load_wifi_state()
+        refresh_wifi_backend()
     with lk:
-        return jsonify({'connected': ST['connected'], 'wifi_conn': ST['wifi_conn'],
-            'wifi_current': ST['wifi_current'], 'wifi_saved': ST['wifi_saved'],
-            'file_count': len(ST['files']), 'queue_len': len(ST['queue']),
-            'current': ST['current'], 'completed': ST['completed'],
-            'log': ST['log'][-12:], 'camera_ssid': CAM_SSID, 'wifi_iface': IFACE,
-            'wifi_backend': WIFI_BACKEND, 'wifi_control': wifi.can_control(),
-            'wifi_target': ST['wifi_target'], 'wifi_has_password': bool(ST['wifi_password'] or DEF_PW),
-            'download_dir': DLDIR,
+        return jsonify({'connected': ST['connected'] if accepted else False,
+            'wifi_conn': ST['wifi_conn'] if accepted else False,
+            'wifi_current': ST['wifi_current'] if accepted else '',
+            'wifi_saved': ST['wifi_saved'] if accepted else False,
+            'file_count': len(ST['files']) if accepted else 0,
+            'queue_len': len(ST['queue']) if accepted else 0,
+            'current': ST['current'] if accepted else None,
+            'completed': ST['completed'] if accepted else 0,
+            'log': ST['log'][-12:] if accepted else [],
+            'camera_ssid': CAM_SSID if accepted else '',
+            'wifi_iface': IFACE if accepted else None,
+            'wifi_backend': WIFI_BACKEND, 'wifi_control': accepted and wifi.can_control(),
+            'wifi_target': ST['wifi_target'] if accepted else '',
+            'wifi_has_password': accepted and bool(ST['wifi_password'] or DEF_PW),
+            'download_dir': DLDIR if accepted else '',
             'auto_sync': ST['auto_sync'], 'auto_interval': AUTO_INTERVAL,
             'auto_sync_lrv': ST['auto_sync_lrv'],
-            'last_auto_sync': ST['last_auto_sync']})
+            'last_auto_sync': ST['last_auto_sync'],
+            'privacy_accepted': accepted, 'privacy_version': PRIVACY_VERSION})
 
 @app.route('/api/auto-sync', methods=['POST'])
 def api_auto_sync():
@@ -627,13 +777,23 @@ def api_auto_sync():
         save_settings({'auto_sync_lrv': include_lrv})
     if 'enabled' in data:
         save_settings({'auto_sync': enabled})
-    if 'enabled' in data:
-        addlog('自动同步已' + ('开启' if enabled else '关闭'))
+    stopped = (0, False)
+    if 'enabled' in data and not enabled:
+        stopped = stop_auto_sync_downloads()
+        detail = []
+        if stopped[0]:
+            detail.append('移除队列 ' + str(stopped[0]) + ' 个')
+        if stopped[1]:
+            detail.append('正在停止当前自动下载')
+        addlog('自动同步已关闭' + (': ' + '，'.join(detail) if detail else ''))
+    elif 'enabled' in data:
+        addlog('自动同步已开启')
     if 'include_lrv' in data:
         addlog('自动同步 LRV 已' + ('开启' if include_lrv else '关闭'))
     if 'enabled' in data and enabled:
         trigger_auto_sync_check('自动同步已开启，开始检查')
-    return jsonify({'ok': True, 'auto_sync': enabled, 'auto_sync_lrv': include_lrv})
+    return jsonify({'ok': True, 'auto_sync': enabled, 'auto_sync_lrv': include_lrv,
+                    'removed': stopped[0], 'cancelled': stopped[1]})
 
 @app.route('/api/wifi/scan')
 def wifi_scan():
@@ -828,16 +988,14 @@ def thumb(name):
     try:
         p = local_path(name)
         if p:
-            data = open(p, 'rb').read()
+            with open(p, 'rb') as local_file:
+                data = local_file.read()
         else:
             url = file_url(name)
             if not url:
                 return ('', 204)
-            cli = LunaClient(HOST); cli.connect()
-            try:
-                data = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'L'}), timeout=20).read()
-            finally:
-                cli.close()
+            CAMERA_CLIENT.connect()
+            data = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'L'}), timeout=20).read()
         if Image is None:
             return Response(data, mimetype='image/jpeg')
         im = Image.open(io.BytesIO(data)); im.thumbnail((220, 220)); im.convert('RGB').save(tp, 'JPEG', quality=75)
@@ -855,11 +1013,8 @@ def img(name):
     url = file_url(name)
     if not url:
         abort(404)
-    cli = LunaClient(HOST); cli.connect()
-    try:
-        data = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'L'}), timeout=60).read()
-    finally:
-        cli.close()
+    CAMERA_CLIENT.connect()
+    data = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'L'}), timeout=60).read()
     return Response(data, mimetype=mime)
 
 @app.route('/video/<path:name>')
@@ -870,7 +1025,7 @@ def video(name):
     url = file_url(name)
     if not url:
         abort(404)
-    cli = LunaClient(HOST); cli.connect()
+    CAMERA_CLIENT.connect()
     headers = {'User-Agent': 'L'}
     range_h = request.headers.get('Range')
     if range_h:
@@ -892,7 +1047,6 @@ def video(name):
                 resp.close()
             except Exception:
                 pass
-            cli.close()
     out = {'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store'}
     cr = resp.headers.get('Content-Range')
     cl = resp.headers.get('Content-Length')
@@ -902,18 +1056,8 @@ def video(name):
         out['Content-Length'] = cl
     return Response(gen(), status=status, headers=out, mimetype='video/mp4')
 
-# Load remembered Wi-Fi before workers start.
-saved = load_saved_wifi()
-if saved and saved.get('ssid') and saved.get('password'):
-    ST['wifi_target'] = saved['ssid']
-    ST['wifi_password'] = saved['password']
-    ST['wifi_saved'] = True
-    addlog('加载记住的WiFi: ' + saved['ssid'])
-elif CAM_SSID and DEF_PW:
-    ST['wifi_target'] = CAM_SSID
-    ST['wifi_password'] = DEF_PW
-    ST['wifi_saved'] = False
-    addlog('加载配置中的WiFi: ' + CAM_SSID)
+if privacy_accepted():
+    load_wifi_state()
 
 workers_lk = threading.Lock()
 workers_started = False
@@ -924,7 +1068,11 @@ def start_workers():
         if workers_started:
             return
         workers_started = True
+    if privacy_accepted():
+        load_wifi_state()
+        refresh_wifi_backend()
     threading.Thread(target=keeper, daemon=True).start()
+    threading.Thread(target=camera_keepalive_worker, daemon=True).start()
     threading.Thread(target=dl_worker, daemon=True).start()
     threading.Thread(target=auto_sync_worker, daemon=True).start()
     addlog('Luna Sync 启动，WiFi 后端: ' + WIFI_BACKEND + '，无线网卡: ' + (IFACE or '未检测到'))
