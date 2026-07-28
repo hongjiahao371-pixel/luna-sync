@@ -898,11 +898,22 @@ def api_dl():
 def api_can():
     with lk:
         current = ST['current']
-        if current:
+        active = bool(ST['active_key'] or current)
+        removed = len(ST['queue'])
+        ST['queue'] = []
+        auto_downloads.clear()
+        if active:
             cancel.set()
-    if current:
-        addlog('请求取消')
-    return jsonify({'ok': True, 'cancelled': bool(current)})
+        auto_sync = ST['auto_sync']
+    if active or removed:
+        detail = []
+        if active:
+            detail.append('正在停止当前下载')
+        if removed:
+            detail.append('移除队列 ' + str(removed) + ' 个')
+        addlog('取消下载: ' + '，'.join(detail))
+    return jsonify({'ok': True, 'cancelled': active, 'removed': removed,
+                    'auto_sync': auto_sync})
 
 @app.route('/api/file/<path:name>', methods=['DELETE'])
 def api_del(name):

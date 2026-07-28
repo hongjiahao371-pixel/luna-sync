@@ -174,6 +174,7 @@ var TEXT={
     unknownError:'未知错误',downloading:'下载中',encoding:'转码中',pending:'排队',processing:'处理中',notConnected:'未连接',noNetworks:'没扫到网络',scanFailed:'扫描失败',
     enterSsid:'请输入 SSID',manageable:'可管理',manual:'手动',remembered:'已记住',notRemembered:'未记住',wifiPill:'Wi-Fi: {name}',autoPill:'自动同步: {state}',
     downloadProgress:'下载 {name} {percent}% ({done}/{total}, {speed}/s)',queueCount:'队列 {count} 个',totalDone:'本次完成 {count}',forgetConfirm:'清除记住的 Wi-Fi 密码?',
+    cancelResult:'正在停止当前下载，已移除 {count} 个排队任务',cancelQueued:'已移除 {count} 个排队任务',cancelCurrent:'正在停止当前下载',cancelNone:'当前没有下载任务',cancelFailed:'取消下载失败，请重试',autoSyncMayResume:'自动同步仍处于开启状态，后续检查可能再次加入未完成素材。',
     selectFilesFirst:'请先勾选文件',visibleAllDone:'当前可见文件都已下载',clearCacheConfirm:'清空全部预览缓存（缩略图 + 转码预览）？\n已下载的文件不受影响，下次查看会重新生成。',
     clearing:'清理中…',cacheCleared:'已清理 {count} 个文件',clearFailed:'清理失败，请重试',ready:'就绪',done:'完成',doneLocal:'完成(本地)',
     consentTitle:'使用前请阅读并同意',consentIntro:'Luna Sync 仅在您的设备和局域网内处理以下信息，用于连接相机和备份素材：',
@@ -199,6 +200,7 @@ var TEXT={
     unknownError:'unknown error',downloading:'Downloading',encoding:'Encoding',pending:'Queued',processing:'Processing',notConnected:'Not connected',noNetworks:'No networks found',scanFailed:'Scan failed',
     enterSsid:'Please enter an SSID',manageable:'Managed',manual:'Manual',remembered:'Saved',notRemembered:'Not saved',wifiPill:'Wi-Fi: {name}',autoPill:'Auto sync: {state}',
     downloadProgress:'Downloading {name} {percent}% ({done}/{total}, {speed}/s)',queueCount:'Queue {count}',totalDone:'Completed {count}',forgetConfirm:'Clear the saved Wi-Fi password?',
+    cancelResult:'Stopping the current download and removed {count} queued items',cancelQueued:'Removed {count} queued items',cancelCurrent:'Stopping the current download',cancelNone:'There are no download tasks',cancelFailed:'Failed to cancel downloads. Please try again',autoSyncMayResume:'Auto sync is still enabled, so a later scan may enqueue unfinished media again.',
     selectFilesFirst:'Select files first',visibleAllDone:'All visible files are already downloaded',clearCacheConfirm:'Clear all preview cache, including thumbnails and transcoded previews?\nDownloaded files will not be affected and previews will be regenerated when needed.',
     clearing:'Clearing...',cacheCleared:'Cleared {count} files',clearFailed:'Clear failed. Please try again',ready:'Ready',done:'Done',doneLocal:'Done (local)',
     consentTitle:'Please review and agree before use',consentIntro:'Luna Sync processes the following information only on your device and local network to connect to the camera and back up media:',
@@ -311,6 +313,17 @@ function updateMetrics(){var v=visible();$('mFiles').textContent=FILES.length;$(
   var lf=localFiles(),ni=lf.filter(function(x){return isImg(x.kind)}).length,nv=lf.filter(function(x){return isVid(x.kind)}).length,tot=lf.reduce(function(a,x){return a+(x.bytes||0)},0);
   $('camCnt').textContent=FILES.length;$('localCnt').textContent=lf.length;$('lstat').textContent=tr('localStat',{total:lf.length,photos:ni,videos:nv,size:fmt(tot)})}
 async function queueFiles(names){var d=await(await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:names})})).json();alert(d.msg?apiMsg(d.msg):tr('queuedFiles',{count:d.queued}));poll()}
+async function cancelDownloads(){
+  var btn=$('bCan');btn.disabled=true;
+  try{
+    var response=await fetch('/api/cancel',{method:'POST'}),d=await response.json();
+    if(!response.ok||!d.ok)throw new Error('cancel');
+    var message=d.cancelled&&d.removed?tr('cancelResult',{count:d.removed}):(d.cancelled?tr('cancelCurrent'):(d.removed?tr('cancelQueued',{count:d.removed}):tr('cancelNone')));
+    if(d.auto_sync&&(d.cancelled||d.removed))message+='\n'+tr('autoSyncMayResume');
+    alert(message);await poll();
+  }catch(e){alert(tr('cancelFailed'))}
+  finally{btn.disabled=false}
+}
 function render(){
   var tb=$('tbody'),list=visible();tb.innerHTML='';$('empty').style.display=list.length?'none':'grid';
   list.forEach(function(it){
@@ -415,7 +428,7 @@ async function checkConsent(){
   try{var d=await(await fetch('/api/privacy')).json();if(d.accepted){setConsentVisible(false);scan()}else{setConsentVisible(true)}}
   catch(e){setConsentVisible(true)}
 }
-$('bScan').onclick=scan;$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;$('bCan').onclick=function(){fetch('/api/cancel',{method:'POST'})};$('bForget').onclick=async function(){if(confirm(tr('forgetConfirm'))){await fetch('/api/wifi/forget',{method:'POST'});$('pw').value='';$('rem').checked=false;await poll()}};$('bAuto').onclick=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!STATE.auto_sync})});poll()};$('autoLrv').onchange=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({include_lrv:this.checked})});poll()};$('bDl').onclick=function(){if(!SEL.size)return alert(tr('selectFilesFirst'));queueFiles(Array.from(SEL))};$('bVisible').onclick=function(){var ns=visible().filter(function(x){return !done(x)}).map(keyOf);if(!ns.length)return alert(tr('visibleAllDone'));queueFiles(ns)};$('bMissing').onclick=function(){SEL.clear();visible().filter(function(x){return !done(x)}).forEach(function(x){SEL.add(keyOf(x))});render()};$('bAll').onclick=function(){var v=visible(),all=!v.every(function(x){return SEL.has(keyOf(x))});v.forEach(function(x){all?SEL.add(keyOf(x)):SEL.delete(keyOf(x))});render()};$('cAll').onchange=$('bAll').onclick;$('fl').onchange=render;$('fs').onchange=render;$('q').oninput=render;$('ovc').onclick=closePrev;$('ov').onclick=function(e){if(e.target===$('ov'))closePrev()};
+$('bScan').onclick=scan;$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;$('bCan').onclick=cancelDownloads;$('bForget').onclick=async function(){if(confirm(tr('forgetConfirm'))){await fetch('/api/wifi/forget',{method:'POST'});$('pw').value='';$('rem').checked=false;await poll()}};$('bAuto').onclick=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!STATE.auto_sync})});poll()};$('autoLrv').onchange=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({include_lrv:this.checked})});poll()};$('bDl').onclick=function(){if(!SEL.size)return alert(tr('selectFilesFirst'));queueFiles(Array.from(SEL))};$('bVisible').onclick=function(){var ns=visible().filter(function(x){return !done(x)}).map(keyOf);if(!ns.length)return alert(tr('visibleAllDone'));queueFiles(ns)};$('bMissing').onclick=function(){SEL.clear();visible().filter(function(x){return !done(x)}).forEach(function(x){SEL.add(keyOf(x))});render()};$('bAll').onclick=function(){var v=visible(),all=!v.every(function(x){return SEL.has(keyOf(x))});v.forEach(function(x){all?SEL.add(keyOf(x)):SEL.delete(keyOf(x))});render()};$('cAll').onchange=$('bAll').onclick;$('fl').onchange=render;$('fs').onchange=render;$('q').oninput=render;$('ovc').onclick=closePrev;$('ov').onclick=function(e){if(e.target===$('ov'))closePrev()};
 $('tabCam').onclick=function(){switchTab('cam')};$('tabLocal').onclick=function(){switchTab('local')};
 function setLF(v){LFIL=v;['lfAll','lfImg','lfVid'].forEach(function(id){$(id).classList.toggle('on',id===('lf'+{all:'All',img:'Img',vid:'Vid'}[v]))});renderLocal()}
 $('lfAll').onclick=function(){setLF('all')};$('lfImg').onclick=function(){setLF('img')};$('lfVid').onclick=function(){setLF('vid')};

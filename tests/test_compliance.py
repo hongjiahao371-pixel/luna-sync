@@ -111,6 +111,48 @@ class ComplianceTests(unittest.TestCase):
                 app.ST['queue'] = []
                 app.ST['auto_sync'] = False
 
+    def test_cancel_clears_queue_and_stops_active_download(self):
+        app = self.web_app
+        try:
+            with app.lk:
+                app.ST['privacy_version'] = app.PRIVACY_VERSION
+                app.ST['auto_sync'] = False
+                app.ST['queue'] = ['manual/queued.mp4', 'auto/queued.mp4']
+                app.ST['active_key'] = 'manual/current.mp4'
+                app.ST['current'] = None
+                app.auto_downloads.clear()
+                app.auto_downloads.add('auto/queued.mp4')
+                app.cancel.clear()
+            response = self.client.post('/api/cancel')
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.get_json()['cancelled'])
+            self.assertEqual(response.get_json()['removed'], 2)
+            with app.lk:
+                self.assertEqual(app.ST['queue'], [])
+                self.assertEqual(app.auto_downloads, set())
+            self.assertTrue(app.cancel.is_set())
+        finally:
+            with app.lk:
+                app.ST['queue'] = []
+                app.ST['active_key'] = None
+                app.ST['current'] = None
+                app.auto_downloads.clear()
+                app.cancel.clear()
+
+    def test_cancel_when_idle_does_not_arm_next_download(self):
+        app = self.web_app
+        with app.lk:
+            app.ST['privacy_version'] = app.PRIVACY_VERSION
+            app.ST['queue'] = []
+            app.ST['active_key'] = None
+            app.ST['current'] = None
+            app.cancel.clear()
+        response = self.client.post('/api/cancel')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.get_json()['cancelled'])
+        self.assertEqual(response.get_json()['removed'], 0)
+        self.assertFalse(app.cancel.is_set())
+
     def test_legal_pages_are_public(self):
         self.assertIn('Luna Sync 隐私政策', self.client.get('/privacy').get_data(as_text=True))
         self.assertIn('Luna Sync 用户协议', self.client.get('/terms').get_data(as_text=True))
