@@ -56,6 +56,7 @@ lk = threading.Lock()
 scan_lk = threading.Lock()
 refresh_lk = threading.Lock()
 auto_sync_lk = threading.Lock()
+preview_lk = threading.Lock()
 _scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
 SCAN_CACHE_TTL = 8
 SCAN_RESCAN_INTERVAL = 12
@@ -186,16 +187,23 @@ def ensure_camera_ipv4():
         log.warning('camera_ipv4:' + str(e)[:60])
 
 def wifi_on_target():
-    if not CAM_SSID:
-        ensure_camera_ipv4()
-        return cam_on()
     if not wifi.requires_target_ssid():
-        return cam_on()
+        return True
+    with lk:
+        target = ST.get('wifi_target') or CAM_SSID
     cur = current_ssid()
-    ok = bool(cur and CAM_SSID and cur == CAM_SSID)
+    ok = bool(cur and (cur == target if target else looks_like_luna_ssid(cur)))
     if ok:
         ensure_camera_ipv4()
     return ok
+
+
+def debounced_connection(probe_ok, previous, failures):
+    if probe_ok:
+        return True, 0
+    failures += 1
+    return bool(previous and failures < 2), failures
+
 
 def cam_on():
     try:
@@ -329,6 +337,7 @@ def trigger_auto_sync_check(reason):
     threading.Thread(target=auto_sync_once, kwargs={'manual': True}, daemon=True).start()
 
 def keeper():
+    camera_failures = 0
     while True:
         try:
             if not privacy_accepted():
@@ -339,11 +348,18 @@ def keeper():
             cur = current_ssid()
             with lk:
                 ST['wifi_current'] = cur
-            connected = wifi_on_target() and cam_on()
+            on_target = wifi_on_target()
+            probe_ok = on_target and cam_on()
             with lk:
                 was_connected = ST['connected']
+                if on_target:
+                    connected, camera_failures = debounced_connection(
+                        probe_ok, was_connected, camera_failures,
+                    )
+                else:
+                    connected, camera_failures = False, 0
                 ST['connected'] = connected
-            if connected and not was_connected:
+            if probe_ok and not was_connected:
                 trigger_auto_sync_check('检测到 Luna 已连接，开始自动同步检查')
         except Exception as e:
             log.warning('keeper:' + str(e)[:50])
@@ -413,6 +429,23 @@ def split_file_id(value):
 def file_key(item):
     return item.get('id') or ((item.get('storage') or 'internal') + '/' + item['name'])
 
+
+def local_file_info(item, local):
+    info = local.get(file_key(item))
+    if info is None and item.get('storage') == 'internal':
+        info = local.get(item['name'])
+    return info
+
+
+def local_file_complete(item, local):
+    info = local_file_info(item, local)
+    if info is None:
+        return False
+    if item.get('bytes_exact') and item.get('bytes') is not None:
+        return info['size'] == item['bytes']
+    return True
+
+
 def local_dest_for(item):
     return safe_path(DLDIR, file_key(item))
 
@@ -431,8 +464,7 @@ def refresh():
             for f in files:
                 key = file_key(f)
                 f['id'] = key
-                legacy_done = f.get('storage') == 'internal' and f['name'] in loc
-                f['status'] = '完成' if key in loc or legacy_done else '就绪'
+                f['status'] = '完成' if local_file_complete(f, loc) else '就绪'
             with lk:
                 ST['files'] = files; ST['connected'] = True
             return True
@@ -455,8 +487,7 @@ def enqueue(names, source='manual'):
         for name in names:
             key = name if name in known else by_name.get(name, name)
             item = known.get(key)
-            legacy_done = item and item.get('storage') == 'internal' and item['name'] in loc
-            if key in loc or legacy_done:
+            if item and local_file_complete(item, loc):
                 skipped.append({'name': name, 'reason': 'already_local'})
                 continue
             if key in ST['queue'] or key == current:
@@ -573,6 +604,20 @@ def auto_sync_worker():
             log.warning('auto_sync:' + str(e)[:60])
         time.sleep(AUTO_INTERVAL)
 
+
+def postpone_unavailable_download(key, source):
+    with lk:
+        was_cancelled = cancel.is_set()
+        ST['active_key'] = None
+        if was_cancelled or (source == 'auto' and not ST['auto_sync']):
+            auto_downloads.discard(key)
+        elif key not in ST['queue']:
+            ST['queue'].insert(0, key)
+        if was_cancelled:
+            cancel.clear()
+    return was_cancelled
+
+
 def dl_worker():
     while True:
         key = None
@@ -596,15 +641,22 @@ def dl_worker():
         name = f['name']
         key = file_key(f)
         if not (wifi_on_target() and cam_on()):
+            was_cancelled = postpone_unavailable_download(key, source)
+            if was_cancelled:
+                addlog(('自动同步已停止 ' if source == 'auto' else '已取消 ') + name)
+            else:
+                time.sleep(15)
+            continue
+        try:
+            dest = local_dest_for(f)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+        except Exception as e:
+            addlog('准备下载失败 ' + name + ':' + str(e)[:60])
             with lk:
                 ST['active_key'] = None
-                if source == 'auto' and not ST['auto_sync']:
-                    auto_downloads.discard(key)
-                else:
-                    ST['queue'].insert(0, key)
-            time.sleep(15); continue
-        dest = local_dest_for(f)
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                auto_downloads.discard(key)
+                cancel.clear()
+            continue
         with lk:
             ST['current'] = {'id': key, 'name': name, 'downloaded': 0,
                              'total': f.get('bytes'), 'speed': 0, 'source': source}
@@ -615,7 +667,9 @@ def dl_worker():
                 with lk:
                     ST['current'] = {'id': key, 'name': n, 'downloaded': d,
                                      'total': t, 'speed': s, 'source': source}
-            download_file(f['url'], dest, on_progress=prog, cancel=cancel)
+            expected_size = f.get('bytes') if f.get('bytes_exact') else None
+            download_file(f['url'], dest, on_progress=prog, cancel=cancel,
+                          expected_size=expected_size)
             with lk:
                 ST['completed'] += 1
             addlog('完成 ' + name)
@@ -646,7 +700,9 @@ def transcode_worker(name):
                 return
             with lk: ST['transcodes'][name] = {'status': 'downloading'}
             CAMERA_CLIENT.connect()
-            download_file(url, src_file)
+            item = file_info(name)
+            expected_size = item.get('bytes') if item and item.get('bytes_exact') else None
+            download_file(url, src_file, expected_size=expected_size)
         with lk: ST['transcodes'][name] = {'status': 'encoding'}
         r = run([
             'ffmpeg', '-y', '-i', src_file, '-c:v', 'libx264', '-preset', 'veryfast',
@@ -661,9 +717,14 @@ def transcode_worker(name):
         with lk: ST['transcodes'][name] = {'status': 'failed', 'msg': str(e)[:80]}
         log.warning('transcode ' + name + ':' + str(e)[:60])
 
-def file_url(name):
+def file_info(name):
     with lk:
         f = next((x for x in ST['files'] if file_key(x) == name or x['name'] == name), None)
+    return dict(f) if f else None
+
+
+def file_url(name):
+    f = file_info(name)
     return f['url'] if f else None
 
 
@@ -922,7 +983,12 @@ def api_del(name):
         os.remove(p)
     if os.path.exists(p + '.part'):
         os.remove(p + '.part')
-    for extra in (safe_path(ENC_DIR, name + '.mp4'), safe_path(THUMB_DIR, name + '.jpg'), safe_path(PREVIEW_SRC_DIR, name)):
+    for extra in (
+        safe_path(ENC_DIR, name + '.mp4'),
+        safe_path(THUMB_DIR, name + '.jpg'),
+        safe_path(THUMB_DIR, name + '.preview.jpg'),
+        safe_path(PREVIEW_SRC_DIR, name),
+    ):
         if os.path.exists(extra):
             os.remove(extra)
         if os.path.exists(extra + '.part'):
@@ -974,6 +1040,41 @@ def _human(b):
         b /= 1024
     return '%.1f TB' % b
 
+
+def dng_preview(name, output, width):
+    with preview_lk:
+        if os.path.exists(output) and os.path.getsize(output) > 0:
+            return output
+        source = local_path(name)
+        if not source:
+            source = safe_path(PREVIEW_SRC_DIR, name)
+            os.makedirs(os.path.dirname(source), exist_ok=True)
+            if not os.path.exists(source):
+                item = file_info(name)
+                if not item:
+                    return None
+                CAMERA_CLIENT.connect()
+                expected_size = item.get('bytes') if item.get('bytes_exact') else None
+                download_file(item['url'], source, expected_size=expected_size)
+        os.makedirs(os.path.dirname(output), exist_ok=True)
+        temporary = output + '.part.jpg'
+        try:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+            result = run([
+                'ffmpeg', '-v', 'error', '-y', '-i', source, '-frames:v', '1',
+                '-vf', 'scale=%d:-2:force_original_aspect_ratio=decrease' % width,
+                '-q:v', '3', temporary,
+            ], 120)
+            if result.returncode == 0 and os.path.exists(temporary) and os.path.getsize(temporary) > 0:
+                os.replace(temporary, output)
+                return output
+        finally:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+    return None
+
+
 @app.route('/thumb/<path:name>')
 def thumb(name):
     tp = safe_path(THUMB_DIR, name + '.jpg')
@@ -981,6 +1082,13 @@ def thumb(name):
         return send_file(tp, mimetype='image/jpeg')
     os.makedirs(os.path.dirname(tp), exist_ok=True)
     low = name.lower()
+    if low.endswith('.dng'):
+        try:
+            preview = dng_preview(name, tp, 220)
+            return send_file(preview, mimetype='image/jpeg') if preview else ('', 204)
+        except Exception as e:
+            log.warning('thumb(dng) ' + name + ':' + str(e)[:60])
+            return ('', 204)
     if low.endswith(('.mp4', '.lrv', '.mov', '.m4v')):
         p = local_path(name)
         if not p:
@@ -1017,6 +1125,14 @@ def thumb(name):
 
 @app.route('/img/<path:name>')
 def img(name):
+    if name.lower().endswith('.dng'):
+        output = safe_path(THUMB_DIR, name + '.preview.jpg')
+        try:
+            preview = dng_preview(name, output, 2560)
+            return send_file(preview, mimetype='image/jpeg') if preview else ('', 204)
+        except Exception as e:
+            log.warning('preview(dng) ' + name + ':' + str(e)[:60])
+            return ('', 204)
     mime = mimetypes.guess_type(name)[0] or 'image/jpeg'
     p = local_path(name)
     if p:

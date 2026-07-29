@@ -75,6 +75,11 @@ def fake_pywifi_module():
 
 
 class WindowsWifiTests(unittest.TestCase):
+    def test_networkmanager_current_ssid_uses_active_wifi_not_profile_name(self):
+        active = subprocess.CompletedProcess([], 0, '*:Luna Ultra TEST\n', '')
+        with patch.object(wifi, 'run', return_value=active):
+            self.assertEqual(wifi.nm_current_ssid('wlan0'), 'Luna Ultra TEST')
+
     def test_current_ssid_ignores_bssid(self):
         output = '\n    BSSID             : 00:11:22:33:44:55\n    SSID              : Luna Ultra TEST\n'
         result = subprocess.CompletedProcess([], 0, output, '')

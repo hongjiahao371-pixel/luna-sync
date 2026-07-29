@@ -261,6 +261,14 @@ def nm_detect_interface(preferred=None):
 def nm_current_ssid(interface):
     if not interface:
         return ''
+    active = run(
+        ['nmcli', '-t', '-f', 'IN-USE,SSID', 'device', 'wifi', 'list', 'ifname', interface],
+        8,
+    )
+    for line in active.stdout.splitlines():
+        marker, separator, ssid = line.partition(':')
+        if separator and marker.strip() in ('*', 'yes'):
+            return ssid.replace('\\:', ':').replace('\\\\', '\\').strip()
     result = run(
         ['nmcli', '-t', '-f', 'GENERAL.CONNECTION', 'device', 'show', interface],
         8,

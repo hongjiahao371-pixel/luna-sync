@@ -1,6 +1,6 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-v123-cancel-all-20260728
+    image: jvsheng/luna-sync:upk-v123-audit-fixes-20260729
     network_mode: host
     privileged: true
     restart: unless-stopped
@@ -34,7 +34,7 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-v123-cancel-all-20260728
+    image: jvsheng/luna-sync:upk-v123-audit-fixes-20260729
     restart: unless-stopped
     depends_on:
       - luna-sync

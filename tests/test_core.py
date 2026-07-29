@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from threading import Event
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
@@ -46,6 +47,51 @@ class DownloaderTests(unittest.TestCase):
                     downloader.download_file('http://camera/clip.mp4', target, cancel=cancel)
                 self.assertTrue(os.path.exists(target + '.part'))
                 self.assertFalse(os.path.exists(target))
+        finally:
+            downloader.urlopen = original
+
+    def test_undersized_final_file_is_resumed_when_exact_size_is_known(self):
+        original = downloader.urlopen
+
+        class PartialResponse(Response):
+            status = 206
+            headers = {'Content-Range': 'bytes 3-5/6', 'Content-Length': '3'}
+
+            def read(self, _):
+                if self.sent:
+                    return b''
+                self.sent = True
+                return b'def'
+
+        requests = []
+        downloader.urlopen = lambda req, **kwargs: requests.append(req) or PartialResponse()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                target = os.path.join(tmp, 'clip.mp4')
+                with open(target, 'wb') as f:
+                    f.write(b'abc')
+                downloader.download_file('http://camera/clip.mp4', target, expected_size=6)
+                with open(target, 'rb') as f:
+                    self.assertEqual(f.read(), b'abcdef')
+                self.assertEqual(requests[0].get_header('Range'), 'bytes=3-')
+                self.assertFalse(os.path.exists(target + '.part'))
+        finally:
+            downloader.urlopen = original
+
+    def test_oversized_partial_file_is_discarded(self):
+        original = downloader.urlopen
+        requests = []
+        downloader.urlopen = lambda req, **kwargs: requests.append(req) or Response()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                target = os.path.join(tmp, 'clip.mp4')
+                with open(target + '.part', 'wb') as f:
+                    f.write(b'abcdefg')
+                downloader.download_file('http://camera/clip.mp4', target, expected_size=6)
+                with open(target, 'rb') as f:
+                    self.assertEqual(f.read(), b'abcdef')
+                self.assertIsNone(requests[0].get_header('Range'))
+                self.assertFalse(os.path.exists(target + '.part'))
         finally:
             downloader.urlopen = original
 
@@ -164,6 +210,15 @@ class LrvTests(unittest.TestCase):
     def test_lrv_sidecar_files_are_classified_as_lrv(self):
         self.assertEqual(luna_client.file_kind('LRV_20260710_101942_062.lrv.3ainfo.bin'), 'LRV')
         self.assertEqual(luna_client.file_kind('VID_20260710_101942_062.mp4.3ainfo.bin'), 'BIN')
+
+
+class PackageMetadataTests(unittest.TestCase):
+    def test_upk_user_agreement_points_to_terms(self):
+        project = Path(__file__).resolve().parents[1] / 'upk' / 'luna-sync' / 'project.yaml'
+        text = project.read_text(encoding='utf-8')
+        self.assertIn('/TERMS.md', text)
+        agreement = text.split('license_agreement_link:', 1)[1].split('source_code_link:', 1)[0]
+        self.assertNotIn('/LICENSE', agreement)
 
 
 if __name__ == '__main__':

@@ -43,12 +43,12 @@ python3 scripts/docker_archive_from_registry.py \
 python3 scripts/append_image_layer.py \
   --input luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar \
   --output luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar.tmp \
-  --tag jvsheng/luna-sync:upk-v123-cancel-all-20260728
+  --tag jvsheng/luna-sync:upk-v123-audit-fixes-20260729
 mv luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar.tmp \
   luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar
 ugcli check --path luna-sync
 cd luna-sync
-ugcli pack --arch <amd64|arm64> --build 25
+ugcli pack --arch <amd64|arm64> --build 26
 ```
 
 The generated `.upk` will be written to `luna-sync/build_dir/pkgs/upk/`.
