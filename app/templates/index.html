@@ -44,6 +44,7 @@ button,input,select{font:inherit}button{height:34px;border:1px solid transparent
       <button id="bDl">下载选中</button>
       <button id="bCan" class="danger">取消下载</button>
       <button id="bLang" class="ghost">EN</button>
+      <button id="bLogout" class="ghost">退出</button>
     </div>
   </div>
 </header>
@@ -156,12 +157,14 @@ var FILES=[],LOCAL=[],SEL=new Set(),STATE={};
 var LANG_PARAM=new URLSearchParams(location.search).get('lang');
 var LANG=(LANG_PARAM==='en'||LANG_PARAM==='zh')?LANG_PARAM:(localStorage.getItem('lunaLang')||(((navigator.language||'').toLowerCase().indexOf('zh')===0)?'zh':'en'));
 if(LANG_PARAM==='en'||LANG_PARAM==='zh')localStorage.setItem('lunaLang',LANG);
+var _fetch=window.fetch.bind(window);
+window.fetch=function(){return _fetch.apply(null,arguments).then(function(r){if(r.status===401){location.href='/login';throw new Error('unauthorized')}return r})};
 var TEXT={
   zh:{
     waitingStatus:'等待状态',cameraChecking:'相机: 检查中',cameraOnline:'相机: 在线',cameraOffline:'相机: 离线',cameraError:'相机: 错误',cameraConnecting:'相机: 连接中',
     autoSync:'自动同步',autoSyncDash:'自动同步: -',autoOn:'开',autoOff:'关',enableAuto:'开启自动同步',disableAuto:'关闭自动同步',
     scanCamera:'扫描相机文件',scanning:'扫描中',downloadSelected:'下载选中',cancelDownload:'取消下载',
-    connection:'连接',currentWifi:'当前 Wi-Fi',backend:'连接后端',scanWifi:'扫描 Wi-Fi',forgetSaved:'清除记住',password:'密码',rememberPassword:'记住密码',autoSyncLrv:'自动同步 LRV',connect:'连接',
+    connection:'连接',currentWifi:'当前 Wi-Fi',backend:'连接后端',scanWifi:'扫描 Wi-Fi',forgetSaved:'清除记住',password:'密码',rememberPassword:'记住密码',autoSyncLrv:'自动同步 LRV',connect:'连接',logout:'退出',
     overview:'概览',files:'文件',selected:'已选',queue:'队列',completedThisRun:'本次完成',logs:'日志',
     mediaLibrary:'媒体库',waitingScan:'等待扫描',incrementalBackup:'增量备份',cameraFiles:'相机文件',localDownloads:'本地已下载',
     selectAll:'全选/反选',selectMissing:'选择未下载',downloadVisible:'下载可见未下载',type:'类型',status:'状态',all:'全部',downloaded:'已下载',notDownloaded:'未下载',
@@ -187,7 +190,7 @@ var TEXT={
     waitingStatus:'Waiting',cameraChecking:'Camera: checking',cameraOnline:'Camera: online',cameraOffline:'Camera: offline',cameraError:'Camera: error',cameraConnecting:'Camera: connecting',
     autoSync:'Auto sync',autoSyncDash:'Auto sync: -',autoOn:'on',autoOff:'off',enableAuto:'Enable auto sync',disableAuto:'Disable auto sync',
     scanCamera:'Scan camera files',scanning:'Scanning',downloadSelected:'Download selected',cancelDownload:'Cancel download',
-    connection:'Connection',currentWifi:'Current Wi-Fi',backend:'Connection backend',scanWifi:'Scan Wi-Fi',forgetSaved:'Clear saved',password:'Password',rememberPassword:'Remember password',autoSyncLrv:'Auto sync LRV',connect:'Connect',
+    connection:'Connection',currentWifi:'Current Wi-Fi',backend:'Connection backend',scanWifi:'Scan Wi-Fi',forgetSaved:'Clear saved',password:'Password',rememberPassword:'Remember password',autoSyncLrv:'Auto sync LRV',connect:'Connect',logout:'Sign out',
     overview:'Overview',files:'Files',selected:'Selected',queue:'Queue',completedThisRun:'Completed',logs:'Logs',
     mediaLibrary:'Media Library',waitingScan:'Waiting to scan',incrementalBackup:'Incremental backup',cameraFiles:'Camera files',localDownloads:'Local downloads',
     selectAll:'Select/invert',selectMissing:'Select missing',downloadVisible:'Download visible missing',type:'Type',status:'Status',all:'All',downloaded:'Downloaded',notDownloaded:'Not downloaded',
@@ -289,7 +292,7 @@ function labelText(label,k){if(label&&label.childNodes.length)label.childNodes[0
 function checkboxLabelText(label,k){if(label&&label.childNodes.length>1)label.childNodes[label.childNodes.length-1].nodeValue=' '+tr(k)}
 function tabLabel(id,key,countId){var b=$(id),svg=b.querySelector('svg'),cnt=$(countId);b.innerHTML='';if(svg)b.appendChild(svg);b.appendChild(document.createTextNode(tr(key)));if(cnt)b.appendChild(cnt)}
 function applyLang(){
-  document.documentElement.lang=LANG==='zh'?'zh-CN':'en';$('bLang').textContent=LANG==='zh'?'EN':'中文';
+  document.documentElement.lang=LANG==='zh'?'zh-CN':'en';$('bLang').textContent=LANG==='zh'?'EN':'中文';$('bLogout').textContent=tr('logout');
   $('subtitle').textContent=tr('waitingStatus');$('cameraPill').textContent=tr('cameraChecking');$('autoPill').textContent=tr('autoSyncDash');
   $('bScan').textContent=tr('scanCamera');$('bAuto').textContent=STATE.auto_sync?tr('disableAuto'):tr('enableAuto');$('bDl').textContent=tr('downloadSelected');$('bCan').textContent=tr('cancelDownload');
   var h=document.querySelectorAll('aside.panel h2');if(h[0])h[0].textContent=tr('connection');if(h[1])h[1].textContent=tr('overview');if(h[2])h[2].textContent=tr('logs');
@@ -451,6 +454,7 @@ $('consentAgree').onclick=async function(){
   catch(e){alert(tr('consentFailed'));btn.disabled=!$('consentCheck').checked}
 };
 $('bLang').onclick=function(){LANG=LANG==='zh'?'en':'zh';localStorage.setItem('lunaLang',LANG);applyLang();render();poll()};
+$('bLogout').onclick=function(){fetch('/api/auth/logout',{method:'POST'}).catch(function(){}).then(function(){location.href='/login'})};
 applyLang();poll();checkConsent();setInterval(poll,1500);
 </script>
 </body>

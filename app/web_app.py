@@ -1,6 +1,7 @@
 import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress
+import hashlib, hmac
 import urllib.request, urllib.error
-from flask import Flask, jsonify, request, render_template, send_file, Response, abort
+from flask import Flask, jsonify, request, render_template, send_file, Response, abort, redirect
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from luna_client import LunaClient, file_kind
 from downloader import download_file
@@ -784,9 +785,126 @@ def api_privacy():
                     'version': PRIVACY_VERSION, 'privacy_url': PRIVACY_POLICY_URL,
                     'terms_url': TERMS_URL})
 
+AUTH_COOKIE = 'luna_session'
+AUTH_SESSION_SECONDS = 30 * 24 * 3600
+AUTH_PUBLIC_PATHS = {'/login', '/privacy', '/terms', '/api/auth-state',
+                     '/api/auth/login', '/api/auth/setup', '/api/auth/logout'}
+
+def config_auth_password():
+    value = (os.environ.get('LUNA_AUTH_TOKEN') or config_value(CFG.get('web_auth_token')) or '').strip()
+    return value or None
+
+def hash_password(password, iterations=120000):
+    salt = os.urandom(16)
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, iterations)
+    return 'pbkdf2$%d$%s$%s' % (iterations, salt.hex(), digest.hex())
+
+def verify_password(password, record):
+    try:
+        scheme, iterations, salt_hex, digest_hex = str(record).split('$')
+        if scheme != 'pbkdf2':
+            return False
+        digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'),
+                                     bytes.fromhex(salt_hex), int(iterations))
+        return hmac.compare_digest(digest.hex(), digest_hex)
+    except Exception:
+        return False
+
+def auth_password_set():
+    return bool(config_auth_password() or SETTINGS.get('web_password'))
+
+def check_web_password(password):
+    configured = config_auth_password()
+    if configured:
+        return hmac.compare_digest(str(password), configured)
+    record = SETTINGS.get('web_password')
+    return bool(record) and verify_password(password, record)
+
+def web_secret():
+    secret = SETTINGS.get('web_secret')
+    if secret:
+        return str(secret)
+    secret = os.urandom(32).hex()
+    save_settings({'web_secret': secret})
+    SETTINGS['web_secret'] = secret
+    return secret
+
+def session_signature(expires):
+    return hmac.new(web_secret().encode(), ('%d' % expires).encode(), hashlib.sha256).hexdigest()
+
+def session_cookie_value():
+    expires = int(time.time()) + AUTH_SESSION_SECONDS
+    return '%d.%s' % (expires, session_signature(expires))
+
+def session_valid():
+    value = request.cookies.get(AUTH_COOKIE, '')
+    if '.' not in value:
+        return False
+    expires, _, signature = value.partition('.')
+    if not expires.isdigit() or int(expires) < time.time():
+        return False
+    return hmac.compare_digest(session_signature(int(expires)), signature)
+
+def attach_session(response):
+    response.set_cookie(AUTH_COOKIE, session_cookie_value(), max_age=AUTH_SESSION_SECONDS,
+                        httponly=True, samesite='Lax', path='/')
+    return response
+
+@app.route('/login')
+def login_page():
+    return render_template('login.html')
+
+@app.route('/api/auth-state')
+def api_auth_state():
+    return jsonify({'password_set': auth_password_set(), 'authenticated': session_valid(),
+                    'managed_by_config': bool(config_auth_password())})
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_auth_login():
+    if not auth_password_set():
+        return jsonify({'ok': False, 'error': 'password_not_set'}), 400
+    data = request.get_json(silent=True) or {}
+    if not check_web_password(str(data.get('password') or '')):
+        addlog('Web 登录失败：密码错误')
+        return jsonify({'ok': False, 'error': 'invalid_password'}), 401
+    addlog('Web 登录成功')
+    return attach_session(jsonify({'ok': True}))
+
+@app.route('/api/auth/setup', methods=['POST'])
+def api_auth_setup():
+    if config_auth_password():
+        return jsonify({'ok': False, 'error': 'password_managed_by_config'}), 400
+    if SETTINGS.get('web_password'):
+        return jsonify({'ok': False, 'error': 'password_already_set'}), 400
+    data = request.get_json(silent=True) or {}
+    password = str(data.get('password') or '')
+    if len(password) < 4 or password != str(data.get('confirm') or ''):
+        return jsonify({'ok': False, 'error': 'invalid_password'}), 400
+    record = hash_password(password)
+    save_settings({'web_password': record})
+    SETTINGS['web_password'] = record
+    addlog('Web 访问密码已设置')
+    return attach_session(jsonify({'ok': True}))
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_auth_logout():
+    response = jsonify({'ok': True})
+    response.delete_cookie(AUTH_COOKIE, path='/')
+    return response
+
+@app.before_request
+def require_web_auth():
+    if request.path in AUTH_PUBLIC_PATHS or request.path.startswith('/static/'):
+        return None
+    if session_valid():
+        return None
+    if request.path == '/':
+        return redirect('/login')
+    return jsonify({'ok': False, 'error': 'authentication_required'}), 401
+
 @app.before_request
 def require_privacy_consent():
-    public_paths = {'/', '/privacy', '/terms', '/api/privacy', '/api/state'}
+    public_paths = {'/', '/privacy', '/terms', '/api/privacy', '/api/state'} | AUTH_PUBLIC_PATHS
     if request.path in public_paths or request.path.startswith('/static/'):
         return None
     if not privacy_accepted():

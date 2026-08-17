@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Luna Sync</title>
+<style>
+:root{--blue:#2563eb;--line:#dbe3eb;--muted:#728095;--bg:#eef2f6;--danger:#c0392b}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#1d2a3a}
+.card{width:min(380px,92vw);background:#fff;border:1px solid var(--line);border-radius:12px;padding:28px 26px;box-shadow:0 8px 28px rgba(23,42,74,.07)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;margin-bottom:4px}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 4px rgba(37,99,235,.14)}
+.sub{color:var(--muted);font-size:12.5px;margin:0 0 20px}
+h1{font-size:15px;margin:0 0 14px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px;font-weight:600}
+input{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:inherit}
+input:focus{outline:2px solid rgba(37,99,235,.28);border-color:var(--blue)}
+button{width:100%;margin-top:16px;padding:10px;border:0;border-radius:8px;background:var(--blue);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+button:hover{filter:brightness(1.06)}
+.err{display:none;margin-top:12px;color:var(--danger);font-size:12.5px;background:#fdf1ef;border:1px solid #f3cfca;border-radius:8px;padding:8px 10px}
+.lang{position:fixed;top:16px;right:18px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 13px;font:inherit;font-weight:700;color:#415064;cursor:pointer;width:auto;margin:0}
+</style>
+</head>
+<body>
+<button class="lang" id="bLang" type="button">EN</button>
+<div class="card">
+  <div class="brand"><span class="dot"></span>Luna Sync</div>
+  <p class="sub" id="sub"></p>
+  <h1 id="title"></h1>
+  <form id="form" autocomplete="off">
+    <label for="pw" id="pwLabel"></label>
+    <input id="pw" type="password" required>
+    <div id="confirmRow" style="display:none">
+      <label for="pw2" id="pw2Label"></label>
+      <input id="pw2" type="password" required>
+    </div>
+    <div class="err" id="err"></div>
+    <button id="btn" type="submit"></button>
+  </form>
+</div>
+<script>
+var T={
+  zh:{sub:'相机素材同步工作台',login:'登录',setpw:'设置访问密码',password:'密码',confirm:'确认密码',
+      btnLogin:'登录',btnSave:'保存并进入',wrong:'密码错误，请重试',mismatch:'两次输入的密码不一致',
+      short:'密码至少 4 位',failed:'操作失败，请重试',hint:'首次使用请先设置 Web 访问密码'},
+  en:{sub:'Camera media sync console',login:'Sign in',setpw:'Set access password',password:'Password',confirm:'Confirm password',
+      btnLogin:'Sign in',btnSave:'Save and continue',wrong:'Wrong password, please try again',mismatch:'Passwords do not match',
+      short:'Password must be at least 4 characters',failed:'Operation failed, please retry',hint:'Set a web access password to get started'}
+};
+var P=new URLSearchParams(location.search).get('lang');
+var LANG=(P==='en'||P==='zh')?P:(localStorage.getItem('lunaLang')||(((navigator.language||'').toLowerCase().indexOf('zh')===0)?'zh':'en'));
+if(P==='en'||P==='zh')localStorage.setItem('lunaLang',LANG);
+function t(k){return (T[LANG]&&T[LANG][k])||T.zh[k]||k}
+function apply(){
+  document.documentElement.lang=LANG==='zh'?'zh-CN':'en';
+  document.getElementById('bLang').textContent=LANG==='zh'?'EN':'中文';
+  document.getElementById('sub').textContent=t('sub');
+  document.getElementById('pwLabel').textContent=t('password');
+  document.getElementById('pw2Label').textContent=t('confirm');
+  document.getElementById('btn').textContent=MODE==='setup'?t('btnSave'):t('btnLogin');
+  document.getElementById('title').textContent=MODE==='setup'?t('setpw'):t('login');
+}
+document.getElementById('bLang').onclick=function(){LANG=LANG==='zh'?'en':'zh';localStorage.setItem('lunaLang',LANG);apply()};
+var MODE='login';
+fetch('/api/auth-state').then(function(r){return r.json()}).then(function(d){
+  MODE=d.password_set?'login':'setup';
+  document.getElementById('confirmRow').style.display=MODE==='setup'?'block':'none';
+  document.getElementById('pw2').required=(MODE==='setup');
+  if(MODE==='setup'){document.getElementById('sub').textContent=t('hint')}
+  apply();
+}).catch(function(){apply()});
+document.getElementById('form').onsubmit=function(e){
+  e.preventDefault();
+  var err=document.getElementById('err');err.style.display='none';
+  var pw=document.getElementById('pw').value;
+  if(MODE==='setup'){
+    var pw2=document.getElementById('pw2').value;
+    if(pw.length<4){err.textContent=t('short');err.style.display='block';return}
+    if(pw!==pw2){err.textContent=t('mismatch');err.style.display='block';return}
+  }
+  var url=MODE==='setup'?'/api/auth/setup':'/api/auth/login';
+  var body=MODE==='setup'?{password:pw,confirm:document.getElementById('pw2').value}:{password:pw};
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){
+    if(r.ok){location.href='/';return null}
+    return r.json().then(function(d){
+      err.textContent=d&&d.error==='invalid_password'?t('wrong'):t('failed');
+      err.style.display='block';
+    });
+  }).catch(function(){err.textContent=t('failed');err.style.display='block'});
+};
+</script>
+</body>
+</html>

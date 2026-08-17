@@ -147,9 +147,26 @@ windows/
 | `web_port` | Web 服务端口 |
 
 `config.json`、媒体文件和运行状态已被 Git 忽略。记住 Wi-Fi 功能会将凭据保存在
-`state/wifi.json`，文件权限设置为仅容器用户可读写。请仅在可信局域网中使用。
+`state/wifi.json`，文件权限设置为仅容器用户可读写。
+
+## Web 访问密码
+
+首次打开页面会引导设置 Web 访问密码（至少 4 位），设置后所有页面和 API 均需登录；
+浏览器登录态以 HttpOnly Cookie 保存 30 天，右上角可退出登录。密码以 PBKDF2 哈希
+存储在 `state/settings.json` 的 `web_password` 字段，不会明文保存。
+
+部署时也可以用 `web_auth_token` 配置项或 `LUNA_AUTH_TOKEN` 环境变量直接指定密码，
+此时首次引导设置不可用。忘记密码时，删除 `state/settings.json` 中的 `web_password`
+字段并重启应用即可重新引导设置。
 
 ## 更新日志
+
+### v1.2.5
+
+- 新增 Web 访问密码：首次打开引导设置（PBKDF2 哈希存储），登录后以 Cookie 保持 30 天会话；所有 API 与媒体接口未登录返回 401，首页跳转登录页
+- 支持 `web_auth_token` 配置 / `LUNA_AUTH_TOKEN` 环境变量部署级指定密码，覆盖首次引导
+- WebUI 右上角新增退出登录；任意请求会话失效时自动跳回登录页
+- 登录页与设置引导支持中英文
 
 ### v1.2.4
 

@@ -36,7 +36,10 @@ class ComplianceTests(unittest.TestCase):
         if app_dir not in sys.path:
             sys.path.insert(0, app_dir)
         cls.web_app = importlib.import_module('web_app')
+        cls.web_app.SETTINGS['web_password'] = cls.web_app.hash_password('test-pass')
         cls.client = cls.web_app.app.test_client()
+        login = cls.client.post('/api/auth/login', json={'password': 'test-pass'})
+        assert login.status_code == 200, 'test suite login failed'
 
     @classmethod
     def tearDownClass(cls):
@@ -341,6 +344,74 @@ class ComplianceTests(unittest.TestCase):
     def test_bridge_gateway_ips_are_addresses(self):
         for value in self.web_app.bridge_gateway_ips():
             self.assertEqual(value.count('.'), 3)
+
+    def test_unauthenticated_requests_are_rejected(self):
+        app = self.web_app
+        guest = app.app.test_client()
+        blocked = guest.get('/api/files')
+        self.assertEqual(blocked.status_code, 401)
+        self.assertEqual(blocked.get_json()['error'], 'authentication_required')
+        home = guest.get('/')
+        self.assertEqual(home.status_code, 302)
+        self.assertTrue(home.headers['Location'].endswith('/login'))
+        self.assertEqual(guest.get('/login').status_code, 200)
+        state = guest.get('/api/auth-state')
+        self.assertEqual(state.status_code, 200)
+        self.assertTrue(state.get_json()['password_set'])
+        self.assertFalse(state.get_json()['authenticated'])
+
+    def test_first_run_requires_setup_before_access(self):
+        app = self.web_app
+        guest = app.app.test_client()
+        with app.lk:
+            app.SETTINGS.pop('web_password', None)
+        try:
+            state = guest.get('/api/auth-state')
+            self.assertFalse(state.get_json()['password_set'])
+            self.assertEqual(guest.get('/api/files').status_code, 401)
+            mismatch = guest.post('/api/auth/setup', json={'password': 'abcd', 'confirm': 'dcba'})
+            self.assertEqual(mismatch.status_code, 400)
+            too_short = guest.post('/api/auth/setup', json={'password': 'ab', 'confirm': 'ab'})
+            self.assertEqual(too_short.status_code, 400)
+            done = guest.post('/api/auth/setup', json={'password': 'nas-pass', 'confirm': 'nas-pass'})
+            self.assertEqual(done.status_code, 200)
+            self.assertTrue(guest.get('/api/auth-state').get_json()['authenticated'])
+            gated = guest.get('/api/files')
+            self.assertEqual(gated.status_code, 451)
+        finally:
+            record = app.hash_password('test-pass')
+            with app.lk:
+                app.SETTINGS['web_password'] = record
+            app.save_settings({'web_password': record})
+
+    def test_login_rejects_wrong_password_and_logout_ends_session(self):
+        app = self.web_app
+        guest = app.app.test_client()
+        wrong = guest.post('/api/auth/login', json={'password': 'nope'})
+        self.assertEqual(wrong.status_code, 401)
+        ok = guest.post('/api/auth/login', json={'password': 'test-pass'})
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(guest.get('/api/files').status_code, 451)
+        out = guest.post('/api/auth/logout')
+        self.assertEqual(out.status_code, 200)
+        self.assertEqual(guest.get('/api/files').status_code, 401)
+
+    def test_configured_password_overrides_setup(self):
+        app = self.web_app
+        os.environ['LUNA_AUTH_TOKEN'] = 'env-secret'
+        guest = app.app.test_client()
+        try:
+            state = guest.get('/api/auth-state')
+            self.assertTrue(state.get_json()['password_set'])
+            self.assertTrue(state.get_json()['managed_by_config'])
+            setup = guest.post('/api/auth/setup', json={'password': 'abcd', 'confirm': 'abcd'})
+            self.assertEqual(setup.status_code, 400)
+            denied = guest.post('/api/auth/login', json={'password': 'test-pass'})
+            self.assertEqual(denied.status_code, 401)
+            ok = guest.post('/api/auth/login', json={'password': 'env-secret'})
+            self.assertEqual(ok.status_code, 200)
+        finally:
+            os.environ.pop('LUNA_AUTH_TOKEN', None)
 
 
 if __name__ == '__main__':

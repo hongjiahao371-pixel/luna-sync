@@ -45,12 +45,12 @@ python3 scripts/docker_archive_from_registry.py \
 python3 scripts/append_image_layer.py \
   --input luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar \
   --output luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar.tmp \
-  --tag jvsheng/luna-sync:upk-v124-gateway-20260817
+  --tag jvsheng/luna-sync:upk-v125-auth-20260817
 mv luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar.tmp \
   luna-sync/rootfs_<amd64|arm64>/images/luna-sync-<amd64|arm64>.tar
 ugcli check --path luna-sync
 cd luna-sync
-ugcli pack --arch <amd64|arm64> --build 28
+ugcli pack --arch <amd64|arm64> --build 29
 ```
 
 The tracked `luna-sync/rootfs_common/icon.png` is the release icon. It must

@@ -1,6 +1,6 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-v124-gateway-20260817
+    image: jvsheng/luna-sync:upk-v125-auth-20260817
     network_mode: host
     privileged: true
     restart: unless-stopped
@@ -35,7 +35,7 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-v124-gateway-20260817
+    image: jvsheng/luna-sync:upk-v125-auth-20260817
     restart: unless-stopped
     depends_on:
       - luna-sync
@@ -51,7 +51,13 @@ services:
         import shutil
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         from urllib.error import HTTPError
-        from urllib.request import Request, urlopen
+        from urllib.request import Request, build_opener, HTTPRedirectHandler
+
+        class NoRedirect(HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+
+        OPENER = build_opener(NoRedirect)
 
         def gateway_ip():
             for line in open('/proc/net/route'):
@@ -104,7 +110,7 @@ services:
                 }
                 req = Request(TARGET + self.path, data=body, headers=headers, method=self.command)
                 try:
-                    with urlopen(req, timeout=120) as resp:
+                    with OPENER.open(req, timeout=120) as resp:
                         self.send_response(resp.status)
                         for key, value in resp.headers.items():
                             if key.lower() not in HOP_HEADERS:

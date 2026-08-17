@@ -17,6 +17,7 @@ PATCH_FILES = [
     ('app/web_app.py', 'app/web_app.py', 0o644),
     ('app/templates/index.html', 'app/templates/index.html', 0o644),
     ('app/templates/legal.html', 'app/templates/legal.html', 0o644),
+    ('app/templates/login.html', 'app/templates/login.html', 0o644),
 ]
 
 
