@@ -300,6 +300,48 @@ class ComplianceTests(unittest.TestCase):
         self.assertIn('Luna Sync 隐私政策', self.client.get('/privacy').get_data(as_text=True))
         self.assertIn('Luna Sync 用户协议', self.client.get('/terms').get_data(as_text=True))
 
+    def test_gateway_forwarder_relays_http(self):
+        import http.server
+        import socket
+        import threading
+
+        class Probe(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = b'gateway-ok'
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/plain')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, fmt, *args):
+                return
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Probe)
+        target_port = server.server_address[1]
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        forwarder = self.web_app.start_gateway_forwarder('127.0.0.1', 0, target_port)
+        try:
+            with socket.create_connection(('127.0.0.1', forwarder.server_address[1]), timeout=5) as sock:
+                sock.sendall(b'GET /probe HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n')
+                data = b''
+                while True:
+                    chunk = sock.recv(65536)
+                    if not chunk:
+                        break
+                    data += chunk
+            self.assertIn(b' 200 OK', data)
+            self.assertIn(b'gateway-ok', data)
+        finally:
+            forwarder.shutdown()
+            forwarder.server_close()
+            server.shutdown()
+            server.server_close()
+
+    def test_bridge_gateway_ips_are_addresses(self):
+        for value in self.web_app.bridge_gateway_ips():
+            self.assertEqual(value.count('.'), 3)
+
 
 if __name__ == '__main__':
     unittest.main()

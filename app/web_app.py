@@ -1205,10 +1205,95 @@ def start_workers():
     addlog('Luna Sync 启动，WiFi 后端: ' + WIFI_BACKEND + '，无线网卡: ' + (IFACE or '未检测到'))
     addlog('素材保存目录: ' + DLDIR)
 
+def bridge_gateway_ips():
+    try:
+        out = subprocess.run(
+            ['ip', '-o', '-4', 'addr', 'show'],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+    except Exception:
+        return []
+    ips = []
+    for line in out.splitlines():
+        fields = line.split()
+        if len(fields) < 4:
+            continue
+        if fields[1] == 'docker0' or fields[1].startswith('br-'):
+            ip = fields[3].split('/')[0]
+            if ip not in ips:
+                ips.append(ip)
+    return ips
+
+
+def start_gateway_forwarder(listen_ip, listen_port, target_port=None):
+    import socketserver
+
+    target_port = target_port if target_port is not None else listen_port
+
+    def pipe(source, target):
+        try:
+            while True:
+                data = source.recv(65536)
+                if not data:
+                    break
+                target.sendall(data)
+        except OSError:
+            pass
+        finally:
+            for sock in (source, target):
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+    class Handler(socketserver.BaseRequestHandler):
+        def handle(self):
+            try:
+                upstream = socket.create_connection(('127.0.0.1', target_port), timeout=10)
+            except OSError:
+                try:
+                    self.request.close()
+                except OSError:
+                    pass
+                return
+            pipes = [
+                threading.Thread(target=pipe, args=(self.request, upstream), daemon=True),
+                threading.Thread(target=pipe, args=(upstream, self.request), daemon=True),
+            ]
+            for worker in pipes:
+                worker.start()
+            for worker in pipes:
+                worker.join()
+
+    class Server(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    server = Server((listen_ip, listen_port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
 def run_app(host=None, port=None):
     start_workers()
-    host = host or os.environ.get('LUNA_BIND_HOST') or '0.0.0.0'
     port = port or int(os.environ.get('LUNA_WEB_PORT') or CFG.get('web_port', 8765))
+    if (not host and not os.environ.get('LUNA_BIND_HOST')
+            and os.environ.get('LUNA_GATEWAY_FORWARD', '').strip().lower() in ('1', 'true', 'yes')):
+        bound = []
+        for gateway_ip in bridge_gateway_ips():
+            try:
+                start_gateway_forwarder(gateway_ip, port)
+                bound.append(gateway_ip)
+            except OSError as err:
+                addlog('容器网关转发监听失败 ' + gateway_ip + ':' + str(port) + ': ' + str(err))
+        if bound:
+            host = '127.0.0.1'
+            addlog('Web 服务仅监听本机回环，容器网关转发入口: '
+                   + ', '.join(ip + ':' + str(port) for ip in bound))
+        else:
+            host = '0.0.0.0'
+            addlog('未找到可用的 docker 桥接网关地址，Web 服务回退监听所有网卡')
+    host = host or os.environ.get('LUNA_BIND_HOST') or '0.0.0.0'
     app.run(host=host, port=port, threaded=True)
 
 if __name__ == '__main__':

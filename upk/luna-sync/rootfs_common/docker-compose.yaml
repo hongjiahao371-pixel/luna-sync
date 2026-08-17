@@ -1,11 +1,12 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-v123-audit-fixes-20260729
+    image: jvsheng/luna-sync:upk-v124-gateway-20260817
     network_mode: host
     privileged: true
     restart: unless-stopped
     environment:
       - LUNA_CONFIG=/app/config.json
+      - LUNA_GATEWAY_FORWARD=1
       - TZ=Asia/Shanghai
     entrypoint:
       - /bin/sh
@@ -34,14 +35,12 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-v123-audit-fixes-20260729
+    image: jvsheng/luna-sync:upk-v124-gateway-20260817
     restart: unless-stopped
     depends_on:
       - luna-sync
     ports:
       - "8767:8767"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       TZ: Asia/Shanghai
     entrypoint:
@@ -54,7 +53,15 @@ services:
         from urllib.error import HTTPError
         from urllib.request import Request, urlopen
 
-        TARGET = "http://host.docker.internal:8766"
+        def gateway_ip():
+            for line in open('/proc/net/route'):
+                fields = line.split()
+                if len(fields) >= 3 and fields[1] == '00000000':
+                    raw = fields[2]
+                    return '.'.join(str(int(raw[i:i + 2], 16)) for i in (6, 4, 2, 0))
+            return 'host.docker.internal'
+
+        TARGET = 'http://' + gateway_ip() + ':8766'
         HOP_HEADERS = {
             "connection",
             "keep-alive",
