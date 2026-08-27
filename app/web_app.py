@@ -53,7 +53,7 @@ SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
 for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR):
     os.makedirs(d, exist_ok=True)
 
-lk = threading.Lock()
+lk = threading.RLock()
 scan_lk = threading.Lock()
 refresh_lk = threading.Lock()
 auto_sync_lk = threading.Lock()
@@ -534,10 +534,11 @@ def auto_sync_once(manual=False):
         with lk:
             if not ST['auto_sync']:
                 return 0
-            if ST['current'] or ST['queue']:
-                if manual:
-                    addlog('自动同步队列执行中，本轮无需重复扫描')
-                return 0
+            busy = bool(ST['current'] or ST['queue'])
+        if busy:
+            if manual:
+                addlog('自动同步队列执行中，本轮无需重复扫描')
+            return 0
         if not prepare_auto_sync_connection():
             if manual:
                 addlog('自动同步未开始: 相机未就绪')
