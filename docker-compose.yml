@@ -3,9 +3,9 @@ services:
     build: .
     image: luna-sync:latest
     container_name: luna-sync
-    network_mode: host
-    privileged: true
     restart: unless-stopped
+    ports:
+      - "8765:8765"
     environment:
       - LUNA_CONFIG=/app/config.json
       - TZ=Asia/Shanghai

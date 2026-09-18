@@ -1,3 +1,8 @@
+# 可选覆盖：通过挂载宿主机 D-Bus/NetworkManager 套接字远程管理宿主机 Wi-Fi。
+# 该方式不需要 host 网络或特权容器：
+#   docker compose -f docker-compose.yml -f docker-compose.networkmanager.yml up -d
+# 容器通过 D-Bus 调用宿主机 NetworkManager 完成扫描与连接；
+# 相机经宿主机路由转发可达（网络地址转换），无需容器直接持有无线网卡。
 services:
   luna-sync:
     environment:

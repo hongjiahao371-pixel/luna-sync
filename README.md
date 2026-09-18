@@ -23,13 +23,15 @@ Luna Sync 是一个相机媒体同步工具。它可以连接相机 Wi-Fi，浏�
 - Docker 与 Docker Compose
 - 如需自动连接相机 Wi-Fi，需要无线网卡及可用驱动
 
-自动管理无线网络时需要 `network_mode: host` 和 `privileged: true`。macOS/Windows
-Docker Desktop 不能直接管理宿主机无线网卡，但可以使用手动连接模式。
+容器默认以桥接网络运行（无 host 网络、无特权、无额外 capabilities），通过端口映射
+对外提供 Web 服务。应用不直接持有宿主机无线网卡；需要自动管理 Wi-Fi 时，使用
+NetworkManager 覆盖文件经宿主机 D-Bus 远程调度，或由宿主机自行连上相机 Wi-Fi 后
+使用手动模式。macOS/Windows Docker Desktop 可使用手动连接模式。
 
 ## Windows EXE
 
 Windows x64 版会直接使用系统无线网络接口，不依赖 Docker、NetworkManager 或
-wpa_supplicant。首次启动会自动打开 `http://127.0.0.1:8765`，默认目录为：
+wpa_supplicant。首次启动会自动打开 `https://127.0.0.1:8765`（自签证书，确认告警即可），默认目录为：
 
 - 素材：`%USERPROFILE%\Videos\Luna Sync`
 - 配置和缓存：`%LOCALAPPDATA%\LunaSync`
@@ -58,7 +60,8 @@ python -m PyInstaller --clean --noconfirm windows/luna_sync.spec
 | `wpa_supplicant` | NAS/精简 Linux，有无线网卡驱动但没有 NetworkManager 的环境 |
 | `none` | 程序不管理 Wi-Fi；用户自己让部署设备能访问 `camera_host` |
 
-`networkmanager` 模式需要额外挂载宿主机 D-Bus 与 NetworkManager：
+`networkmanager` 模式通过挂载宿主机 D-Bus 套接字远程调度宿主机的 NetworkManager，
+不需要 host 网络或特权容器：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.networkmanager.yml up -d --build
@@ -70,8 +73,9 @@ docker compose -f docker-compose.yml -f docker-compose.networkmanager.yml up -d 
 docker compose -f docker-compose.hub.yml -f docker-compose.networkmanager.yml up -d
 ```
 
-`wpa_supplicant` 模式会在容器内启动自己的 `wpa_supplicant` 管理无线网卡，不依赖
-宿主机安装 `nmcli`。请确保没有其他服务同时控制同一块无线网卡。连接成功后会给无线网卡
+`wpa_supplicant` 模式需要容器直接控制宿主机无线网卡；桥接网络下容器看不到宿主机
+网卡，自动检测会退回手动模式。如确有需要，请自行评估网络与安全配置。请确保没有
+其他服务同时控制同一块无线网卡。连接成功后会给无线网卡
 配置 `camera_client_cidr`，默认示例为 `192.168.42.2/24`，用于访问 `camera_host`。
 
 `none` 模式适合路由桥接、宿主机手动连接、或只想浏览/管理本地已下载文件的场景。
@@ -92,7 +96,7 @@ mkdir -p downloads state
 docker compose up -d --build
 ```
 
-浏览器访问 `http://设备IP:8765`。
+浏览器访问 `https://设备IP:8765`（首次打开会提示自签证书告警，确认继续即可；也可用 `LUNA_TLS_CERT`/`LUNA_TLS_KEY` 挂载自己的证书）。
 
 也可以直接使用 Docker Hub 镜像：
 
@@ -145,6 +149,8 @@ windows/
 | `download_dir` | 容器内下载目录 |
 | `state_dir` | 容器内运行状态、缩略图和转码缓存目录 |
 | `web_port` | Web 服务端口 |
+| `tls` | `auto`（默认，自动生成自签证书并启用 HTTPS）或 `off`；也可用环境变量 `LUNA_TLS` |
+| `tls_cert` / `tls_key` | 自有证书路径（PEM）；也可用环境变量 `LUNA_TLS_CERT`/`LUNA_TLS_KEY` |
 
 `config.json`、媒体文件和运行状态已被 Git 忽略。记住 Wi-Fi 功能会将凭据保存在
 `state/wifi.json`，文件权限设置为仅容器用户可读写。
@@ -155,11 +161,24 @@ windows/
 浏览器登录态以 HttpOnly Cookie 保存 30 天，右上角可退出登录。密码以 PBKDF2 哈希
 存储在 `state/settings.json` 的 `web_password` 字段，不会明文保存。
 
+Web 服务默认启用 HTTPS：首次启动自动在 `state/tls/` 生成自签证书（RSA-2048，10 年），
+登录密码、Wi-Fi 凭据与 SSID 均经 TLS 加密传输，登录 Cookie 带 `Secure` 标记并下发
+HSTS。明文 HTTP 不再提供服务；确需关闭请设置 `LUNA_TLS=off`（不推荐）。
+
 部署时也可以用 `web_auth_token` 配置项或 `LUNA_AUTH_TOKEN` 环境变量直接指定密码，
 此时首次引导设置不可用。忘记密码时，删除 `state/settings.json` 中的 `web_password`
 字段并重启应用即可重新引导设置。
 
 ## 更新日志
+
+### v1.3.0
+
+- 安全合规修复：容器不再使用 host 网络与特权模式，默认以桥接网络 + 端口映射部署，NetworkManager 模式改为经 D-Bus 远程调度宿主机网络
+- Web 服务默认启用 HTTPS：首次启动自动生成自签证书（`state/tls/`），支持 `LUNA_TLS_CERT`/`LUNA_TLS_KEY` 挂载自有证书；登录密码、Wi-Fi 密码与 SSID 全部经 TLS 加密传输
+- 登录 Cookie 在 HTTPS 下追加 `Secure` 标记并下发 HSTS；明文 HTTP 默认关闭（`LUNA_TLS=off` 可显式回退，不推荐）
+- 首次隐私授权弹窗新增「不同意并退出」按钮，与同意按钮同等便捷；拒绝后进入说明页，可随时返回重新阅读并同意
+- 主界面顶栏新增「隐私与协议」常驻入口：应用内弹层即可随时查看隐私政策与用户协议；登录页同步补充协议链接
+- UPK 包（绿联应用商店形态）：8766 端口仅容器网络内部可达，8767 应用入口改为 TLS 透传代理，端到端加密
 
 ### v1.2.5
 

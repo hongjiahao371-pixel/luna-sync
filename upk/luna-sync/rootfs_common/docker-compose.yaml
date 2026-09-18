@@ -1,13 +1,12 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-v125-auth-20260817
-    network_mode: host
-    privileged: true
+    image: jvsheng/luna-sync:upk-v130-https-20260918
     restart: unless-stopped
     environment:
       - LUNA_CONFIG=/app/config.json
-      - LUNA_GATEWAY_FORWARD=1
       - TZ=Asia/Shanghai
+    expose:
+      - "8766"
     entrypoint:
       - /bin/sh
       - -c
@@ -35,7 +34,7 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-v125-auth-20260817
+    image: jvsheng/luna-sync:upk-v130-https-20260918
     restart: unless-stopped
     depends_on:
       - luna-sync
@@ -48,92 +47,51 @@ services:
       - -c
       - |
         python3 - <<'PY'
-        import shutil
-        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-        from urllib.error import HTTPError
-        from urllib.request import Request, build_opener, HTTPRedirectHandler
+        import socket
+        import socketserver
+        import threading
 
-        class NoRedirect(HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                return None
+        TARGET = ('luna-sync', 8766)
 
-        OPENER = build_opener(NoRedirect)
-
-        def gateway_ip():
-            for line in open('/proc/net/route'):
-                fields = line.split()
-                if len(fields) >= 3 and fields[1] == '00000000':
-                    raw = fields[2]
-                    return '.'.join(str(int(raw[i:i + 2], 16)) for i in (6, 4, 2, 0))
-            return 'host.docker.internal'
-
-        TARGET = 'http://' + gateway_ip() + ':8766'
-        HOP_HEADERS = {
-            "connection",
-            "keep-alive",
-            "proxy-authenticate",
-            "proxy-authorization",
-            "te",
-            "trailers",
-            "transfer-encoding",
-            "upgrade",
-        }
-
-        class Proxy(BaseHTTPRequestHandler):
-            protocol_version = "HTTP/1.1"
-
-            def do_GET(self):
-                self.forward()
-
-            def do_POST(self):
-                self.forward()
-
-            def do_PUT(self):
-                self.forward()
-
-            def do_PATCH(self):
-                self.forward()
-
-            def do_DELETE(self):
-                self.forward()
-
-            def do_OPTIONS(self):
-                self.forward()
-
-            def forward(self):
-                length = int(self.headers.get("Content-Length") or 0)
-                body = self.rfile.read(length) if length else None
-                headers = {
-                    key: value
-                    for key, value in self.headers.items()
-                    if key.lower() not in HOP_HEADERS and key.lower() != "host"
-                }
-                req = Request(TARGET + self.path, data=body, headers=headers, method=self.command)
+        class PassThrough(socketserver.BaseRequestHandler):
+            def handle(self):
                 try:
-                    with OPENER.open(req, timeout=120) as resp:
-                        self.send_response(resp.status)
-                        for key, value in resp.headers.items():
-                            if key.lower() not in HOP_HEADERS:
-                                self.send_header(key, value)
-                        self.end_headers()
-                        shutil.copyfileobj(resp, self.wfile)
-                except HTTPError as err:
-                    self.send_response(err.code)
-                    for key, value in err.headers.items():
-                        if key.lower() not in HOP_HEADERS:
-                            self.send_header(key, value)
-                    self.end_headers()
-                    shutil.copyfileobj(err, self.wfile)
-                except Exception as err:
-                    message = f"Luna Sync gateway unavailable: {err}\n".encode()
-                    self.send_response(502)
-                    self.send_header("Content-Type", "text/plain; charset=utf-8")
-                    self.send_header("Content-Length", str(len(message)))
-                    self.end_headers()
-                    self.wfile.write(message)
+                    upstream = socket.create_connection(TARGET, timeout=15)
+                except OSError:
+                    try:
+                        self.request.close()
+                    except OSError:
+                        pass
+                    return
 
-            def log_message(self, fmt, *args):
-                return
+                def pipe(source, target):
+                    try:
+                        while True:
+                            data = source.recv(65536)
+                            if not data:
+                                break
+                            target.sendall(data)
+                    except OSError:
+                        pass
+                    finally:
+                        for sock in (source, target):
+                            try:
+                                sock.shutdown(socket.SHUT_RDWR)
+                            except OSError:
+                                pass
 
-        ThreadingHTTPServer(("0.0.0.0", 8767), Proxy).serve_forever()
+                workers = [
+                    threading.Thread(target=pipe, args=(self.request, upstream), daemon=True),
+                    threading.Thread(target=pipe, args=(upstream, self.request), daemon=True),
+                ]
+                for worker in workers:
+                    worker.start()
+                for worker in workers:
+                    worker.join()
+
+        class Server(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+        Server(('0.0.0.0', 8767), PassThrough).serve_forever()
         PY

@@ -3,4 +3,5 @@ Pillow==12.3.0
 PyWiFi==1.1.12
 comtypes==1.4.16
 imageio-ffmpeg==0.6.0
+cryptography>=44
 pyinstaller==6.21.0

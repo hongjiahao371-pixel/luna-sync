@@ -1,6 +1,6 @@
 # Luna Sync 隐私政策 / Privacy Policy
 
-**生效及更新日期 / Effective and last updated: 2026-07-22**
+**生效及更新日期 / Effective and last updated: 2026-09-18**
 
 Luna Sync（“本应用”）是一款部署在用户自有 NAS 或电脑上的相机素材备份与同步工具。本应用完全在用户自己的设备与局域网内运行，不主动向开发者、云端或第三方上传、出售或共享用户数据。
 
@@ -28,11 +28,13 @@ The app does not collect accounts, phone numbers, precise location, contacts, or
 - 媒体目录仅用于展示、预览、筛选与增量备份。
 - 运行状态与缓存仅用于恢复任务和提升预览速度。
 - 上述信息仅在用户自己的设备和局域网内处理，不会发送给开发者或第三方。
+- Web 管理界面默认以 HTTPS（TLS）加密传输，登录密码与 Wi-Fi 凭据仅在加密通道中传输。
 
 - Wi-Fi credentials are used only to connect to the selected Luna camera on the user's local network.
 - Media listings are used only for browsing, preview, filtering, and incremental backup.
 - Runtime state and cache are used only to resume tasks and improve preview speed.
 - This information is processed only on the user's device and local network and is not sent to the developer or third parties.
+- The web console is served over HTTPS (TLS) by default; the login password and Wi-Fi credentials are only transmitted through the encrypted channel.
 
 ## 3. 保存位置与期限 / Storage and Retention
 

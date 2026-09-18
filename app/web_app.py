@@ -1,5 +1,5 @@
 import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress
-import hashlib, hmac
+import hashlib, hmac, ssl, datetime
 import urllib.request, urllib.error
 from flask import Flask, jsonify, request, render_template, send_file, Response, abort, redirect
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,14 +17,19 @@ logging.basicConfig(level='INFO', format='%(asctime)s %(levelname)s %(message)s'
 log = logging.getLogger('luna')
 app = Flask(__name__)
 
-PRIVACY_VERSION = '2026-07-22'
+PRIVACY_VERSION = '2026-09-18'
 PRIVACY_POLICY_URL = '/privacy'
 TERMS_URL = '/terms'
+DECLINED_URL = '/declined'
+
+TLS_ENABLED = False
 
 @app.after_request
-def disable_home_cache(response):
+def security_headers(response):
     if request.path == '/':
         response.headers['Cache-Control'] = 'no-store, max-age=0'
+    if TLS_ENABLED and request.is_secure:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000')
     return response
 
 HOST = CFG['camera_host']
@@ -133,6 +138,89 @@ def privacy_accepted():
 
 def run(args, t=30):
     return subprocess.run(args, capture_output=True, text=True, timeout=t)
+
+TLS_DIR = os.path.join(STATE_DIR, 'tls')
+
+def tls_mode():
+    return (os.environ.get('LUNA_TLS') or str(CFG.get('tls') or 'auto')).strip().lower()
+
+def _write_tls_files(cert_pem, key_pem, cert_path, key_path):
+    os.makedirs(os.path.dirname(cert_path), exist_ok=True)
+    flag = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(cert_path, flag, 0o644)
+    with os.fdopen(fd, 'wb') as f:
+        f.write(cert_pem)
+    fd = os.open(key_path, flag, 0o600)
+    with os.fdopen(fd, 'wb') as f:
+        f.write(key_pem)
+
+def generate_self_signed_certificate(cert_path, key_path):
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.x509.oid import NameOID
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Luna Sync')])
+        now = datetime.datetime.now(datetime.timezone.utc)
+        san = x509.SubjectAlternativeName([
+            x509.DNSName('localhost'),
+            x509.DNSName('LunaSync'),
+            x509.IPAddress(ipaddress.ip_address('127.0.0.1')),
+            x509.IPAddress(ipaddress.ip_address('::1')),
+        ])
+        cert = (x509.CertificateBuilder()
+                .subject_name(subject).issuer_name(subject)
+                .public_key(key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(now - datetime.timedelta(days=1))
+                .not_valid_after(now + datetime.timedelta(days=3650))
+                .add_extension(san, critical=False)
+                .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=False)
+                .sign(key, hashes.SHA256()))
+        _write_tls_files(cert.public_bytes(serialization.Encoding.PEM),
+                         key.private_bytes(serialization.Encoding.PEM,
+                                           serialization.PrivateFormat.TraditionalOpenSSL,
+                                           serialization.NoEncryption()),
+                         cert_path, key_path)
+        return True
+    except Exception as cert_error:
+        log.warning('tls(cryptography):' + str(cert_error)[:80])
+    try:
+        result = run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-sha256',
+                      '-days', '3650', '-nodes',
+                      '-keyout', key_path, '-out', cert_path,
+                      '-subj', '/CN=Luna Sync',
+                      '-addext', 'subjectAltName=DNS:localhost,DNS:LunaSync,IP:127.0.0.1,IP:::1'], 60)
+        if result.returncode == 0 and os.path.exists(cert_path) and os.path.exists(key_path):
+            os.chmod(key_path, 0o600)
+            return True
+        log.warning('tls(openssl):' + (result.stderr or '')[:80])
+    except Exception as openssl_error:
+        log.warning('tls(openssl):' + str(openssl_error)[:80])
+    return False
+
+def build_ssl_context():
+    mode = tls_mode()
+    if mode in ('off', 'false', '0', 'no', 'disabled'):
+        return None
+    cert = os.environ.get('LUNA_TLS_CERT') or CFG.get('tls_cert')
+    key = os.environ.get('LUNA_TLS_KEY') or CFG.get('tls_key')
+    custom = bool(cert and key)
+    if not custom:
+        cert = os.path.join(TLS_DIR, 'cert.pem')
+        key = os.path.join(TLS_DIR, 'key.pem')
+        if not (os.path.exists(cert) and os.path.exists(key)):
+            if not generate_self_signed_certificate(cert, key):
+                addlog('TLS 证书生成失败，已回退明文 HTTP；建议安装 python3-cryptography 或配置 LUNA_TLS_CERT/LUNA_TLS_KEY')
+                return None
+    try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        return context
+    except Exception as e:
+        addlog('TLS 证书加载失败(' + str(cert) + '): ' + str(e)[:60] + '，已回退明文 HTTP')
+        return None
 
 def refresh_wifi_backend(start_wpa=False):
     global WIFI_BACKEND, IFACE
@@ -770,6 +858,10 @@ def privacy_page():
 def terms_page():
     return render_template('legal.html', document='terms')
 
+@app.route('/declined')
+def declined_page():
+    return render_template('declined.html')
+
 @app.route('/api/privacy', methods=['GET', 'POST'])
 def api_privacy():
     if request.method == 'POST':
@@ -784,11 +876,11 @@ def api_privacy():
         trigger_auto_sync_check('隐私授权完成，开始自动同步检查')
     return jsonify({'ok': True, 'accepted': privacy_accepted(),
                     'version': PRIVACY_VERSION, 'privacy_url': PRIVACY_POLICY_URL,
-                    'terms_url': TERMS_URL})
+                    'terms_url': TERMS_URL, 'declined_url': DECLINED_URL})
 
 AUTH_COOKIE = 'luna_session'
 AUTH_SESSION_SECONDS = 30 * 24 * 3600
-AUTH_PUBLIC_PATHS = {'/login', '/privacy', '/terms', '/api/auth-state',
+AUTH_PUBLIC_PATHS = {'/login', '/privacy', '/terms', '/declined', '/api/auth-state',
                      '/api/auth/login', '/api/auth/setup', '/api/auth/logout'}
 
 def config_auth_password():
@@ -848,7 +940,7 @@ def session_valid():
 
 def attach_session(response):
     response.set_cookie(AUTH_COOKIE, session_cookie_value(), max_age=AUTH_SESSION_SECONDS,
-                        httponly=True, samesite='Lax', path='/')
+                        httponly=True, samesite='Lax', secure=TLS_ENABLED, path='/')
     return response
 
 @app.route('/login')
@@ -905,7 +997,7 @@ def require_web_auth():
 
 @app.before_request
 def require_privacy_consent():
-    public_paths = {'/', '/privacy', '/terms', '/api/privacy', '/api/state'} | AUTH_PUBLIC_PATHS
+    public_paths = {'/', '/privacy', '/terms', '/declined', '/api/privacy', '/api/state'} | AUTH_PUBLIC_PATHS
     if request.path in public_paths or request.path.startswith('/static/'):
         return None
     if not privacy_accepted():
@@ -1413,7 +1505,17 @@ def run_app(host=None, port=None):
             host = '0.0.0.0'
             addlog('未找到可用的 docker 桥接网关地址，Web 服务回退监听所有网卡')
     host = host or os.environ.get('LUNA_BIND_HOST') or '0.0.0.0'
-    app.run(host=host, port=port, threaded=True)
+    global TLS_ENABLED
+    ssl_context = None
+    if tls_mode() not in ('off', 'false', '0', 'no', 'disabled'):
+        ssl_context = build_ssl_context()
+    TLS_ENABLED = ssl_context is not None
+    if TLS_ENABLED:
+        addlog('HTTPS 已启用，请使用 https:// 地址访问 Web 界面（自签证书首次打开会有告警，属正常现象）')
+    else:
+        addlog('警告：当前以明文 HTTP 提供服务，登录密码与 Wi-Fi 凭据将未加密传输；'
+               '生产环境请保持 TLS 开启（LUNA_TLS=auto）')
+    app.run(host=host, port=port, threaded=True, ssl_context=ssl_context)
 
 if __name__ == '__main__':
     run_app()

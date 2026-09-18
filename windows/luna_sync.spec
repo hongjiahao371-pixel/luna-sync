@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 ROOT = Path(SPECPATH).parent
 ASSETS = ROOT / 'windows' / 'build_assets'
-hidden_imports = ['pywifi._wifiutil_win'] + collect_submodules('comtypes')
+hidden_imports = ['pywifi._wifiutil_win', 'cryptography'] + collect_submodules('comtypes')
 
 a = Analysis(
     [str(ROOT / 'windows' / 'launcher.py')],

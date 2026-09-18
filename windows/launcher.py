@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import ssl
 import sys
 import threading
 import time
@@ -74,17 +75,36 @@ def configure_runtime(config_path, download_dir, state_dir, port):
     os.environ['PATH'] = str(root) + os.pathsep + os.environ.get('PATH', '')
 
 
+def local_ssl_context():
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
 def server_is_running(url):
     try:
+        if url.startswith('https://'):
+            with urllib.request.urlopen(url + '/api/state', timeout=1, context=local_ssl_context()) as response:
+                return response.status == 200
         with urllib.request.urlopen(url + '/api/state', timeout=1) as response:
             return response.status == 200
     except Exception:
         return False
 
 
-def open_when_ready(url):
-    for _ in range(60):
+def detect_server_url(base):
+    for scheme in ('https', 'http'):
+        url = scheme + '://' + base
         if server_is_running(url):
+            return url
+    return None
+
+
+def open_when_ready(base):
+    for _ in range(60):
+        url = detect_server_url(base)
+        if url:
             webbrowser.open(url)
             return
         time.sleep(0.5)
@@ -114,13 +134,14 @@ def main():
         download_dir = Path(config.get('download_dir') or download_dir)
     state_dir = Path(config.get('state_dir') or state_dir)
     configure_runtime(config_path, download_dir, state_dir, port)
-    url = 'http://127.0.0.1:%d' % port
+    base = '127.0.0.1:%d' % port
+    url = detect_server_url(base) or ('https://' + base)
     if server_is_running(url):
         if not args.no_browser:
             webbrowser.open(url)
         return 0
     if not args.no_browser:
-        threading.Thread(target=open_when_ready, args=(url,), daemon=True).start()
+        threading.Thread(target=open_when_ready, args=(base,), daemon=True).start()
     print('Luna Sync is running at ' + url)
     print('Downloaded media: ' + str(download_dir))
     print('Close this window to stop Luna Sync.')
