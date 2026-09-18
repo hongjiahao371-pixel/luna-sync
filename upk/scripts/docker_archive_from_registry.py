@@ -26,29 +26,36 @@ def request_json(url, headers=None):
 
 def request_bytes(url, headers=None):
     last = None
-    for attempt in range(4):
+    data = bytearray()
+    offset = 0
+    for attempt in range(12):
+        req_headers = dict(headers or {})
+        if offset:
+            req_headers["Range"] = "bytes=%d-" % offset
         try:
-            req = urllib.request.Request(url, headers=headers or {})
-            with urllib.request.urlopen(req, timeout=180) as res:
-                total = int(res.headers.get("Content-Length") or 0)
-                data = io.BytesIO()
-                next_report = 64 * 1024 * 1024
+            req = urllib.request.Request(url, headers=req_headers)
+            with urllib.request.urlopen(req, timeout=60) as res:
+                status = getattr(res, "status", None) or 200
+                length = int(res.headers.get("Content-Length") or 0)
+                total = length + (offset if status == 206 else 0)
+                next_report = (offset // (64 * 1024 * 1024)) * (64 * 1024 * 1024) + 64 * 1024 * 1024
                 while True:
                     chunk = res.read(1024 * 1024)
                     if not chunk:
                         break
-                    data.write(chunk)
-                    if total and data.tell() >= next_report:
-                        print(f"downloaded {data.tell() // 1024 // 1024}M / {total // 1024 // 1024}M", file=sys.stderr)
+                    data.extend(chunk)
+                    offset = len(data)
+                    if total and offset >= next_report:
+                        print(f"downloaded {offset // 1024 // 1024}M / {total // 1024 // 1024}M", file=sys.stderr)
                         next_report += 64 * 1024 * 1024
-                if total and data.tell() != total:
-                    raise http.client.IncompleteRead(data.getvalue(), total - data.tell())
-                return data.getvalue(), res.headers
+            if total and len(data) != total:
+                raise http.client.IncompleteRead(bytes(data), total - len(data))
+            return bytes(data), None
         except (http.client.IncompleteRead, TimeoutError, urllib.error.URLError) as exc:
             last = exc
-            if attempt == 3:
+            if attempt == 11:
                 break
-            time.sleep(2 ** attempt)
+            time.sleep(min(2 ** min(attempt, 4), 16))
     raise last
 
 
@@ -78,7 +85,14 @@ def get_manifest(repo, reference, token, accept):
 
 def blob(repo, digest, token):
     headers = {"Authorization": f"Bearer {token}"}
-    data, _ = request_bytes(f"{REGISTRY}/v2/{repo}/blobs/{digest}", headers)
+    try:
+        data, _ = request_bytes(f"{REGISTRY}/v2/{repo}/blobs/{digest}", headers)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 401:
+            raise
+        # anonymous tokens expire after ~5 minutes; refresh once and retry
+        data, _ = request_bytes(f"{REGISTRY}/v2/{repo}/blobs/{digest}",
+                                {"Authorization": f"Bearer {auth_token(repo)}"})
     got = "sha256:" + hashlib.sha256(data).hexdigest()
     if got != digest:
         raise RuntimeError(f"blob digest mismatch: expected {digest}, got {got}")
