@@ -6,12 +6,14 @@ The package is a Docker app. It embeds a Docker image archive under
 `luna-sync/rootfs_amd64/images/` and uses `luna-sync/rootfs_common/docker-compose.yaml`
 to start two services:
 
-- `luna-sync`: the main app on host networking, required for Wi-Fi control.
-  It sets `LUNA_GATEWAY_FORWARD=1`, so the web interface binds to loopback only
-  and a small TCP forwarder on the docker bridge gateway IP feeds the `8767`
-  gateway service; port `8766` is not exposed to the LAN.
-- `luna-sync-open`: a bridge-network gateway on port `8767`, used by the UGOS
-  app launcher to avoid 404s from the system gateway.
+- `luna-sync`: the main app on the compose bridge network. The web console
+  speaks HTTPS (a self-signed certificate is generated on first start); port
+  `8766` stays inside the compose network and is never published to the LAN.
+- `luna-sync-open`: the published entry on port `8767`. TLS traffic is passed
+  through to the main app untouched (end-to-end encryption), while plaintext
+  HTTP requests get a 301 redirect to the same host and port over HTTPS, so
+  the UGOS app center `http://` launch URL still lands on the secure UI
+  without ever carrying data in plaintext.
 
 The UPK exposes a required `DOWNLOAD_DIR` path parameter. UGOS mounts the chosen
 host folder to `/downloads` inside the container, and Luna Sync stores camera

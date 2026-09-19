@@ -53,45 +53,79 @@ services:
 
         TARGET = ('luna-sync', 8766)
 
-        class PassThrough(socketserver.BaseRequestHandler):
+        def pipe(source, target):
+            try:
+                while True:
+                    data = source.recv(65536)
+                    if not data:
+                        break
+                    target.sendall(data)
+            except OSError:
+                pass
+            finally:
+                for sock in (source, target):
+                    try:
+                        sock.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+
+        class Gateway(socketserver.BaseRequestHandler):
             def handle(self):
+                request = self.request
                 try:
-                    upstream = socket.create_connection(TARGET, timeout=15)
+                    request.settimeout(5)
+                    lead = request.recv(1, socket.MSG_PEEK)
+                    if not lead:
+                        return
+                    if lead == b'\x16':
+                        # TLS ClientHello: pass the stream through untouched
+                        # so the session stays end-to-end encrypted.
+                        request.settimeout(None)
+                        upstream = socket.create_connection(TARGET, timeout=15)
+                        upstream.settimeout(None)
+                        workers = [
+                            threading.Thread(target=pipe, args=(request, upstream), daemon=True),
+                            threading.Thread(target=pipe, args=(upstream, request), daemon=True),
+                        ]
+                        for worker in workers:
+                            worker.start()
+                        for worker in workers:
+                            worker.join()
+                        return
+                    # Plaintext HTTP: carry no data, just point the client at
+                    # the same port over HTTPS (UGOS opens the app as http://).
+                    buffer = b''
+                    while b'\r\n\r\n' not in buffer and len(buffer) < 8192:
+                        try:
+                            chunk = request.recv(4096)
+                        except socket.timeout:
+                            break
+                        if not chunk:
+                            break
+                        buffer += chunk
+                    host = ''
+                    for line in buffer.split(b'\r\n')[1:]:
+                        if line[:5].lower() == b'host:':
+                            host = line[5:].strip().decode('latin-1')
+                            break
+                    if not host:
+                        try:
+                            host = request.getsockname()[0] or 'localhost'
+                        except OSError:
+                            host = 'localhost'
+                    if ':' not in host:
+                        host += ':8767'
+                    response = (b'HTTP/1.1 301 Moved Permanently\r\n'
+                                b'Location: https://' + host.encode('latin-1') + b'/\r\n'
+                                b'Content-Length: 0\r\n'
+                                b'Connection: close\r\n\r\n')
+                    request.sendall(response)
                 except OSError:
-                    try:
-                        self.request.close()
-                    except OSError:
-                        pass
-                    return
-
-                def pipe(source, target):
-                    try:
-                        while True:
-                            data = source.recv(65536)
-                            if not data:
-                                break
-                            target.sendall(data)
-                    except OSError:
-                        pass
-                    finally:
-                        for sock in (source, target):
-                            try:
-                                sock.shutdown(socket.SHUT_RDWR)
-                            except OSError:
-                                pass
-
-                workers = [
-                    threading.Thread(target=pipe, args=(self.request, upstream), daemon=True),
-                    threading.Thread(target=pipe, args=(upstream, self.request), daemon=True),
-                ]
-                for worker in workers:
-                    worker.start()
-                for worker in workers:
-                    worker.join()
+                    pass
 
         class Server(socketserver.ThreadingTCPServer):
             allow_reuse_address = True
             daemon_threads = True
 
-        Server(('0.0.0.0', 8767), PassThrough).serve_forever()
+        Server(('0.0.0.0', 8767), Gateway).serve_forever()
         PY
