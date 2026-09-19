@@ -450,7 +450,7 @@ var TEXT={
     legalEntry:'隐私与协议',legalViewer:'隐私政策与用户协议',
     wifiHintTitle:'在本机连接相机 Wi-Fi',wifiHintBody:'本应用不管理 Wi-Fi。请在 UGOS Pro 系统的 Wi-Fi 管理界面连接相机热点；连接成功后，本应用会自动检测相机并开始同步。',
     hintCamOnline:'相机已就绪，可浏览与同步',hintCamOffline:'相机不可达：请确认相机已开机，且已在本机连接相机 Wi-Fi',
-    playLive:'播放动态照片',viewStill:'查看静态照片',livePhoto:'Live',panoHint:'按住左右拖动，环视全景',
+    playLive:'播放动态照片',viewStill:'查看静态照片',livePhoto:'Live',panoHint:'按住拖动环视 · 滚轮缩放视角',
     cacheTitle:'清空缩略图、转码预览与 Live Photo 缓存（不影响已下载文件）',
     clearCacheConfirm:'清空全部预览缓存（缩略图 + 转码预览 + Live Photo）？\n已下载的文件不受影响，下次查看会重新生成。'
   },
@@ -482,7 +482,7 @@ var TEXT={
     legalEntry:'Privacy & Terms',legalViewer:'Privacy Policy & User Agreement',
     wifiHintTitle:'Connect the camera Wi-Fi on this device',wifiHintBody:'This app does not manage Wi-Fi. Connect to the camera hotspot in UGOS Pro Wi-Fi settings; once connected, the app detects the camera automatically and starts syncing.',
     hintCamOnline:'Camera reachable — browsing and syncing are available',hintCamOffline:'Camera unreachable — make sure the camera is on and this device is connected to its Wi-Fi',
-    playLive:'Play Live Photo',viewStill:'View still photo',livePhoto:'Live',panoHint:'Drag left and right to look around',
+    playLive:'Play Live Photo',viewStill:'View still photo',livePhoto:'Live',panoHint:'Drag to look around · Scroll to zoom',
     cacheTitle:'Clear thumbnails, transcoded previews, and Live Photo cache; downloaded files stay intact',
     clearCacheConfirm:'Clear all preview cache, including thumbnails, transcoded previews, and Live Photo cache?\nDownloaded files will not be affected and previews will be regenerated when needed.'
   }
@@ -701,14 +701,113 @@ function openLive(key){
 }
 function openPano(key){
   var box=$('ovc2');
-  box.innerHTML='<div class="pano-view" id="panoView"><div class="pano-track" id="panoTrack"><img src="/img/'+encodeURIComponent(key)+'" alt="" draggable="false"><img src="/img/'+encodeURIComponent(key)+'" alt="" draggable="false"></div></div>';
+  box.innerHTML='<canvas id="panoGl" width="8" height="8" style="touch-action:none;cursor:grab"></canvas>';
   var hint=document.createElement('span');hint.className='pano-hint';hint.textContent=tr('panoHint');$('ova').appendChild(hint);
+  var canvas=$('panoGl');
+  var resize=function(){
+    var w=Math.min(window.innerWidth*0.94,1200),h=Math.min(window.innerHeight*0.7,640);
+    canvas.width=Math.round(w);canvas.height=Math.round(h);
+  };
+  resize();
+  var gl=canvas.getContext('webgl',{antialias:true})||canvas.getContext('experimental-webgl');
+  var img=new Image();
+  img.onload=function(){
+    var ratio=img.naturalWidth/img.naturalHeight;
+    if(Math.abs(ratio-2)>0.35){openPlain(key);return}
+    if(!gl){openPanoFlat(key);return}
+    startGl(img);
+  };
+  img.onerror=function(){openPlain(key)};
+  img.src='/img/'+encodeURIComponent(key);
+
+  function startGl(image){
+    var vs='attribute vec2 aPos;varying vec2 vUV;void main(){vUV=aPos;gl_Position=vec4(aPos,0.0,1.0);}';
+    var fs='precision mediump float;varying vec2 vUV;uniform sampler2D uTex;'+
+      'uniform float uYaw,uPitch,uTanX,uTanY;'+
+      'void main(){'+
+      'vec3 fwd=vec3(sin(uYaw)*cos(uPitch),sin(uPitch),-cos(uYaw)*cos(uPitch));'+
+      'vec3 right=vec3(cos(uYaw),0.0,sin(uYaw));'+
+      'vec3 up=cross(right,fwd);'+
+      'vec3 dir=normalize(fwd+vUV.x*uTanX*right+vUV.y*uTanY*up);'+
+      'float lon=atan(dir.x,-dir.z);'+
+      'float lat=asin(clamp(dir.y,-1.0,1.0));'+
+      'vec2 uv=vec2(fract(lon*0.15915494+0.5),1.0-(lat*0.31830988+0.5));'+
+      'gl_FragColor=texture2D(uTex,uv);}';
+    function shader(type,src){
+      var s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);return s;
+    }
+    var prog=gl.createProgram();
+    gl.attachShader(prog,shader(gl.VERTEX_SHADER,vs));
+    gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,fs));
+    gl.linkProgram(prog);
+    if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){openPanoFlat(key);return}
+    gl.useProgram(prog);
+    var buf=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+    var aPos=gl.getAttribLocation(prog,'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+    var tex=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    var maxTex=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    var sw=image.naturalWidth,sh=image.naturalHeight,scale=Math.min(1,maxTex/sw,maxTex/sh);
+    if(scale<1){
+      var c2=document.createElement('canvas');
+      c2.width=Math.round(sw*scale);c2.height=Math.round(sh*scale);
+      c2.getContext('2d').drawImage(image,0,0,c2.width,c2.height);
+      image=c2;
+    }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);
+    var uYaw=gl.getUniformLocation(prog,'uYaw'),uPitch=gl.getUniformLocation(prog,'uPitch');
+    var uTanX=gl.getUniformLocation(prog,'uTanX'),uTanY=gl.getUniformLocation(prog,'uTanY');
+    var yaw=0,pitch=0,fov=75*Math.PI/180,dragging=false,lastX=0,lastY=0;
+    function draw(){
+      gl.viewport(0,0,canvas.width,canvas.height);
+      var tanY=Math.tan(fov/2),tanX=tanY*canvas.width/canvas.height;
+      gl.uniform1f(uYaw,yaw);gl.uniform1f(uPitch,pitch);
+      gl.uniform1f(uTanX,tanX);gl.uniform1f(uTanY,tanY);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    }
+    function loop(){panoRaf=requestAnimationFrame(loop);draw()}
+    canvas.addEventListener('pointerdown',function(e){dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId);canvas.style.cursor='grabbing'});
+    canvas.addEventListener('pointermove',function(e){
+      if(!dragging)return;
+      var k=fov/canvas.height;
+      yaw-=(e.clientX-lastX)*k;
+      pitch+=(e.clientY-lastY)*k;
+      pitch=Math.max(-1.45,Math.min(1.45,pitch));
+      lastX=e.clientX;lastY=e.clientY;
+    });
+    ['pointerup','pointercancel'].forEach(function(ev){canvas.addEventListener(ev,function(){dragging=false;canvas.style.cursor='grab'})});
+    canvas.addEventListener('wheel',function(e){
+      e.preventDefault();
+      fov*=e.deltaY>0?1.08:0.92;
+      fov=Math.max(30*Math.PI/180,Math.min(100*Math.PI/180,fov));
+    },{passive:false});
+    window.addEventListener('resize',function(){if($('panoGl')){resize();draw()}});
+    loop();
+  }
+}
+var panoRaf=null,panoResize=null;
+function stopPanoLoop(){
+  if(panoRaf){cancelAnimationFrame(panoRaf);panoRaf=null}
+  if(panoResize){window.removeEventListener('resize',panoResize);panoResize=null}
+}
+function openPanoFlat(key){
+  var box=$('ovc2');
+  box.innerHTML='<div class="pano-view" id="panoView"><div class="pano-track" id="panoTrack"><img src="/img/'+encodeURIComponent(key)+'" alt="" draggable="false"><img src="/img/'+encodeURIComponent(key)+'" alt="" draggable="false"></div></div>';
   var view=$('panoView'),track=$('panoTrack'),first=track.querySelector('img');
   var span=0,dragging=false,lastX=0,w=0;
   function apply(){track.style.transform='translate3d('+(-span)+'px,0,0)'}
   function start(){
     w=first.getBoundingClientRect().width;
-    if(!w||Math.abs((first.naturalWidth/first.naturalHeight)-2)>0.35){openPlain(key);return}
+    if(!w)return;
     apply();
   }
   if(first.complete&&first.naturalWidth)start();else first.onload=start;
@@ -728,7 +827,7 @@ function startTranscode(name){
   fetch('/api/transcode/'+encodeURIComponent(name),{method:'POST'});
   transcodePoll=setInterval(async function(){try{var d=await(await fetch('/api/transcode/status/'+encodeURIComponent(name))).json();if(d.status==='done'){stopTranscodePoll();$('ovc2').innerHTML='<video src="/play/'+encodeURIComponent(name)+'" controls autoplay playsinline></video>';$('ovn').textContent=name+' · '+tr('previewReady')}else if(d.status==='failed'){stopTranscodePoll();$('ovc2').innerHTML='<div class="empty">'+tr('transcodeFailed',{msg:esc(d.msg||tr('unknownError'))})+'</div>'}else{$('ovn').textContent=name+' · '+({downloading:tr('downloading'),encoding:tr('encoding'),pending:tr('pending')}[d.status]||tr('processing'))}}catch(e){}},1800)
 }
-function closePrev(){stopTranscodePoll();$('ov').classList.remove('open');$('ovc2').innerHTML='';$('ova').innerHTML=''}
+function closePrev(){stopTranscodePoll();stopPanoLoop();$('ov').classList.remove('open');$('ovc2').innerHTML='';$('ova').innerHTML=''}
 async function scanWifi(){
   $('bWifi').disabled=true;$('bWifi').textContent=tr('scanning');
   try{var d=await(await fetch('/api/wifi/scan')).json();$('curwifi').textContent=d.current||tr('notConnected');var html='';d.nets.forEach(function(n){html+='<span class="net '+(n.is_camera?'cam':'')+'" data-ssid="'+esc(n.ssid)+'">'+esc(n.ssid)+(n.signal?' '+esc(fmtSignal(n.signal)):'')+'</span>'});$('wifilist').innerHTML=html||'<span class="muted">'+tr('noNetworks')+'</span>';document.querySelectorAll('.net').forEach(function(n){n.onclick=function(){$('ssid').value=this.getAttribute('data-ssid')}})}
