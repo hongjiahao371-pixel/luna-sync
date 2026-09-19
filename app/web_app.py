@@ -1263,9 +1263,12 @@ def _human(b):
     return '%.1f TB' % b
 
 
+_generating = set()
+_gen_lk = threading.Lock()
+
 def extract_thumb(src, output, stream=False):
     """Grab a frame for the thumbnail; retry without the seek on failure."""
-    input_opts = ['-user_agent', 'LunaDL/0.1'] if stream else []
+    input_opts = ['-threads', '1', '-user_agent', 'LunaDL/0.1'] if stream else ['-threads', '1']
     for lead in (['-ss', '1'], []):
         cmd = ['ffmpeg', '-y'] + lead + input_opts + [
             '-i', src, '-frames:v', '1', '-vf', 'scale=320:-2', '-q:v', '4', output]
@@ -1474,39 +1477,37 @@ def thumb(name):
             log.warning('thumb(dng) ' + name + ':' + str(e)[:60])
             return ('', 204)
     if low.endswith(('.mp4', '.lrv', '.mov', '.m4v')):
-        p = local_path(name)
-        if p:
-            try:
-                extract_thumb(p, tp)
+        if os.path.exists(tp) and os.path.getsize(tp) > 0:
+            return send_file(tp, mimetype='image/jpeg')
+        # one extraction per file; duplicate requests get the placeholder
+        # instead of queueing another ffmpeg (NAS CPUs choke otherwise)
+        with _gen_lk:
+            if name in _generating:
+                return ('', 204)
+            _generating.add(name)
+        try:
+            with preview_lk:
                 if os.path.exists(tp) and os.path.getsize(tp) > 0:
                     return send_file(tp, mimetype='image/jpeg')
-            except Exception as e:
-                log.warning('thumb(video) ' + name + ':' + str(e)[:60])
-            if os.path.exists(tp):
+                p = local_path(name)
+                url = None if p else file_url(name)
+                if not p and not url:
+                    return ('', 204)
                 try:
-                    os.remove(tp)
-                except OSError:
-                    pass
-            return ('', 204)
-        url = file_url(name)
-        if not url:
-            return ('', 204)
-        # not downloaded yet: pull a frame straight off the camera over HTTP
-        with preview_lk:
-            if os.path.exists(tp) and os.path.getsize(tp) > 0:
-                return send_file(tp, mimetype='image/jpeg')
-            try:
-                extract_thumb(url, tp, stream=True)
-                if os.path.exists(tp) and os.path.getsize(tp) > 0:
-                    return send_file(tp, mimetype='image/jpeg')
-            except Exception as e:
-                log.warning('thumb(video-url) ' + name + ':' + str(e)[:60])
-            if os.path.exists(tp):
-                try:
-                    os.remove(tp)
-                except OSError:
-                    pass
-        return ('', 204)
+                    extract_thumb(p or url, tp, stream=not p)
+                    if os.path.exists(tp) and os.path.getsize(tp) > 0:
+                        return send_file(tp, mimetype='image/jpeg')
+                except Exception as e:
+                    log.warning('thumb(video) ' + name + ':' + str(e)[:60])
+                if os.path.exists(tp):
+                    try:
+                        os.remove(tp)
+                    except OSError:
+                        pass
+                return ('', 204)
+        finally:
+            with _gen_lk:
+                _generating.discard(name)
     if is_live_name(name):
         try:
             parts = liv_parts(name)

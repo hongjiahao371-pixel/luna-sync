@@ -217,6 +217,42 @@ class LivePhotoPreviewTests(unittest.TestCase):
         os.remove(out)
         return data
 
+    def test_concurrent_video_thumb_dedupes(self):
+        import threading
+        data = self.mp4_bytes()
+        if data is None:
+            self.skipTest('ffmpeg is not available')
+        self.write_local('internal/dup.lrv', data)
+        started = threading.Event()
+        release = threading.Event()
+        original = self.web_app.extract_thumb
+
+        def slow_extract(src, output, stream=False):
+            started.set()
+            release.wait(5)
+            return original(src, output, stream)
+
+        self.web_app.extract_thumb = slow_extract
+        try:
+            guest = self.web_app.app.test_client()
+            guest.post('/api/auth/login', json={'password': 'test-pass'})
+            with self.web_app.lk:
+                self.web_app.ST['privacy_version'] = self.web_app.PRIVACY_VERSION
+            worker = threading.Thread(
+                target=lambda: guest.get('/thumb/internal/dup.lrv'))
+            worker.start()
+            self.assertTrue(started.wait(5), 'extraction did not start')
+            duplicate = guest.get('/thumb/internal/dup.lrv')
+            self.assertEqual(duplicate.status_code, 204,
+                             'a second request must not queue another ffmpeg')
+            release.set()
+            worker.join(15)
+            done = guest.get('/thumb/internal/dup.lrv')
+            self.assertEqual(done.status_code, 200)
+        finally:
+            self.web_app.extract_thumb = original
+            release.set()
+
     def test_lrv_local_video_thumb(self):
         data = self.mp4_bytes()
         if data is None:
