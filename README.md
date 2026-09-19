@@ -143,7 +143,7 @@ windows/
 | `wifi_backend` | `auto`、`windows`、`networkmanager`、`wpa_supplicant` 或 `none` |
 | `wifi_iface` | 无线网卡名；`null` 时自动识别 |
 | `wpa_ctrl` | wpa_supplicant 控制 socket 目录 |
-| `auto_sync` | 是否自动增量同步 |
+| `auto_sync` | 是否自动增量同步，默认关闭；也可在 WebUI 中开启 |
 | `auto_sync_lrv` | 自动同步是否包含 LRV 文件，默认包含；也可在 WebUI 中切换 |
 | `auto_sync_interval_sec` | 自动同步检查间隔，最低 10 秒 |
 | `download_dir` | 容器内下载目录 |
@@ -206,6 +206,7 @@ HTTPS 加密传输（两种部署形态均生效）：
 其他改进：
 
 - 相机文件列表支持点击表头排序（文件名/来源/类型/拍摄日期/大小），默认按拍摄日期从新到旧，再点切换升降序
+- 自动同步默认关闭：首次使用需在 WebUI 中手动开启（已手动设置过的用户保持原有选择）；`config.json` 示例与应用商店内置配置同步调整为默认关闭
 - 修复自动同步与日志写入之间的并发死锁
 
 ### v1.2.5

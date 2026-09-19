@@ -45,7 +45,7 @@ def ensure_config(config_path, download_dir, state_dir, port=DEFAULT_PORT):
         'camera_password': '',
         'wifi_backend': 'windows',
         'wifi_iface': None,
-        'auto_sync': True,
+        'auto_sync': False,
         'auto_sync_lrv': True,
         'auto_sync_interval_sec': 30,
         'download_dir': str(download_dir),

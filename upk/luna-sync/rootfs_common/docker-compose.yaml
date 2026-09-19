@@ -21,7 +21,7 @@ services:
           "wifi_backend": "auto",
           "wifi_iface": null,
           "wpa_ctrl": "/run/wpa_supplicant",
-          "auto_sync": true,
+          "auto_sync": false,
           "auto_sync_lrv": true,
           "auto_sync_interval_sec": 30,
           "download_dir": "/downloads",

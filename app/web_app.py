@@ -124,7 +124,7 @@ def _triggered_scan():
 
 ST = {'connected': False, 'wifi_conn': False, 'files': [], 'queue': [], 'current': None,
       'completed': 0, 'log': [], 'wifi_current': '', 'wifi_target': CAM_SSID, 'wifi_password': None,
-      'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool_value(SETTINGS.get('auto_sync'), bool_value(CFG.get('auto_sync'), True)),
+      'wifi_saved': False, 'transcodes': {}, 'auto_sync': bool_value(SETTINGS.get('auto_sync'), bool_value(CFG.get('auto_sync'), False)),
       'auto_sync_lrv': bool_value(SETTINGS.get('auto_sync_lrv'), bool_value(CFG.get('auto_sync_lrv'), True)),
       'last_auto_sync': '', 'privacy_version': str(SETTINGS.get('privacy_version') or ''),
       'active_key': None}

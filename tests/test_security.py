@@ -40,6 +40,15 @@ class DeploymentHardeningTests(unittest.TestCase):
                 self.assertNotIn('LUNA_WIFI_GUIDANCE', text,
                                  'self-hosted form must keep the in-app Wi-Fi controls')
 
+    def test_auto_sync_defaults_off(self):
+        import json as _json
+        with open(os.path.join(REPO, 'config.example.json')) as f:
+            self.assertFalse(_json.load(f).get('auto_sync', True),
+                             'example config must default auto sync to off')
+        with open(os.path.join(REPO, 'upk', 'luna-sync', 'rootfs_common', 'docker-compose.yaml')) as f:
+            text = f.read()
+        self.assertIn('"auto_sync": false,', text)
+        self.assertNotIn('"auto_sync": true,', text)
     def test_dockerfile_ships_tls_prerequisites(self):
         with open(os.path.join(REPO, 'Dockerfile')) as f:
             text = f.read()
@@ -177,6 +186,10 @@ class SecurityFixTests(unittest.TestCase):
         self.assertIn('wifi_guidance', data)
         self.assertEqual(data['wifi_guidance'], '',
                          'docker deployments must keep the in-app Wi-Fi controls')
+
+    def test_fresh_instance_starts_with_auto_sync_off(self):
+        self.assertFalse(self.web_app.bool_value(self.web_app.CFG.get('auto_sync'), False),
+                         'fresh deployments must not start auto sync')
 
     def test_decline_survives_router_for_index_route(self):
         with self.web_app.lk:
