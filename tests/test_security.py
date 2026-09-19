@@ -34,6 +34,8 @@ class DeploymentHardeningTests(unittest.TestCase):
             text = f.read()
         self.assertIn('expose:', text)
         self.assertNotRegex(text, r'8766:8766', 'upk web port must stay inside the compose network')
+        self.assertIn('LUNA_WIFI_GUIDANCE=ugos', text,
+                      'upk must point users at UGOS Wi-Fi settings instead of in-app controls')
 
     def test_dockerfile_ships_tls_prerequisites(self):
         with open(os.path.join(REPO, 'Dockerfile')) as f:
@@ -166,6 +168,12 @@ class SecurityFixTests(unittest.TestCase):
         login = self.client.post('/api/auth/login', json={'password': 'test-pass'})
         set_cookie = login.headers.get('Set-Cookie', '')
         self.assertNotIn('Secure', set_cookie)
+
+    def test_state_reports_wifi_guidance(self):
+        data = self.client.get('/api/state').get_json()
+        self.assertIn('wifi_guidance', data)
+        self.assertEqual(data['wifi_guidance'], '',
+                         'docker deployments must keep the in-app Wi-Fi controls')
 
     def test_decline_survives_router_for_index_route(self):
         with self.web_app.lk:

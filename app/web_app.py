@@ -38,6 +38,10 @@ DLDIR = os.environ.get('DOWNLOAD_DIR') or CFG['download_dir']
 def configured_wifi_backend():
     return os.environ.get('LUNA_WIFI_BACKEND') or CFG.get('wifi_backend', 'auto')
 
+# Appliance deployments (UGOS store package) set this to swap the in-app Wi-Fi
+# controls for guidance pointing at the system's own Wi-Fi settings.
+WIFI_GUIDANCE = (os.environ.get('LUNA_WIFI_GUIDANCE') or str(CFG.get('wifi_guidance') or '')).strip().lower()
+
 WIFI_BACKEND = wifi.configure(configured_wifi_backend(), CFG.get('wpa_ctrl'))
 IFACE = None
 backend_lk = threading.Lock()
@@ -1023,6 +1027,7 @@ def api_state():
             'camera_ssid': CAM_SSID if accepted else '',
             'wifi_iface': IFACE if accepted else None,
             'wifi_backend': WIFI_BACKEND, 'wifi_control': accepted and wifi.can_control(),
+            'wifi_guidance': WIFI_GUIDANCE,
             'wifi_target': ST['wifi_target'] if accepted else '',
             'wifi_has_password': accepted and bool(ST['wifi_password'] or DEF_PW),
             'download_dir': DLDIR if accepted else '',

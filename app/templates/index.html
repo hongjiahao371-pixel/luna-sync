@@ -77,6 +77,14 @@ aside.panel h2:not(:first-child){border-top:1px solid rgba(31,44,67,.06);margin-
 .tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:rgba(31,44,67,.06);color:#5a6a7a;font-size:11px;font-weight:500;white-space:nowrap;vertical-align:middle}
 .tag.done{background:rgba(38,49,64,.08);color:#2c3844}
 .tag.done::before{content:"\2713";font-size:10px;margin-right:3px;font-weight:600}
+/* ---------- wifi guidance card (appliance mode) ---------- */
+.wifi-hint{background:rgba(38,49,64,.05);border:1px solid rgba(38,49,64,.12);border-radius:12px;padding:13px 15px;color:var(--text2)}
+.wifi-hint b{display:block;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.wifi-hint p{margin:0 0 10px;font-size:12.5px;line-height:1.6}
+.wifi-hint-status{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+.wifi-hint-status i{width:8px;height:8px;border-radius:50%;flex:none;background:#d09a3a}
+.wifi-hint-status i.ok{background:#2fa377}
+.wifi-hint-status i.bad{background:#cf5f57}
 /* ---------- sidebar: overview / logs ---------- */
 .metric{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .metric div{background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.85);border-radius:12px;padding:11px 13px;box-shadow:0 6px 16px -10px rgba(31,44,67,.14),inset 0 1px 0 rgba(255,255,255,.9)}
@@ -278,14 +286,21 @@ td.muted{color:var(--muted);font-size:12.5px}
   <aside class="panel">
     <h2>连接</h2>
     <div class="panel-body wifi-grid">
-      <div class="wifi-row info"><span class="muted">当前 Wi-Fi</span><b id="curwifi">-</b><span id="savedtag"></span></div>
-      <div class="wifi-row info"><span class="muted">连接后端</span><b id="backend">-</b><span id="controltag"></span></div>
-      <div class="wifi-row btns"><button id="bWifi" class="secondary">扫描 Wi-Fi</button><button id="bForget" class="ghost">清除记住</button></div>
-      <div id="wifilist" class="netlist"></div>
-      <input id="ssid" type="text" placeholder="SSID">
-      <input id="pw" type="password" placeholder="密码">
-      <div class="wifi-row"><label id="remLabel"><input type="checkbox" id="rem" checked> 记住密码</label></div>
-      <button id="bConn" class="primary block">连接</button>
+      <div id="wifiHint" class="wifi-hint" style="display:none">
+        <b id="wifiHintTitle">在本机连接相机 Wi-Fi</b>
+        <p id="wifiHintBody">本应用不管理 Wi-Fi。请在 UGOS Pro 系统的 Wi-Fi 管理界面连接相机热点；连接成功后，本应用会自动检测相机并开始同步。</p>
+        <div class="wifi-hint-status"><i id="wifiHintDot" class="warn"></i><span id="wifiHintStatus">相机: 检查中</span></div>
+      </div>
+      <div id="wifiControls">
+        <div class="wifi-row info"><span class="muted">当前 Wi-Fi</span><b id="curwifi">-</b><span id="savedtag"></span></div>
+        <div class="wifi-row info"><span class="muted">连接后端</span><b id="backend">-</b><span id="controltag"></span></div>
+        <div class="wifi-row btns"><button id="bWifi" class="secondary">扫描 Wi-Fi</button><button id="bForget" class="ghost">清除记住</button></div>
+        <div id="wifilist" class="netlist"></div>
+        <input id="ssid" type="text" placeholder="SSID">
+        <input id="pw" type="password" placeholder="密码">
+        <div class="wifi-row"><label id="remLabel"><input type="checkbox" id="rem" checked> 记住密码</label></div>
+        <button id="bConn" class="primary block">连接</button>
+      </div>
       <div class="wifi-row"><label id="autoLrvLabel"><input type="checkbox" id="autoLrv" checked> 自动同步 LRV</label></div>
     </div>
     <h2>概览</h2>
@@ -426,7 +441,9 @@ var TEXT={
     consentLocal:'所有信息均保存在您的设备中，不会上传给开发者或第三方。',consentRetention:'凭据保留至清除记住或卸载；缓存保留至清除缓存；素材保留至您主动删除。',
     privacyPolicy:'隐私政策',userAgreement:'用户协议',consentCheck:'我已阅读并同意《隐私政策》和《用户协议》',consentAgree:'同意并进入应用',consentDecline:'不同意并退出',
     consentNote:'同意或拒绝完全自愿；选择“不同意并退出”即停止使用，Wi-Fi 扫描、相机访问和自动同步均保持停用。',consentFailed:'保存同意状态失败，请重试',
-    legalEntry:'隐私与协议',legalViewer:'隐私政策与用户协议'
+    legalEntry:'隐私与协议',legalViewer:'隐私政策与用户协议',
+    wifiHintTitle:'在本机连接相机 Wi-Fi',wifiHintBody:'本应用不管理 Wi-Fi。请在 UGOS Pro 系统的 Wi-Fi 管理界面连接相机热点；连接成功后，本应用会自动检测相机并开始同步。',
+    hintCamOnline:'相机已就绪，可浏览与同步',hintCamOffline:'相机不可达：请确认相机已开机，且已在本机连接相机 Wi-Fi'
   },
   en:{
     waitingStatus:'Waiting',cameraChecking:'Camera: checking',cameraOnline:'Camera: online',cameraOffline:'Camera: offline',cameraError:'Camera: error',cameraConnecting:'Camera: connecting',
@@ -453,7 +470,9 @@ var TEXT={
     consentLocal:'All information stays on your device and is not uploaded to the developer or any third party.',consentRetention:'Credentials remain until cleared or the app is removed; cache remains until cleared; media remains until you delete it.',
     privacyPolicy:'Privacy Policy',userAgreement:'User Agreement',consentCheck:'I have read and agree to the Privacy Policy and User Agreement',consentAgree:'Agree and continue',consentDecline:'Decline and exit',
     consentNote:'Consent is voluntary. Choosing "Decline and exit" stops here; Wi-Fi scanning, camera access, and auto sync remain disabled.',consentFailed:'Failed to save consent. Please try again.',
-    legalEntry:'Privacy & Terms',legalViewer:'Privacy Policy & User Agreement'
+    legalEntry:'Privacy & Terms',legalViewer:'Privacy Policy & User Agreement',
+    wifiHintTitle:'Connect the camera Wi-Fi on this device',wifiHintBody:'This app does not manage Wi-Fi. Connect to the camera hotspot in UGOS Pro Wi-Fi settings; once connected, the app detects the camera automatically and starts syncing.',
+    hintCamOnline:'Camera reachable — browsing and syncing are available',hintCamOffline:'Camera unreachable — make sure the camera is on and this device is connected to its Wi-Fi'
   }
 };
 var API_MSG={
@@ -534,6 +553,12 @@ function setTableHeaders(sel,keys){document.querySelectorAll(sel+' th').forEach(
 function labelText(label,k){if(label&&label.childNodes.length)label.childNodes[0].nodeValue=tr(k)+' '}
 function checkboxLabelText(label,k){if(label&&label.childNodes.length>1)label.childNodes[label.childNodes.length-1].nodeValue=' '+tr(k)}
 function tabLabel(id,key,countId){var b=$(id),svg=b.querySelector('svg'),cnt=$(countId);b.innerHTML='';if(svg)b.appendChild(svg);b.appendChild(document.createTextNode(tr(key)));if(cnt)b.appendChild(cnt)}
+var _guidedShown=null;
+function applyWifiGuidance(){
+  var guided=STATE.wifi_guidance==='ugos';
+  if(_guidedShown!==guided){_guidedShown=guided;$('wifiHint').style.display=guided?'block':'none';$('wifiControls').style.display=guided?'none':'block';$('wifiPill').style.display=guided?'none':''}
+  if(guided){$('wifiHintTitle').textContent=tr('wifiHintTitle');$('wifiHintBody').textContent=tr('wifiHintBody');var online=!!STATE.connected,d=$('wifiHintDot');d.className=online?'ok':'bad';$('wifiHintStatus').textContent=tr(online?'hintCamOnline':'hintCamOffline')}
+}
 function applyLang(){
   document.documentElement.lang=LANG==='zh'?'zh-CN':'en';$('bLang').textContent=LANG==='zh'?'EN':'中文';$('bLogout').textContent=tr('logout');
   $('subtitle').textContent=tr('waitingStatus');$('cameraPill').textContent=tr('cameraChecking');$('autoPill').textContent=tr('autoSyncDash');
@@ -551,6 +576,7 @@ function applyLang(){
   setTableHeaders('#viewLocal .file-table',['preview','fileName','type','date','size','actions']);$('lempty').textContent=tr('noLocalFiles');$('cur').textContent=tr('idle');$('tot').textContent=tr('totalDone',{count:STATE.completed||0});$('ovc').setAttribute('aria-label',tr('closePreview'));
   $('consentTitle').textContent=tr('consentTitle');$('consentIntro').textContent=tr('consentIntro');$('consentWifi').textContent=tr('consentWifi');$('consentMedia').textContent=tr('consentMedia');$('consentLocal').textContent=tr('consentLocal');$('consentRetention').textContent=tr('consentRetention');$('privacyLink').textContent=tr('privacyPolicy');$('termsLink').textContent=tr('userAgreement');$('consentCheckText').textContent=tr('consentCheck');$('consentAgree').textContent=tr('consentAgree');$('consentDecline').textContent=tr('consentDecline');$('consentNote').textContent=tr('consentNote');
   $('legalTabPrivacy').textContent=tr('privacyPolicy');$('legalTabTerms').textContent=tr('userAgreement');$('legalOv').setAttribute('aria-label',tr('legalViewer'));$('legalFrame').setAttribute('title',tr('legalViewer'));
+  applyWifiGuidance();
   updateMetrics();renderLocal();
 }
 function localFiles(){return LOCAL}
@@ -668,7 +694,7 @@ async function connWifi(){
   finally{$('bConn').disabled=false;$('bConn').textContent=tr('connect')}
 }
 async function poll(){
-  try{STATE=await(await fetch('/api/state')).json();if(STATE.privacy_accepted===false)setConsentVisible(true);$('curwifi').textContent=STATE.wifi_current||tr('notConnected');$('backend').textContent=STATE.wifi_backend||'none';$('controltag').innerHTML=STATE.wifi_control?'<span class="tag done">'+tr('manageable')+'</span>':'<span class="tag">'+tr('manual')+'</span>';$('bWifi').disabled=!STATE.wifi_control;$('bConn').disabled=!STATE.wifi_control;$('savedtag').innerHTML=STATE.wifi_saved?'<span class="tag done">'+tr('remembered')+'</span>':'<span class="tag">'+tr('notRemembered')+'</span>';$('autoLrv').checked=STATE.auto_sync_lrv!==false;setPill($('wifiPill'),tr('wifiPill',{name:STATE.wifi_current||tr('notConnected')}),STATE.wifi_current?'ok':'warn');setPill($('autoPill'),tr('autoPill',{state:STATE.auto_sync?tr('autoOn'):tr('autoOff')}),STATE.auto_sync?'ok':'warn');$('bAuto').textContent=STATE.auto_sync?tr('disableAuto'):tr('enableAuto');if(STATE.connected){setPill($('cameraPill'),tr('cameraOnline'),'ok')}else if(STATE.wifi_conn){setPill($('cameraPill'),tr('cameraConnecting'),'warn')}else{setPill($('cameraPill'),tr('cameraOffline'),'bad')}if(STATE.current){var c=STATE.current,pc=c.total?Math.round(c.downloaded/c.total*100):0;$('cur').textContent=tr('downloadProgress',{name:c.name,percent:pc,done:fmt(c.downloaded),total:fmt(c.total),speed:fmt(c.speed)});$('pf').style.width=pc+'%'}else{$('cur').textContent=STATE.queue_len?tr('queueCount',{count:STATE.queue_len}):tr('idle');$('pf').style.width=0}$('tot').textContent=tr('totalDone',{count:STATE.completed});$('pt').style.width=FILES.length?Math.round((STATE.completed||0)/FILES.length*100)+'%':'0';$('lg').innerHTML=(STATE.log||[]).map(function(l){return '<div>'+esc(logText(l))+'</div>'}).join('');updateMetrics()}
+  try{STATE=await(await fetch('/api/state')).json();if(STATE.privacy_accepted===false)setConsentVisible(true);applyWifiGuidance();$('curwifi').textContent=STATE.wifi_current||tr('notConnected');$('backend').textContent=STATE.wifi_backend||'none';$('controltag').innerHTML=STATE.wifi_control?'<span class="tag done">'+tr('manageable')+'</span>':'<span class="tag">'+tr('manual')+'</span>';$('bWifi').disabled=!STATE.wifi_control;$('bConn').disabled=!STATE.wifi_control;$('savedtag').innerHTML=STATE.wifi_saved?'<span class="tag done">'+tr('remembered')+'</span>':'<span class="tag">'+tr('notRemembered')+'</span>';$('autoLrv').checked=STATE.auto_sync_lrv!==false;setPill($('wifiPill'),tr('wifiPill',{name:STATE.wifi_current||tr('notConnected')}),STATE.wifi_current?'ok':'warn');setPill($('autoPill'),tr('autoPill',{state:STATE.auto_sync?tr('autoOn'):tr('autoOff')}),STATE.auto_sync?'ok':'warn');$('bAuto').textContent=STATE.auto_sync?tr('disableAuto'):tr('enableAuto');if(STATE.connected){setPill($('cameraPill'),tr('cameraOnline'),'ok')}else if(STATE.wifi_conn){setPill($('cameraPill'),tr('cameraConnecting'),'warn')}else{setPill($('cameraPill'),tr('cameraOffline'),'bad')}if(STATE.current){var c=STATE.current,pc=c.total?Math.round(c.downloaded/c.total*100):0;$('cur').textContent=tr('downloadProgress',{name:c.name,percent:pc,done:fmt(c.downloaded),total:fmt(c.total),speed:fmt(c.speed)});$('pf').style.width=pc+'%'}else{$('cur').textContent=STATE.queue_len?tr('queueCount',{count:STATE.queue_len}):tr('idle');$('pf').style.width=0}$('tot').textContent=tr('totalDone',{count:STATE.completed});$('pt').style.width=FILES.length?Math.round((STATE.completed||0)/FILES.length*100)+'%':'0';$('lg').innerHTML=(STATE.log||[]).map(function(l){return '<div>'+esc(logText(l))+'</div>'}).join('');updateMetrics()}
   catch(e){}
 }
 function setConsentVisible(show){$('consent').classList.toggle('hidden',!show)}

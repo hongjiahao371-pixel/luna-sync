@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     environment:
       - LUNA_CONFIG=/app/config.json
+      - LUNA_WIFI_GUIDANCE=ugos
       - TZ=Asia/Shanghai
     expose:
       - "8766"
