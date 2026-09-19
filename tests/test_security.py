@@ -10,32 +10,35 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-COMPOSE_FILES = [
-    'docker-compose.yml',
-    'docker-compose.hub.yml',
-    'docker-compose.networkmanager.yml',
-    os.path.join('upk', 'luna-sync', 'rootfs_common', 'docker-compose.yaml'),
-]
+UPK_COMPOSE = os.path.join('upk', 'luna-sync', 'rootfs_common', 'docker-compose.yaml')
+SELFHOST_COMPOSES = ['docker-compose.yml', 'docker-compose.hub.yml']
 
 
 class DeploymentHardeningTests(unittest.TestCase):
-    def test_compose_files_have_no_host_network_or_privileged(self):
-        for rel in COMPOSE_FILES:
-            with self.subTest(file=rel):
-                with open(os.path.join(REPO, rel)) as compose_file:
-                    text = compose_file.read()
-                self.assertNotIn('network_mode', text, rel + ' must not configure network_mode')
-                self.assertNotIn('privileged', text, rel + ' must not run privileged')
-                self.assertNotIn('pid:', text, rel + ' must not share host PID namespace')
-                self.assertNotRegex(text, r'capabilities|CAP_', rel + ' must not add capabilities')
-
-    def test_upk_main_service_is_not_published(self):
-        with open(os.path.join(REPO, 'upk', 'luna-sync', 'rootfs_common', 'docker-compose.yaml')) as f:
-            text = f.read()
+    def test_upk_compose_is_hardened_for_store(self):
+        # UGOS store package: bridge network, no privileges, guidance mode.
+        with open(os.path.join(REPO, UPK_COMPOSE)) as compose_file:
+            text = compose_file.read()
+        self.assertNotIn('network_mode', text, 'upk must not configure network_mode')
+        self.assertNotIn('privileged', text, 'upk must not run privileged')
+        self.assertNotIn('pid:', text, 'upk must not share host PID namespace')
+        self.assertNotRegex(text, r'capabilities|CAP_', 'upk must not add capabilities')
         self.assertIn('expose:', text)
         self.assertNotRegex(text, r'8766:8766', 'upk web port must stay inside the compose network')
         self.assertIn('LUNA_WIFI_GUIDANCE=ugos', text,
                       'upk must point users at UGOS Wi-Fi settings instead of in-app controls')
+
+    def test_selfhost_compose_keeps_wifi_takeover(self):
+        # Self-hosted deployments intentionally keep host networking and
+        # privileged mode so the app can drive the wireless NIC (wpa/NM).
+        for rel in SELFHOST_COMPOSES:
+            with self.subTest(file=rel):
+                with open(os.path.join(REPO, rel)) as compose_file:
+                    text = compose_file.read()
+                self.assertIn('network_mode: host', text)
+                self.assertIn('privileged: true', text)
+                self.assertNotIn('LUNA_WIFI_GUIDANCE', text,
+                                 'self-hosted form must keep the in-app Wi-Fi controls')
 
     def test_dockerfile_ships_tls_prerequisites(self):
         with open(os.path.join(REPO, 'Dockerfile')) as f:

@@ -23,10 +23,11 @@ Luna Sync 是一个相机媒体同步工具。它可以连接相机 Wi-Fi，浏�
 - Docker 与 Docker Compose
 - 如需自动连接相机 Wi-Fi，需要无线网卡及可用驱动
 
-容器默认以桥接网络运行（无 host 网络、无特权、无额外 capabilities），通过端口映射
-对外提供 Web 服务。应用不直接持有宿主机无线网卡；需要自动管理 Wi-Fi 时，使用
-NetworkManager 覆盖文件经宿主机 D-Bus 远程调度，或由宿主机自行连上相机 Wi-Fi 后
-使用手动模式。macOS/Windows Docker Desktop 可使用手动连接模式。
+默认 Docker Compose 使用 `network_mode: host` 和 `privileged: true`，应用可在
+WebUI 内直接接管宿主机无线网卡（wpa_supplicant 模式），Web 服务直接以宿主机端口
+对外。这是自部署形态的能力选择；绿联应用商店分发的 UPK 包受商店安全规范约束，
+改用桥接网络与非特权容器（见 `upk/`）。macOS/Windows Docker Desktop 不能管理
+宿主机无线网卡，可使用手动连接模式。
 
 ## Windows EXE
 
@@ -60,8 +61,8 @@ python -m PyInstaller --clean --noconfirm windows/luna_sync.spec
 | `wpa_supplicant` | NAS/精简 Linux，有无线网卡驱动但没有 NetworkManager 的环境 |
 | `none` | 程序不管理 Wi-Fi；用户自己让部署设备能访问 `camera_host` |
 
-`networkmanager` 模式通过挂载宿主机 D-Bus 套接字远程调度宿主机的 NetworkManager，
-不需要 host 网络或特权容器：
+`networkmanager` 模式通过挂载宿主机 D-Bus 套接字远程调度宿主机的 NetworkManager
+（与 wpa 模式二选一，`auto` 时优先 wpa）：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.networkmanager.yml up -d --build
@@ -73,9 +74,8 @@ docker compose -f docker-compose.yml -f docker-compose.networkmanager.yml up -d 
 docker compose -f docker-compose.hub.yml -f docker-compose.networkmanager.yml up -d
 ```
 
-`wpa_supplicant` 模式需要容器直接控制宿主机无线网卡；桥接网络下容器看不到宿主机
-网卡，自动检测会退回手动模式。如确有需要，请自行评估网络与安全配置。请确保没有
-其他服务同时控制同一块无线网卡。连接成功后会给无线网卡
+`wpa_supplicant` 模式会在容器内启动自己的 `wpa_supplicant` 管理无线网卡，不依赖
+宿主机安装 `nmcli`。请确保没有其他服务同时控制同一块无线网卡。连接成功后会给无线网卡
 配置 `camera_client_cidr`，默认示例为 `192.168.42.2/24`，用于访问 `camera_host`。
 
 `none` 模式适合路由桥接、宿主机手动连接、或只想浏览/管理本地已下载文件的场景。
@@ -171,6 +171,11 @@ HSTS。明文 HTTP 不再提供服务；确需关闭请设置 `LUNA_TLS=off`（�
 字段并重启应用即可重新引导设置。
 
 ## 更新日志
+
+### v1.3.1
+
+- 默认 Docker Compose（自部署形态）恢复 `network_mode: host` + `privileged: true`：用户可在 WebUI 内以 wpa_supplicant 直接接管无线网卡，与 v1.2.x 行为一致；该能力仅面向自部署，绿联应用商店 UPK 包仍为桥接网络 + 非特权容器并附系统连接指引
+- HTTPS/TLS、首次授权拒绝选项、应用内协议入口等安全修复对两种形态同样生效
 
 ### v1.3.0
 

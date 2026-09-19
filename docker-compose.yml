@@ -1,11 +1,15 @@
+# 自部署形态：host 网络 + 特权容器，应用可在 WebUI 内直接接管宿主机无线网卡
+# （wpa_supplicant / NetworkManager 模式），Web 服务直接以宿主机端口对外。
+# 绿联应用商店分发的 UPK 包受商店安全规范约束，使用桥接网络与非特权容器，
+# 两种形态的部署文件相互独立（见 upk/）。
 services:
   luna-sync:
     build: .
     image: luna-sync:latest
     container_name: luna-sync
+    network_mode: host
+    privileged: true
     restart: unless-stopped
-    ports:
-      - "8765:8765"
     environment:
       - LUNA_CONFIG=/app/config.json
       - TZ=Asia/Shanghai
