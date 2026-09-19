@@ -197,6 +197,12 @@ td.muted{color:var(--muted);font-size:12.5px}
 .viewer img,.viewer video{max-width:94vw;max-height:84vh;border-radius:12px;background:#05070a;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .viewer-note{margin-top:10px;color:#e8eef4;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center}
 .viewer-actions{margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+/* ---------- live photo & panorama viewer ---------- */
+.pano-view{position:relative;width:min(94vw,1200px);height:min(66vh,600px);overflow:hidden;background:#05070a;border-radius:10px;cursor:grab;touch-action:none}
+.pano-view:active{cursor:grabbing}
+.pano-track{position:absolute;top:0;left:0;height:100%;display:flex;will-change:transform}
+.pano-track img{height:100%;width:auto;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.pano-hint{align-self:center;color:#e8eef4;font-size:12.5px}
 /* ---------- consent ---------- */
 .consent-backdrop{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(16,26,38,.6);backdrop-filter:blur(10px)}
 .consent-backdrop.hidden{display:none}
@@ -443,7 +449,10 @@ var TEXT={
     consentNote:'同意或拒绝完全自愿；选择“不同意并退出”即停止使用，Wi-Fi 扫描、相机访问和自动同步均保持停用。',consentFailed:'保存同意状态失败，请重试',
     legalEntry:'隐私与协议',legalViewer:'隐私政策与用户协议',
     wifiHintTitle:'在本机连接相机 Wi-Fi',wifiHintBody:'本应用不管理 Wi-Fi。请在 UGOS Pro 系统的 Wi-Fi 管理界面连接相机热点；连接成功后，本应用会自动检测相机并开始同步。',
-    hintCamOnline:'相机已就绪，可浏览与同步',hintCamOffline:'相机不可达：请确认相机已开机，且已在本机连接相机 Wi-Fi'
+    hintCamOnline:'相机已就绪，可浏览与同步',hintCamOffline:'相机不可达：请确认相机已开机，且已在本机连接相机 Wi-Fi',
+    playLive:'播放动态照片',viewStill:'查看静态照片',livePhoto:'Live',panoHint:'按住左右拖动，环视全景',
+    cacheTitle:'清空缩略图、转码预览与 Live Photo 缓存（不影响已下载文件）',
+    clearCacheConfirm:'清空全部预览缓存（缩略图 + 转码预览 + Live Photo）？\n已下载的文件不受影响，下次查看会重新生成。'
   },
   en:{
     waitingStatus:'Waiting',cameraChecking:'Camera: checking',cameraOnline:'Camera: online',cameraOffline:'Camera: offline',cameraError:'Camera: error',cameraConnecting:'Camera: connecting',
@@ -472,7 +481,10 @@ var TEXT={
     consentNote:'Consent is voluntary. Choosing "Decline and exit" stops here; Wi-Fi scanning, camera access, and auto sync remain disabled.',consentFailed:'Failed to save consent. Please try again.',
     legalEntry:'Privacy & Terms',legalViewer:'Privacy Policy & User Agreement',
     wifiHintTitle:'Connect the camera Wi-Fi on this device',wifiHintBody:'This app does not manage Wi-Fi. Connect to the camera hotspot in UGOS Pro Wi-Fi settings; once connected, the app detects the camera automatically and starts syncing.',
-    hintCamOnline:'Camera reachable — browsing and syncing are available',hintCamOffline:'Camera unreachable — make sure the camera is on and this device is connected to its Wi-Fi'
+    hintCamOnline:'Camera reachable — browsing and syncing are available',hintCamOffline:'Camera unreachable — make sure the camera is on and this device is connected to its Wi-Fi',
+    playLive:'Play Live Photo',viewStill:'View still photo',livePhoto:'Live',panoHint:'Drag left and right to look around',
+    cacheTitle:'Clear thumbnails, transcoded previews, and Live Photo cache; downloaded files stay intact',
+    clearCacheConfirm:'Clear all preview cache, including thumbnails, transcoded previews, and Live Photo cache?\nDownloaded files will not be affected and previews will be regenerated when needed.'
   }
 };
 var API_MSG={
@@ -629,8 +641,8 @@ function renderWall(list){
     var hasThumb=isImg(it.kind)||isVid(it.kind);
     var key=keyOf(it);
     var img=hasThumb?('<img src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" alt="">'):('<div class="ph">'+(isVid(it.kind)?'▶':esc(it.kind))+'</div>');
-    var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):tr('photos'))+'</span>';
-    var play=isVid(it.kind)?'<div class="play"><i>▶</i></div>':'';
+    var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):tr('photos')))+'</span>';
+    var play=(isVid(it.kind)||it.kind==='LIV')?'<div class="play"><i>▶</i></div>':'';
     var deleteTip=esc(tr('deleteLocal'));var del='<button type="button" class="icon-btn danger-icon del" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button>';
     c.innerHTML=img+badge+play+del+'<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+fmt(it.bytes)+' · '+esc(fmtDate(it.date,it.time))+'</span></div>';
     var im=c.querySelector('img');if(im){im.onerror=function(){var ph=document.createElement('div');ph.className='ph';ph.textContent=isVid(it.kind)?'▶':it.kind;im.replaceWith(ph)}}
@@ -669,9 +681,44 @@ async function scan(){
 function openPrev(it){
   $('ov').classList.add('open');$('ovn').textContent=it.name+' · '+fmt(it.bytes);$('ova').innerHTML='';var box=$('ovc2');
   var key=keyOf(it);
-  if(isImg(it.kind)){box.innerHTML='<img src="/img/'+encodeURIComponent(key)+'" alt="">';return}
+  if(isImg(it.kind)){
+    if(it.kind==='LIV'){openLive(key);return}
+    if(it.kind==='INSP'){openPano(key);return}
+    box.innerHTML='<img src="/img/'+encodeURIComponent(key)+'" alt="">';return
+  }
   if(isVid(it.kind)){box.innerHTML='<video src="/video/'+encodeURIComponent(key)+'" controls autoplay playsinline></video>';var b=document.createElement('button');b.textContent=tr('compatiblePreview');b.onclick=function(){startTranscode(key)};$('ova').appendChild(b);box.querySelector('video').onerror=function(){startTranscode(key)};return}
   box.innerHTML='<div class="empty">'+tr('noPreview')+'</div>';
+}
+function openLive(key){
+  var box=$('ovc2');
+  box.innerHTML='<img src="/img/'+encodeURIComponent(key)+'" alt="">';
+  var b=document.createElement('button');b.textContent=tr('playLive');
+  b.onclick=function(){
+    if(b.textContent===tr('playLive')){box.innerHTML='<video src="/video/'+encodeURIComponent(key)+'" autoplay loop muted playsinline></video>';b.textContent=tr('viewStill')}
+    else{box.innerHTML='<img src="/img/'+encodeURIComponent(key)+'" alt="">';b.textContent=tr('playLive')}
+  };
+  $('ova').appendChild(b);
+}
+function openPano(key){
+  var box=$('ovc2');
+  box.innerHTML='<div class="pano-view" id="panoView"><div class="pano-track" id="panoTrack"><img src="/img/'+encodeURIComponent(key)+'" alt="" draggable="false"><img src="/img/'+encodeURIComponent(key)+'" alt="" draggable="false"></div></div>';
+  var hint=document.createElement('span');hint.className='pano-hint';hint.textContent=tr('panoHint');$('ova').appendChild(hint);
+  var view=$('panoView'),track=$('panoTrack'),first=track.querySelector('img');
+  var span=0,dragging=false,lastX=0,w=0;
+  function apply(){track.style.transform='translate3d('+(-span)+'px,0,0)'}
+  function start(){
+    w=first.getBoundingClientRect().width;
+    if(!w||Math.abs((first.naturalWidth/first.naturalHeight)-2)>0.35){openPlain(key);return}
+    apply();
+  }
+  if(first.complete&&first.naturalWidth)start();else first.onload=start;
+  view.addEventListener('pointerdown',function(e){dragging=true;lastX=e.clientX;view.setPointerCapture(e.pointerId)});
+  view.addEventListener('pointermove',function(e){if(!dragging||!w)return;var dx=e.clientX-lastX;lastX=e.clientX;span=((span-dx)%w+w)%w;apply()});
+  ['pointerup','pointercancel'].forEach(function(ev){view.addEventListener(ev,function(){dragging=false})});
+}
+function openPlain(key){
+  var box=$('ovc2');box.innerHTML='<img src="/img/'+encodeURIComponent(key)+'" alt="">';
+  var h=$('ova').querySelector('.pano-hint');if(h)h.remove();
 }
 var transcodePoll=null;
 function stopTranscodePoll(){if(transcodePoll){clearInterval(transcodePoll);transcodePoll=null}}

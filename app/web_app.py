@@ -1,5 +1,5 @@
 import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress
-import hashlib, hmac, ssl, datetime
+import hashlib, hmac, ssl, datetime, shutil, zipfile
 import urllib.request, urllib.error
 from flask import Flask, jsonify, request, render_template, send_file, Response, abort, redirect
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -57,9 +57,10 @@ STATE_DIR = os.environ.get('STATE_DIR') or CFG.get('state_dir', '/state')
 THUMB_DIR = os.path.join(STATE_DIR, 'thumbs')
 ENC_DIR = os.path.join(STATE_DIR, 'encoded')
 PREVIEW_SRC_DIR = os.path.join(STATE_DIR, 'preview_sources')
+LIV_DIR = os.path.join(STATE_DIR, 'liv')
 WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
 SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
-for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR):
+for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR):
     os.makedirs(d, exist_ok=True)
 
 lk = threading.RLock()
@@ -1209,6 +1210,9 @@ def api_del(name):
             os.remove(extra)
         if os.path.exists(extra + '.part'):
             os.remove(extra + '.part')
+    liv_cache = safe_path(LIV_DIR, name + '.d')
+    if os.path.isdir(liv_cache):
+        shutil.rmtree(liv_cache, ignore_errors=True)
     addlog('删除 ' + name)
     return jsonify({'ok': True})
 
@@ -1245,6 +1249,8 @@ def api_cache_clear():
             ST['transcodes'] = {}
     if scope in ('all', 'preview'):
         n, t = _wipe_dir(PREVIEW_SRC_DIR); files += n; space += t
+    if scope in ('all', 'liv'):
+        n, t = _wipe_dir(LIV_DIR); files += n; space += t
     msg = '清理缓存 ' + str(files) + ' 个文件 / ' + _human(space)
     addlog(msg)
     return jsonify({'ok': True, 'files': files, 'bytes': space, 'msg': msg})
@@ -1255,6 +1261,102 @@ def _human(b):
             return ('%.0f' % b if u == 'B' else '%.1f' % b) + ' ' + u
         b /= 1024
     return '%.1f TB' % b
+
+
+def _container_kind(path):
+    try:
+        with open(path, 'rb') as probe:
+            head = probe.read(12)
+    except OSError:
+        return ''
+    if head[:4] in (b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08'):
+        return 'zip'
+    if head[:3] == b'\xff\xd8\xff':
+        return 'jpeg'
+    if head[4:8] == b'ftyp':
+        return 'mp4'
+    return ''
+
+
+def liv_parts(name):
+    """Extract the still photo and video clip bundled inside a Live Photo file.
+
+    Insta360 .liv containers are ZIP archives holding a JPEG and an MP4; some
+    exports are plain JPEG or MP4. Results are cached under LIV_DIR keyed by
+    the file id and refreshed when the source file size changes.
+    """
+    with preview_lk:
+        out_dir = safe_path(LIV_DIR, name + '.d')
+        photo = os.path.join(out_dir, 'photo.jpg')
+        video = os.path.join(out_dir, 'video.mp4')
+        meta = os.path.join(out_dir, 'meta.json')
+        source = local_path(name)
+        if not source:
+            item = file_info(name)
+            if not item:
+                return None
+            source = safe_path(PREVIEW_SRC_DIR, name)
+            try:
+                os.makedirs(os.path.dirname(source), exist_ok=True)
+                if not os.path.exists(source):
+                    CAMERA_CLIENT.connect()
+                    expected = item.get('bytes') if item.get('bytes_exact') else None
+                    download_file(item['url'], source, expected_size=expected)
+            except Exception as e:
+                log.warning('liv(source) ' + name + ':' + str(e)[:60])
+                return None
+        try:
+            size = os.path.getsize(source)
+            if os.path.exists(meta) and os.path.exists(photo):
+                try:
+                    with open(meta) as meta_file:
+                        recorded = json.load(meta_file)
+                    if recorded.get('size') == size:
+                        return {'photo': photo,
+                                'video': video if os.path.exists(video) else None}
+                except Exception:
+                    pass
+            kind = _container_kind(source)
+            os.makedirs(out_dir, exist_ok=True)
+            if kind == 'zip':
+                photo_member = video_member = None
+                with zipfile.ZipFile(source) as archive:
+                    for member in archive.namelist():
+                        low = member.lower()
+                        if photo_member is None and low.endswith(('.jpg', '.jpeg')):
+                            photo_member = member
+                        if video_member is None and low.endswith(('.mp4', '.mov')):
+                            video_member = member
+                    if photo_member:
+                        with archive.open(photo_member) as src, open(photo, 'wb') as dst:
+                            shutil.copyfileobj(src, dst)
+                    if video_member:
+                        with archive.open(video_member) as src, open(video, 'wb') as dst:
+                            shutil.copyfileobj(src, dst)
+            elif kind == 'jpeg':
+                shutil.copyfile(source, photo)
+            elif kind == 'mp4':
+                shutil.copyfile(source, video)
+            if not os.path.exists(photo) and os.path.exists(video):
+                frame = photo + '.frame.jpg'
+                result = run(['ffmpeg', '-v', 'error', '-y', '-i', video,
+                              '-frames:v', '1', '-q:v', '3', frame], 60)
+                if result.returncode == 0 and os.path.exists(frame) and os.path.getsize(frame) > 0:
+                    os.replace(frame, photo)
+                else:
+                    try:
+                        os.remove(frame)
+                    except OSError:
+                        pass
+            if not os.path.exists(photo) and not os.path.exists(video):
+                return None
+            with open(meta, 'w') as meta_file:
+                json.dump({'size': size, 'kind': kind}, meta_file)
+            return {'photo': photo if os.path.exists(photo) else None,
+                    'video': video if os.path.exists(video) else None}
+        except Exception as e:
+            log.warning('liv ' + name + ':' + str(e)[:60])
+            return None
 
 
 def dng_preview(name, output, width):
@@ -1318,7 +1420,25 @@ def thumb(name):
         except Exception as e:
             log.warning('thumb(video) ' + name + ':' + str(e)[:60])
             return ('', 204)
-    if not low.endswith(('.jpg', '.jpeg', '.insp', '.liv', '.gif', '.png', '.webp')):
+    if low.endswith('.liv'):
+        try:
+            parts = liv_parts(name)
+        except Exception as e:
+            log.warning('thumb(liv) ' + name + ':' + str(e)[:60])
+            return ('', 204)
+        if not parts or not parts.get('photo'):
+            return ('', 204)
+        try:
+            with open(parts['photo'], 'rb') as local_file:
+                data = local_file.read()
+            if Image is None:
+                return Response(data, mimetype='image/jpeg')
+            im = Image.open(io.BytesIO(data)); im.thumbnail((220, 220)); im.convert('RGB').save(tp, 'JPEG', quality=75)
+            return send_file(tp, mimetype='image/jpeg')
+        except Exception as e:
+            log.warning('thumb(liv) ' + name + ':' + str(e)[:60])
+            return ('', 204)
+    if not low.endswith(('.jpg', '.jpeg', '.insp', '.gif', '.png', '.webp')):
         return ('', 204)
     try:
         p = local_path(name)
@@ -1349,6 +1469,11 @@ def img(name):
         except Exception as e:
             log.warning('preview(dng) ' + name + ':' + str(e)[:60])
             return ('', 204)
+    if name.lower().endswith('.liv'):
+        parts = liv_parts(name)
+        if parts and parts.get('photo'):
+            return send_file(parts['photo'], mimetype='image/jpeg')
+        abort(404)
     mime = mimetypes.guess_type(name)[0] or 'image/jpeg'
     p = local_path(name)
     if p:
@@ -1362,6 +1487,11 @@ def img(name):
 
 @app.route('/video/<path:name>')
 def video(name):
+    if name.lower().endswith('.liv'):
+        parts = liv_parts(name)
+        if parts and parts.get('video'):
+            return send_file(parts['video'], mimetype='video/mp4', conditional=True)
+        abort(404)
     local = local_path(name)
     if local:
         return send_file(local, mimetype=mimetypes.guess_type(name)[0] or 'video/mp4', conditional=True)
