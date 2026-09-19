@@ -192,5 +192,14 @@ class LivePhotoPreviewTests(unittest.TestCase):
         self.assertEqual(img.data, still)
 
 
+    def test_camera_table_has_sorting_ui(self):
+        home = self.client.get('/')
+        self.assertEqual(home.status_code, 200)
+        body = home.get_data(as_text=True)
+        self.assertIn("SORT={key:'date',dir:'desc'}", body)
+        self.assertIn('bindSort', body)
+        self.assertIn('sort-asc', body)
+
+
 if __name__ == '__main__':
     unittest.main()
