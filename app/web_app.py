@@ -1263,6 +1263,22 @@ def _human(b):
     return '%.1f TB' % b
 
 
+def extract_thumb(src, output, stream=False):
+    """Grab a frame for the thumbnail; retry without the seek on failure."""
+    input_opts = ['-user_agent', 'LunaDL/0.1'] if stream else []
+    for lead in (['-ss', '1'], []):
+        cmd = ['ffmpeg', '-y'] + lead + input_opts + [
+            '-i', src, '-frames:v', '1', '-vf', 'scale=320:-2', '-q:v', '4', output]
+        result = run(cmd, 90 if stream else 30)
+        if result.returncode == 0 and os.path.exists(output) and os.path.getsize(output) > 0:
+            return
+        if os.path.exists(output):
+            try:
+                os.remove(output)
+            except OSError:
+                pass
+
+
 def is_live_name(name):
     base = os.path.basename(name).upper()
     return base.startswith('LIV_') or name.lower().endswith('.liv')
@@ -1459,17 +1475,38 @@ def thumb(name):
             return ('', 204)
     if low.endswith(('.mp4', '.lrv', '.mov', '.m4v')):
         p = local_path(name)
-        if not p:
+        if p:
+            try:
+                extract_thumb(p, tp)
+                if os.path.exists(tp) and os.path.getsize(tp) > 0:
+                    return send_file(tp, mimetype='image/jpeg')
+            except Exception as e:
+                log.warning('thumb(video) ' + name + ':' + str(e)[:60])
+            if os.path.exists(tp):
+                try:
+                    os.remove(tp)
+                except OSError:
+                    pass
             return ('', 204)
-        try:
-            run(['ffmpeg', '-y', '-ss', '1', '-i', p, '-frames:v', '1',
-                 '-vf', 'scale=320:-2', '-q:v', '4', tp], 30)
+        url = file_url(name)
+        if not url:
+            return ('', 204)
+        # not downloaded yet: pull a frame straight off the camera over HTTP
+        with preview_lk:
             if os.path.exists(tp) and os.path.getsize(tp) > 0:
                 return send_file(tp, mimetype='image/jpeg')
-            return ('', 204)
-        except Exception as e:
-            log.warning('thumb(video) ' + name + ':' + str(e)[:60])
-            return ('', 204)
+            try:
+                extract_thumb(url, tp, stream=True)
+                if os.path.exists(tp) and os.path.getsize(tp) > 0:
+                    return send_file(tp, mimetype='image/jpeg')
+            except Exception as e:
+                log.warning('thumb(video-url) ' + name + ':' + str(e)[:60])
+            if os.path.exists(tp):
+                try:
+                    os.remove(tp)
+                except OSError:
+                    pass
+        return ('', 204)
     if is_live_name(name):
         try:
             parts = liv_parts(name)

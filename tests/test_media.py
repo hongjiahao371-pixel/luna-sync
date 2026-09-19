@@ -200,6 +200,57 @@ class LivePhotoPreviewTests(unittest.TestCase):
         self.assertIn('bindSort', body)
         self.assertIn('sort-asc', body)
 
+    @staticmethod
+    def mp4_bytes():
+        import shutil
+        if not shutil.which('ffmpeg'):
+            return None
+        out = tempfile.mktemp(suffix='.mp4')
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi',
+                            '-i', 'testsrc=duration=1:size=320x240:rate=10',
+                            '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out],
+                           capture_output=True)
+        if r.returncode != 0 or not os.path.exists(out):
+            return None
+        with open(out, 'rb') as f:
+            data = f.read()
+        os.remove(out)
+        return data
+
+    def test_lrv_local_video_thumb(self):
+        data = self.mp4_bytes()
+        if data is None:
+            self.skipTest('ffmpeg is not available')
+        self.write_local('internal/clip.lrv', data)
+        thumb = self.client.get('/thumb/internal/clip.lrv')
+        self.assertEqual(thumb.status_code, 200)
+        self.assertEqual(thumb.mimetype, 'image/jpeg')
+
+    def test_video_thumb_streams_from_camera_url(self):
+        import functools
+        import http.server
+        import threading
+        data = self.mp4_bytes()
+        if data is None:
+            self.skipTest('ffmpeg is not available')
+        served = tempfile.mkdtemp()
+        with open(os.path.join(served, 'clip.mp4'), 'wb') as f:
+            f.write(data)
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=served)
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        url = 'http://127.0.0.1:%d/clip.mp4' % server.server_address[1]
+        with self.web_app.lk:
+            self.web_app.ST['files'] = [{
+                'id': 'internal/stream.mp4', 'name': 'stream.mp4', 'kind': 'MP4',
+                'url': url, 'bytes': len(data), 'bytes_exact': True,
+            }]
+        self.addCleanup(lambda: self.web_app.ST.__setitem__('files', []))
+        thumb = self.client.get('/thumb/internal/stream.mp4')
+        self.assertEqual(thumb.status_code, 200)
+        self.assertEqual(thumb.mimetype, 'image/jpeg')
+
 
 if __name__ == '__main__':
     unittest.main()

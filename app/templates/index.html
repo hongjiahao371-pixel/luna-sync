@@ -670,9 +670,11 @@ function render(){
   list.forEach(function(it){
     var row=document.createElement('tr');
     var key=keyOf(it);
-    var prev=isImg(it.kind)?'<img class="thumb" src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" alt="">':(isVid(it.kind)?'<div class="thumb-fallback">vid</div>':'<div class="thumb-fallback">file</div>');
+    var prev=(isImg(it.kind)||isVid(it.kind))?'<img class="thumb" src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" alt="">':'<div class="thumb-fallback">file</div>';
     var previewTip=esc(tr('preview')),deleteTip=esc(tr('deleteLocal'));var actions='<button type="button" class="icon-btn act-preview" title="'+previewTip+'" data-tip="'+previewTip+'" aria-label="'+previewTip+'">'+icon('eye')+'</button>'+(done(it)?' <button type="button" class="icon-btn danger-icon act-delete" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button>':'');
     row.innerHTML='<td class="cell-check"><input type="checkbox" '+(SEL.has(key)?'checked':'')+'></td><td>'+prev+'</td><td><div class="name" title="'+esc(it.name)+'">'+esc(it.name)+'</div></td><td><span class="tag">'+esc(storageText(it))+'</span></td><td><span class="tag">'+esc(it.kind)+'</span></td><td class="muted">'+esc(fmtDate(it.date,it.time))+'</td><td class="num">'+fmt(it.bytes)+'</td><td><span class="tag '+(done(it)?'done':'')+'">'+esc(statusText(it.status))+'</span></td><td>'+actions+'</td>';
+    var vim=row.querySelector('img.thumb');
+    if(vim&&isVid(it.kind))vim.onerror=function(){var ph=document.createElement('div');ph.className='thumb-fallback';ph.textContent='vid';vim.replaceWith(ph)};
     row.classList.toggle('selected',SEL.has(key));row.querySelector('input').onclick=function(e){e.stopPropagation()};row.querySelector('input').onchange=function(){this.checked?SEL.add(key):SEL.delete(key);row.classList.toggle('selected',this.checked);updateMetrics()};
     row.querySelector('.act-preview').onclick=function(e){e.stopPropagation();openPrev(it)};
     var del=row.querySelector('.act-delete');if(del)del.onclick=async function(e){e.stopPropagation();if(confirm(tr('deleteLocalConfirm'))){await fetch('/api/file/'+encodeURIComponent(key),{method:'DELETE'});SEL.delete(key);scan()}};
@@ -712,8 +714,10 @@ function renderLocalTable(list){
   list.forEach(function(it){
     var row=document.createElement('tr');
     var key=keyOf(it);
-    var prev=isImg(it.kind)?'<img class="thumb" src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" alt="">':(isVid(it.kind)?'<div class="thumb-fallback">vid</div>':'<div class="thumb-fallback">file</div>');
+    var prev=(isImg(it.kind)||isVid(it.kind))?'<img class="thumb" src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" alt="">':'<div class="thumb-fallback">file</div>';
     var previewTip=esc(tr('preview')),deleteTip=esc(tr('deleteLocal'));row.innerHTML='<td>'+prev+'</td><td><div class="name" title="'+esc(it.name)+'">'+esc(it.name)+'</div></td><td><span class="tag done">'+esc(it.kind)+'</span></td><td class="muted">'+esc(fmtDate(it.date,it.time))+'</td><td class="num">'+fmt(it.bytes)+'</td><td><button type="button" class="icon-btn act-preview" title="'+previewTip+'" data-tip="'+previewTip+'" aria-label="'+previewTip+'">'+icon('eye')+'</button> <button type="button" class="icon-btn danger-icon act-delete" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button></td>';
+    var vim=row.querySelector('img.thumb');
+    if(vim&&isVid(it.kind))vim.onerror=function(){var ph=document.createElement('div');ph.className='thumb-fallback';ph.textContent='vid';vim.replaceWith(ph)};
     row.querySelector('.act-preview').onclick=function(e){e.stopPropagation();openPrev(it)};
     row.querySelector('.act-delete').onclick=function(e){e.stopPropagation();delLocal(key)};
     row.onclick=function(){openPrev(it)};
