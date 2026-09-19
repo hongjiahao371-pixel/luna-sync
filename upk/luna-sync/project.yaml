@@ -1,6 +1,19 @@
 spec_version: 2.1
 app_id: com.jvsheng.lunasync
 version: 1.1.0
+release_note: |
+  1. 新增 Live 动态图预览：点开先看静帧，可一键切换播放动态片段
+  2. 新增 360 全景照片球面环视：按住拖动变换视角，滚轮缩放视野
+  3. 相机文件列表支持表头排序（文件名/来源/类型/拍摄日期/大小），默认最新拍摄在前
+  4. LRV 与视频文件在列表中直接显示缩略图
+  5. Web 界面升级为加密访问（HTTPS），首次打开请按浏览器提示确认证书
+  6. 首次使用提供「同意/不同意」的明确选择，应用内可随时查看隐私政策与用户协议
+  1. Live Photo preview: open the still and play the motion clip with one tap
+  2. 360 panorama look-around with a perspective view; drag to rotate, scroll to zoom
+  3. Sort the camera file list by name, source, type, date, or size; newest first by default
+  4. LRV and video files now show thumbnails in the lists
+  5. The web console now uses encrypted HTTPS access; confirm the certificate prompt on first visit
+  6. First launch offers an explicit agree/decline choice, with the privacy policy and terms available in-app at any time
 support_arch:
   - amd64
   - arm64
@@ -42,13 +55,6 @@ i18n:
     publisher_link: https://github.com/hongjiahao371-pixel
     official: https://github.com/hongjiahao371-pixel
     help: https://github.com/hongjiahao371-pixel/luna-sync#readme
-    release_note: |
-      1. 新增 Live 动态图预览：点开先看静帧，可一键切换播放动态片段
-      2. 新增 360 全景照片球面环视：按住拖动变换视角，滚轮缩放视野
-      3. 相机文件列表支持表头排序（文件名/来源/类型/拍摄日期/大小），默认最新拍摄在前
-      4. LRV 与视频文件在列表中直接显示缩略图
-      5. Web 界面升级为加密访问（HTTPS），首次打开请按浏览器提示确认证书
-      6. 首次使用提供「同意/不同意」的明确选择，应用内可随时查看隐私政策与用户协议
   en-US:
     name: Luna Sync
     description: Luna Sync is a local media backup and management tool for Luna Ultra cameras. It scans photos, videos, and LRV files from internal storage and memory cards over camera Wi-Fi, then incrementally syncs new media to a NAS folder selected by the user. It supports resumable downloads, automatic sync, LRV filtering, a local media library, image, animated image, and video previews, and compatible video transcoding. Credentials, cache, and media stay on the user's own device and local network, with no cloud upload service. Luna Sync is not affiliated with or endorsed by Insta360. Support is available through GitHub Issues
@@ -57,10 +63,3 @@ i18n:
     publisher_link: https://github.com/hongjiahao371-pixel
     official: https://github.com/hongjiahao371-pixel
     help: https://github.com/hongjiahao371-pixel/luna-sync#readme
-    release_note: |
-      1. Live Photo preview: open the still and play the motion clip with one tap
-      2. 360 panorama look-around with a perspective view; drag to rotate, scroll to zoom
-      3. Sort the camera file list by name, source, type, date, or size; newest first by default
-      4. LRV and video files now show thumbnails in the lists
-      5. The web console now uses encrypted HTTPS access; confirm the certificate prompt on first visit
-      6. First launch offers an explicit agree/decline choice, with the privacy policy and terms available in-app at any time
