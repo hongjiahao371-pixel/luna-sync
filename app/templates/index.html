@@ -683,8 +683,8 @@ function openPrev(it){
   var key=keyOf(it);
   if(isImg(it.kind)){
     if(it.kind==='LIV'){openLive(key);return}
-    if(it.kind==='INSP'){openPano(key);return}
-    box.innerHTML='<img src="/img/'+encodeURIComponent(key)+'" alt="">';return
+    if(it.kind==='GIF'){box.innerHTML='<img src="/img/'+encodeURIComponent(key)+'" alt="">';return}
+    openPano(key);return
   }
   if(isVid(it.kind)){box.innerHTML='<video src="/video/'+encodeURIComponent(key)+'" controls autoplay playsinline></video>';var b=document.createElement('button');b.textContent=tr('compatiblePreview');b.onclick=function(){startTranscode(key)};$('ova').appendChild(b);box.querySelector('video').onerror=function(){startTranscode(key)};return}
   box.innerHTML='<div class="empty">'+tr('noPreview')+'</div>';

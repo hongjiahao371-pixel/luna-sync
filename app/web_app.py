@@ -1263,6 +1263,42 @@ def _human(b):
     return '%.1f TB' % b
 
 
+def is_live_name(name):
+    base = os.path.basename(name).upper()
+    return base.startswith('LIV_') or name.lower().endswith('.liv')
+
+
+def _find_motion_split(path):
+    """Return the byte offset where an appended MP4 starts, or -1.
+
+    Insta360 live-photo stills are plain JPEGs with the MP4 clip appended
+    right after the JPEG EOI marker; the clip begins with a 4-byte box
+    length followed by 'ftyp'.
+    """
+    chunk = 4 * 1024 * 1024
+    prev = b''
+    base = 0
+    with open(path, 'rb') as f:
+        while True:
+            data = f.read(chunk)
+            if not data:
+                return -1
+            scan = prev + data
+            start_abs = base - len(prev)
+            idx = scan.find(b'ftyp')
+            while idx != -1:
+                box_start = start_abs + idx - 4
+                if box_start >= 4:
+                    box_len = int.from_bytes(scan[idx - 4:idx], 'big')
+                    brand = scan[idx + 4:idx + 8]
+                    if 8 <= box_len <= 64 and len(brand) == 4 and brand.isascii() \
+                            and all(chr(b).isalnum() for b in brand):
+                        return box_start
+                idx = scan.find(b'ftyp', idx + 1)
+            base += len(data)
+            prev = data[-8:]
+
+
 def _container_kind(path):
     try:
         with open(path, 'rb') as probe:
@@ -1334,7 +1370,21 @@ def liv_parts(name):
                         with archive.open(video_member) as src, open(video, 'wb') as dst:
                             shutil.copyfileobj(src, dst)
             elif kind == 'jpeg':
-                shutil.copyfile(source, photo)
+                split_at = _find_motion_split(source)
+                if split_at != -1:
+                    with open(source, 'rb') as src, open(photo, 'wb') as dst:
+                        remaining = split_at
+                        while remaining > 0:
+                            block = src.read(min(1024 * 1024, remaining))
+                            if not block:
+                                break
+                            dst.write(block)
+                            remaining -= len(block)
+                    with open(source, 'rb') as src, open(video, 'wb') as dst:
+                        src.seek(split_at)
+                        shutil.copyfileobj(src, dst)
+                else:
+                    shutil.copyfile(source, photo)
             elif kind == 'mp4':
                 shutil.copyfile(source, video)
             if not os.path.exists(photo) and os.path.exists(video):
@@ -1420,7 +1470,7 @@ def thumb(name):
         except Exception as e:
             log.warning('thumb(video) ' + name + ':' + str(e)[:60])
             return ('', 204)
-    if low.endswith('.liv'):
+    if is_live_name(name):
         try:
             parts = liv_parts(name)
         except Exception as e:
@@ -1469,7 +1519,7 @@ def img(name):
         except Exception as e:
             log.warning('preview(dng) ' + name + ':' + str(e)[:60])
             return ('', 204)
-    if name.lower().endswith('.liv'):
+    if is_live_name(name):
         parts = liv_parts(name)
         if parts and parts.get('photo'):
             return send_file(parts['photo'], mimetype='image/jpeg')
@@ -1487,7 +1537,7 @@ def img(name):
 
 @app.route('/video/<path:name>')
 def video(name):
-    if name.lower().endswith('.liv'):
+    if is_live_name(name):
         parts = liv_parts(name)
         if parts and parts.get('video'):
             return send_file(parts['video'], mimetype='video/mp4', conditional=True)

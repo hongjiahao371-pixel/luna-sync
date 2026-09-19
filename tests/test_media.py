@@ -161,6 +161,36 @@ class LivePhotoPreviewTests(unittest.TestCase):
         self.assertEqual(img.status_code, 200)
         self.assertEqual(img.data, pano)
 
+    def test_liv_prefix_jpg_maps_to_liv_kind(self):
+        from luna_client import file_kind
+        self.assertEqual(file_kind('LIV_20260919_151905_564.jpg'), 'LIV')
+        self.assertEqual(file_kind('IMG_20260919_151828_562.jpg'), 'JPG')
+
+    def test_motion_jpeg_live_still_splits_still_and_clip(self):
+        FAKE_BOX = b'\x00\x00\x00\x20ftypmp42\x00\x00\x00\x00mp42isom' + b'\x01' * 48
+        still = jpeg_bytes(32, 32)
+        self.write_local('external/LIV_20260919_151905_564.jpg', still + FAKE_BOX)
+        img = self.client.get('/img/external/LIV_20260919_151905_564.jpg')
+        self.assertEqual(img.status_code, 200)
+        self.assertEqual(img.data, still)
+        video = self.client.get('/video/external/LIV_20260919_151905_564.jpg')
+        self.assertEqual(video.status_code, 200)
+        self.assertEqual(video.data, FAKE_BOX)
+        thumb = self.client.get('/thumb/external/LIV_20260919_151905_564.jpg')
+        self.assertEqual(thumb.status_code, 200)
+        self.assertEqual(thumb.mimetype, 'image/jpeg')
+
+    def test_plain_jpg_is_not_treated_as_live(self):
+        still = jpeg_bytes(32, 32)
+        self.write_local('external/IMG_20260919_151828_562.jpg', still)
+        # /video passes non-live files through untouched; nothing is split off
+        video = self.client.get('/video/external/IMG_20260919_151828_562.jpg')
+        self.assertEqual(video.status_code, 200)
+        self.assertEqual(video.data, still)
+        img = self.client.get('/img/external/IMG_20260919_151828_562.jpg')
+        self.assertEqual(img.status_code, 200)
+        self.assertEqual(img.data, still)
+
 
 if __name__ == '__main__':
     unittest.main()

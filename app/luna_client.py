@@ -39,6 +39,9 @@ def is_lrv_name(name):
 def file_kind(name):
     if is_lrv_name(name):
         return 'LRV'
+    # Insta360 live photos are stored as JPEG stills with a LIV_ name prefix
+    if name.upper().startswith('LIV_'):
+        return 'LIV'
     s = name.rsplit('.', 1)[-1].upper() if '.' in name else ''
     if s in ('MP4', 'LRV', 'MOV', 'JPG', 'JPEG', 'PNG', 'WEBP', 'GIF', 'LIV', 'INSP'):
         return s
