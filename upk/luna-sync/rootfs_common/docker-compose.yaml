@@ -58,6 +58,8 @@ services:
         TUNNEL_HOST_SUFFIX = 'ugapp.link'
         PROXY_HINT_HEADERS = (b'x-forwarded-for', b'x-forwarded-proto',
                               b'x-forwarded-host', b'via')
+        IDLE_TIMEOUT = 75
+        MAX_HEAD = 262144
 
         def pipe(source, target):
             try:
@@ -75,65 +77,96 @@ services:
                     except OSError:
                         pass
 
-        def read_plain_http(request):
-            head = b''
-            while b'\r\n\r\n' not in head and len(head) < 262144:
-                try:
-                    chunk = request.recv(16384)
-                except socket.timeout:
-                    break
-                if not chunk:
-                    break
-                head += chunk
-            if b'\r\n\r\n' not in head:
-                return None, None
-            split = head.find(b'\r\n\r\n')
-            return head[:split], head[split + 4:]
-
         def respond(request, payload):
             try:
                 request.sendall(payload)
             except OSError:
                 pass
 
+        def read_request_head(request):
+            head = b''
+            while b'\r\n\r\n' not in head:
+                if len(head) >= MAX_HEAD:
+                    return None
+                try:
+                    chunk = request.recv(16384)
+                except (socket.timeout, OSError):
+                    return None
+                if not chunk:
+                    return None
+                head += chunk
+            split = head.find(b'\r\n\r\n')
+            return head[:split], head[split + 4:]
+
         def proxy_plain(request, head_part, body):
-            """Relay one plain-HTTP request to the app over TLS and stream
-            the response back; the UGOS relay reaches the app as an HTTP
-            client, so the gateway must speak HTTP on that leg."""
+            """Relay one plain-HTTP request to the app over TLS. Returns True when
+            the client connection may be reused for the next request."""
             try:
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
-                upstream = context.wrap_socket(
-                    socket.create_connection(TARGET, timeout=15))
-            except OSError:
-                respond(request, b'HTTP/1.1 502 Bad Gateway\r\n'
-                                 b'Content-Length: 0\r\nConnection: close\r\n\r\n')
-                return
+                upstream = context.wrap_socket(socket.create_connection(TARGET, timeout=15))
+            except OSError as err:
+                print('gw: upstream connect failed: %r' % (err,), flush=True)
+                respond(request, b'HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n'
+                                 b'Connection: close\r\n\r\n')
+                return False
             try:
                 upstream.settimeout(60)
-                if b'connection:' not in head_part.lower():
-                    head_part += b'\r\nConnection: close'
-                upstream.sendall(head_part + b'\r\n\r\n' + body)
-                match = re.search(rb'content-length:\s*(\d+)',
-                                  head_part.lower())
-                needed = int(match.group(1)) if match else 0
+                bare = re.sub(rb'(?i)\r\nconnection:[^\r\n]*', b'', head_part)
+                upstream.sendall(bare + b'\r\nConnection: close\r\n\r\n' + body)
+                length_match = re.search(rb'content-length:\s*(\d+)', bare.lower())
+                needed = int(length_match.group(1)) if length_match else 0
                 while len(body) < needed:
                     chunk = request.recv(65536)
                     if not chunk:
                         break
                     body += chunk
                     upstream.sendall(chunk)
-                while True:
-                    try:
-                        chunk = upstream.recv(65536)
-                    except (socket.timeout, OSError):
-                        break
+                response = b''
+                while b'\r\n\r\n' not in response:
+                    chunk = upstream.recv(16384)
                     if not chunk:
-                        break
-                    request.sendall(chunk)
-            except OSError:
-                pass
+                        return False
+                    response += chunk
+                    if len(response) > MAX_HEAD:
+                        return False
+                split = response.find(b'\r\n\r\n')
+                resp_head, resp_body = response[:split], response[split + 4:]
+                total_match = re.search(rb'(?i)\r\ncontent-length:\s*(\d+)',
+                                        resp_head + b'\r\n')
+                chunked = b'transfer-encoding:' in resp_head.lower() and \
+                          b'chunked' in resp_head.lower()
+                status = resp_head.split(b'\r\n', 1)[0]
+                if chunked or not total_match:
+                    # not length-framed: stream until upstream EOF, then close client
+                    resp_head = re.sub(rb'(?i)\r\nconnection:[^\r\n]*', b'',
+                                       resp_head) + b'\r\nConnection: close'
+                    respond(request, resp_head + b'\r\n\r\n' + resp_body)
+                    while True:
+                        try:
+                            chunk = upstream.recv(65536)
+                        except (socket.timeout, OSError):
+                            break
+                        if not chunk:
+                            break
+                        respond(request, chunk)
+                    return False
+                total = int(total_match.group(1))
+                while len(resp_body) < total:
+                    chunk = upstream.recv(65536)
+                    if not chunk:
+                        return False
+                    resp_body += chunk
+                keep_head = re.sub(rb'(?i)\r\nconnection:[^\r\n]*', b'',
+                                   resp_head) + b'\r\nConnection: keep-alive'
+                respond(request, keep_head + b'\r\n\r\n' + resp_body)
+                print('gw: %s -> %s' % (status.decode('latin-1', 'replace')[:60],
+                                        'ok'), flush=True)
+                return True
+            except (OSError, socket.timeout) as err:
+                print('gw: proxy error: %r' % (err,), flush=True)
+                return False
             finally:
                 try:
                     upstream.close()
@@ -144,13 +177,13 @@ services:
             def handle(self):
                 request = self.request
                 try:
-                    request.settimeout(5)
+                    request.settimeout(IDLE_TIMEOUT)
                     lead = request.recv(1, socket.MSG_PEEK)
                     if not lead:
                         return
                     if lead == b'\x16':
-                        # TLS ClientHello: pass through untouched so the
-                        # session stays end-to-end encrypted.
+                        # TLS ClientHello: pass through untouched so the session
+                        # stays end-to-end encrypted.
                         request.settimeout(None)
                         try:
                             upstream = socket.create_connection(TARGET, timeout=15)
@@ -167,33 +200,40 @@ services:
                         for worker in workers:
                             worker.join()
                         return
-                    head_part, body = read_plain_http(request)
-                    if head_part is None:
-                        return
-                    lines = head_part.split(b'\r\n')
-                    parts = lines[0].split(b' ')
-                    method = parts[0] if parts else b'GET'
-                    low = head_part.lower()
-                    host = b''
-                    for line in lines[1:]:
-                        if line[:5].lower() == b'host:':
-                            host = line[5:].strip()
-                            break
-                    host_s = host.decode('latin-1', 'replace')
-                    via_tunnel = TUNNEL_HOST_SUFFIX in host_s.lower()
-                    forwarded = any(h in low for h in PROXY_HINT_HEADERS)
-                    if not (via_tunnel or forwarded or method not in (b'GET', b'HEAD')):
-                        # direct LAN browser: point it at the HTTPS entry
-                        if not host_s:
-                            host_s = 'localhost:8767'
-                        elif ':' not in host_s:
-                            host_s += ':8767'
-                        respond(request, b'HTTP/1.1 301 Moved Permanently\r\n'
-                                         b'Location: https://' + host_s.encode('latin-1') + b'/\r\n'
-                                         b'Content-Length: 0\r\nConnection: close\r\n\r\n')
-                        return
-                    # relayed/tunnel traffic or non-GET API calls: proxy to the app
-                    proxy_plain(request, head_part, body)
+                    # Plain HTTP: serve requests on this connection until the peer
+                    # closes or goes idle (relays pool and reuse connections).
+                    while True:
+                        parsed = read_request_head(request)
+                        if parsed is None:
+                            return
+                        head_part, body = parsed
+                        lines = head_part.split(b'\r\n')
+                        parts = lines[0].split(b' ')
+                        method = parts[0] if parts else b'GET'
+                        path = parts[1] if len(parts) > 1 else b'/'
+                        low = head_part.lower()
+                        host = b''
+                        for line in lines[1:]:
+                            if line[:5].lower() == b'host:':
+                                host = line[5:].strip()
+                                break
+                        host_s = host.decode('latin-1', 'replace')
+                        via_tunnel = TUNNEL_HOST_SUFFIX in host_s.lower()
+                        forwarded = any(h in low for h in PROXY_HINT_HEADERS)
+                        if not (via_tunnel or forwarded or method not in (b'GET', b'HEAD')):
+                            # direct LAN browser: point it at the HTTPS entry
+                            if not host_s:
+                                host_s = 'localhost:8767'
+                            elif ':' not in host_s:
+                                host_s += ':8767'
+                            respond(request, b'HTTP/1.1 301 Moved Permanently\r\n'
+                                             b'Location: https://' + host_s.encode('latin-1') + b'/\r\n'
+                                             b'Content-Length: 0\r\nConnection: close\r\n\r\n')
+                            return
+                        print('gw: %s %s' % (method.decode('latin-1', 'replace'),
+                                             path.decode('latin-1', 'replace')[:80]), flush=True)
+                        if not proxy_plain(request, head_part, body):
+                            return
                 except OSError:
                     pass
 
@@ -202,4 +242,5 @@ services:
             daemon_threads = True
 
         Server(('0.0.0.0', 8767), Gateway).serve_forever()
+
         PY
