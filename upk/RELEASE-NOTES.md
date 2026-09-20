@@ -22,3 +22,4 @@ en-US:
 4. LRV and video files now show thumbnails in the lists
 5. The web console now uses encrypted HTTPS access; confirm the certificate prompt on first visit
 6. First launch offers an explicit agree/decline choice, with the privacy policy and terms available in-app at any time
+   7. Fixed remote access through the UGOS relay failing to open the app

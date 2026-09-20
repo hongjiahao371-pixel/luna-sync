@@ -48,11 +48,16 @@ services:
       - -c
       - |
         python3 - <<'PY'
+        import re
         import socket
+        import ssl
         import socketserver
         import threading
 
         TARGET = ('luna-sync', 8766)
+        TUNNEL_HOST_SUFFIX = 'ugapp.link'
+        PROXY_HINT_HEADERS = (b'x-forwarded-for', b'x-forwarded-proto',
+                              b'x-forwarded-host', b'via')
 
         def pipe(source, target):
             try:
@@ -70,6 +75,71 @@ services:
                     except OSError:
                         pass
 
+        def read_plain_http(request):
+            head = b''
+            while b'\r\n\r\n' not in head and len(head) < 262144:
+                try:
+                    chunk = request.recv(16384)
+                except socket.timeout:
+                    break
+                if not chunk:
+                    break
+                head += chunk
+            if b'\r\n\r\n' not in head:
+                return None, None
+            split = head.find(b'\r\n\r\n')
+            return head[:split], head[split + 4:]
+
+        def respond(request, payload):
+            try:
+                request.sendall(payload)
+            except OSError:
+                pass
+
+        def proxy_plain(request, head_part, body):
+            """Relay one plain-HTTP request to the app over TLS and stream
+            the response back; the UGOS relay reaches the app as an HTTP
+            client, so the gateway must speak HTTP on that leg."""
+            try:
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                upstream = context.wrap_socket(
+                    socket.create_connection(TARGET, timeout=15))
+            except OSError:
+                respond(request, b'HTTP/1.1 502 Bad Gateway\r\n'
+                                 b'Content-Length: 0\r\nConnection: close\r\n\r\n')
+                return
+            try:
+                upstream.settimeout(60)
+                if b'connection:' not in head_part.lower():
+                    head_part += b'\r\nConnection: close'
+                upstream.sendall(head_part + b'\r\n\r\n' + body)
+                match = re.search(rb'content-length:\s*(\d+)',
+                                  head_part.lower())
+                needed = int(match.group(1)) if match else 0
+                while len(body) < needed:
+                    chunk = request.recv(65536)
+                    if not chunk:
+                        break
+                    body += chunk
+                    upstream.sendall(chunk)
+                while True:
+                    try:
+                        chunk = upstream.recv(65536)
+                    except (socket.timeout, OSError):
+                        break
+                    if not chunk:
+                        break
+                    request.sendall(chunk)
+            except OSError:
+                pass
+            finally:
+                try:
+                    upstream.close()
+                except OSError:
+                    pass
+
         class Gateway(socketserver.BaseRequestHandler):
             def handle(self):
                 request = self.request
@@ -79,10 +149,14 @@ services:
                     if not lead:
                         return
                     if lead == b'\x16':
-                        # TLS ClientHello: pass the stream through untouched
-                        # so the session stays end-to-end encrypted.
+                        # TLS ClientHello: pass through untouched so the
+                        # session stays end-to-end encrypted.
                         request.settimeout(None)
-                        upstream = socket.create_connection(TARGET, timeout=15)
+                        try:
+                            upstream = socket.create_connection(TARGET, timeout=15)
+                        except OSError:
+                            request.close()
+                            return
                         upstream.settimeout(None)
                         workers = [
                             threading.Thread(target=pipe, args=(request, upstream), daemon=True),
@@ -93,34 +167,33 @@ services:
                         for worker in workers:
                             worker.join()
                         return
-                    # Plaintext HTTP: carry no data, just point the client at
-                    # the same port over HTTPS (UGOS opens the app as http://).
-                    buffer = b''
-                    while b'\r\n\r\n' not in buffer and len(buffer) < 8192:
-                        try:
-                            chunk = request.recv(4096)
-                        except socket.timeout:
-                            break
-                        if not chunk:
-                            break
-                        buffer += chunk
-                    host = ''
-                    for line in buffer.split(b'\r\n')[1:]:
+                    head_part, body = read_plain_http(request)
+                    if head_part is None:
+                        return
+                    lines = head_part.split(b'\r\n')
+                    parts = lines[0].split(b' ')
+                    method = parts[0] if parts else b'GET'
+                    low = head_part.lower()
+                    host = b''
+                    for line in lines[1:]:
                         if line[:5].lower() == b'host:':
-                            host = line[5:].strip().decode('latin-1')
+                            host = line[5:].strip()
                             break
-                    if not host:
-                        try:
-                            host = request.getsockname()[0] or 'localhost'
-                        except OSError:
-                            host = 'localhost'
-                    if ':' not in host:
-                        host += ':8767'
-                    response = (b'HTTP/1.1 301 Moved Permanently\r\n'
-                                b'Location: https://' + host.encode('latin-1') + b'/\r\n'
-                                b'Content-Length: 0\r\n'
-                                b'Connection: close\r\n\r\n')
-                    request.sendall(response)
+                    host_s = host.decode('latin-1', 'replace')
+                    via_tunnel = TUNNEL_HOST_SUFFIX in host_s.lower()
+                    forwarded = any(h in low for h in PROXY_HINT_HEADERS)
+                    if not (via_tunnel or forwarded or method not in (b'GET', b'HEAD')):
+                        # direct LAN browser: point it at the HTTPS entry
+                        if not host_s:
+                            host_s = 'localhost:8767'
+                        elif ':' not in host_s:
+                            host_s += ':8767'
+                        respond(request, b'HTTP/1.1 301 Moved Permanently\r\n'
+                                         b'Location: https://' + host_s.encode('latin-1') + b'/\r\n'
+                                         b'Content-Length: 0\r\nConnection: close\r\n\r\n')
+                        return
+                    # relayed/tunnel traffic or non-GET API calls: proxy to the app
+                    proxy_plain(request, head_part, body)
                 except OSError:
                     pass
 
