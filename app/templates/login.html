@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Luna Sync</title>
 <style>
-:root{color-scheme:light;--muted:#64748b;--bg:#eef1f4;--danger:#c4443c}
+:root{color-scheme:light;--muted:#64748b;--bg:#eef1f4;--danger:#c4443c;--line:#dde5ec;--text2:#3c4a5c}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(900px 520px at 10% -6%,rgba(122,144,176,.18),transparent 60%),radial-gradient(820px 500px at 90% -8%,rgba(150,132,204,.11),transparent 60%),radial-gradient(760px 480px at 55% 112%,rgba(214,192,168,.13),transparent 62%),linear-gradient(180deg,#f7f9fa,#eef1f4);
   font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#1a2430}
-.card{width:min(380px,92vw);background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border:1px solid rgba(255,255,255,.9);border-radius:16px;padding:28px 26px;box-shadow:0 24px 60px -20px rgba(31,44,67,.25),inset 0 1px 0 rgba(255,255,255,.9)}
+.card{width:min(430px,92vw);max-height:calc(100vh - 48px);overflow:auto;background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border:1px solid rgba(255,255,255,.9);border-radius:16px;padding:28px 26px;box-shadow:0 24px 60px -20px rgba(31,44,67,.25),inset 0 1px 0 rgba(255,255,255,.9)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;letter-spacing:-.2px;margin-bottom:4px}
 .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(180deg,#33404e,#202a35);color:#fff;display:grid;place-items:center;font-weight:600;font-size:14px;box-shadow:0 4px 10px -3px rgba(31,44,67,.5),inset 0 1px 0 rgba(255,255,255,.18)}
 .sub{color:var(--muted);font-size:12.5px;margin:0 0 20px}
@@ -19,46 +19,91 @@ input{width:100%;padding:10px 11px;border:1px solid #d3dde5;border-radius:8px;fo
 input:focus{outline:none;border-color:#8394a4;box-shadow:0 0 0 3px rgba(38,49,64,.1)}
 button{width:100%;margin-top:16px;padding:10px;border:0;border-radius:8px;background:#263140;color:#fff;font:inherit;font-weight:500;cursor:pointer;box-shadow:0 6px 16px -6px rgba(31,44,67,.45),inset 0 1px 0 rgba(255,255,255,.14)}
 button:hover{background:#313e4e}
+button:disabled{opacity:.45;cursor:not-allowed}
 .err{display:none;margin-top:12px;color:var(--danger);font-size:12.5px;background:rgba(196,68,60,.08);border:1px solid rgba(196,68,60,.22);border-radius:8px;padding:8px 10px}
 .lang{position:fixed;top:16px;right:18px;background:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.9);border-radius:999px;padding:6px 13px;font:inherit;font-weight:500;color:#5a6a7a;cursor:pointer;width:auto;margin:0;box-shadow:0 2px 8px -2px rgba(31,44,67,.12);backdrop-filter:blur(8px)}
-.legal{margin:18px 0 0;text-align:center;font-size:12px;color:var(--muted)}
+.legal{margin:14px 0 0;text-align:center;font-size:12px;color:var(--muted)}
 .legal a{color:#3c4a5c;font-weight:500}
 .legal a:hover{color:#1a2430}
+.consent-list{margin:10px 0 0;padding:12px 16px 12px 34px;background:rgba(38,49,64,.035);border:1px solid rgba(38,49,64,.1);border-radius:10px;color:var(--text2);font-size:13px;line-height:1.6}
+.consent-list li+li{margin-top:7px}
+.ccheck{display:flex;align-items:flex-start;gap:9px;padding:12px 0 0;color:var(--text2);cursor:pointer;font-size:13px}
+.ccheck input{width:16px;height:16px;margin:2px 0 0;flex:none;accent-color:#263140}
+.c-actions{display:flex;gap:10px;margin-top:14px}
+.c-actions button{flex:1;margin-top:0;height:40px}
+.c-decline{background:rgba(255,255,255,.7);color:var(--text2);border:1px solid var(--line);box-shadow:0 2px 8px -2px rgba(31,44,67,.1)}
+.c-decline:hover{background:rgba(196,68,60,.08);border-color:rgba(196,68,60,.35);color:var(--danger)}
+.c-note{display:block;margin-top:10px;text-align:center;color:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
 <button class="lang" id="bLang" type="button">EN</button>
 <div class="card">
   <div class="brand"><span class="mark">L</span>Luna Sync</div>
-  <p class="sub" id="sub"></p>
-  <h1 id="title"></h1>
-  <form id="form" autocomplete="off">
-    <label for="pw" id="pwLabel"></label>
-    <input id="pw" type="password" required>
-    <div id="confirmRow" style="display:none">
-      <label for="pw2" id="pw2Label"></label>
-      <input id="pw2" type="password" required>
+  <div id="consentBox" style="display:none">
+    <h1 id="consentTitle">使用前请阅读并同意</h1>
+    <ul class="consent-list">
+      <li id="cWeb">Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。</li>
+      <li id="cWifi">相机 Wi-Fi 名称与密码：仅用于连接您选择的相机并保存在本机。</li>
+      <li id="cMedia">相机媒体目录、下载进度、缩略图与兼容预览缓存。</li>
+      <li id="cLocal">所有信息均保存在您的设备中，不会上传给开发者或第三方。</li>
+    </ul>
+    <p class="legal"><a id="lnkPrivacy" href="/privacy" target="_blank" rel="noopener">《隐私政策》</a>与<a id="lnkTerms" href="/terms" target="_blank" rel="noopener">《用户协议》</a></p>
+    <label class="ccheck"><input type="checkbox" id="consentCheck"><span id="consentCheckText">我已阅读并同意《隐私政策》和《用户协议》</span></label>
+    <div class="c-actions">
+      <button id="consentDecline" class="c-decline" type="button">不同意并退出</button>
+      <button id="consentAgree" class="c-agree" type="button" disabled>同意并继续</button>
     </div>
-    <div class="err" id="err"></div>
-    <button id="btn" type="submit"></button>
-  </form>
-  <p class="legal"><span id="legalPrefix">登录即代表您已阅读并同意</span> <a id="lnkPrivacy" href="/privacy" target="_blank" rel="noopener">《隐私政策》</a>与<a id="lnkTerms" href="/terms" target="_blank" rel="noopener">《用户协议》</a></p>
+    <small id="consentNote" class="c-note">同意或拒绝完全自愿；选择“不同意并退出”即停止使用。</small>
+  </div>
+  <div id="formBox" style="display:none">
+    <p class="sub" id="sub"></p>
+    <h1 id="title"></h1>
+    <form id="form" autocomplete="off">
+      <label for="pw" id="pwLabel"></label>
+      <input id="pw" type="password" required>
+      <div id="confirmRow" style="display:none">
+        <label for="pw2" id="pw2Label"></label>
+        <input id="pw2" type="password" required>
+      </div>
+      <div class="err" id="err"></div>
+      <button id="btn" type="submit"></button>
+    </form>
+    <p class="legal"><a id="lnkPrivacy" href="/privacy" target="_blank" rel="noopener">《隐私政策》</a>与<a id="lnkTerms" href="/terms" target="_blank" rel="noopener">《用户协议》</a></p>
+  </div>
 </div>
 <script>
 var T={
   zh:{sub:'相机素材同步工作台',login:'登录',setpw:'设置访问密码',password:'密码',confirm:'确认密码',
       btnLogin:'登录',btnSave:'保存并进入',wrong:'密码错误，请重试',mismatch:'两次输入的密码不一致',
-      short:'密码至少 4 位',failed:'操作失败，请重试',hint:'首次使用请先设置 Web 访问密码',
-      legalPrefix:'登录即代表您已阅读并同意'},
+      short:'密码至少 4 位',failed:'操作失败，请重试',hint:'设置 Web 访问密码以开始使用',
+      consentTitle:'使用前请阅读并同意',
+      cWeb:'Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。',
+      cWifi:'相机 Wi-Fi 名称与密码：仅用于连接您选择的相机并保存在本机。',
+      cMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
+      cLocal:'所有信息均保存在您的设备中，不会上传给开发者或第三方。',
+      consentCheck:'我已阅读并同意《隐私政策》和《用户协议》',
+      consentAgree:'同意并继续',consentDecline:'不同意并退出',
+      consentNote:'同意或拒绝完全自愿；选择“不同意并退出”即停止使用。',
+      consentFailed:'保存同意状态失败，请重试'},
   en:{sub:'Camera media sync console',login:'Sign in',setpw:'Set access password',password:'Password',confirm:'Confirm password',
       btnLogin:'Sign in',btnSave:'Save and continue',wrong:'Wrong password, please try again',mismatch:'Passwords do not match',
       short:'Password must be at least 4 characters',failed:'Operation failed, please retry',hint:'Set a web access password to get started',
-      legalPrefix:'By signing in you accept the'}
+      consentTitle:'Please review and agree before use',
+      cWeb:'Web access password: stored on this device as a hash only, to protect the console.',
+      cWifi:'Camera Wi-Fi SSID and password: used to connect to the camera you choose and stored on this device.',
+      cMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
+      cLocal:'All information stays on your device and is not uploaded to the developer or any third party.',
+      consentCheck:'I have read and agree to the Privacy Policy and User Agreement',
+      consentAgree:'Agree and continue',consentDecline:'Decline and exit',
+      consentNote:'Consent is voluntary. Choosing "Decline and exit" stops here.',
+      consentFailed:'Failed to save consent. Please try again.'}
 };
 var P=new URLSearchParams(location.search).get('lang');
 var LANG=(P==='en'||P==='zh')?P:(localStorage.getItem('lunaLang')||(((navigator.language||'').toLowerCase().indexOf('zh')===0)?'zh':'en'));
 if(P==='en'||P==='zh')localStorage.setItem('lunaLang',LANG);
 function t(k){return (T[LANG]&&T[LANG][k])||T.zh[k]||k}
+var MODE='login';
 function apply(){
   document.documentElement.lang=LANG==='zh'?'zh-CN':'en';
   document.getElementById('bLang').textContent=LANG==='zh'?'EN':'中文';
@@ -67,19 +112,37 @@ function apply(){
   document.getElementById('pw2Label').textContent=t('confirm');
   document.getElementById('btn').textContent=MODE==='setup'?t('btnSave'):t('btnLogin');
   document.getElementById('title').textContent=MODE==='setup'?t('setpw'):t('login');
-  document.getElementById('legalPrefix').textContent=t('legalPrefix');
+  for(var id in {cWeb:0,cWifi:0,cMedia:0,cLocal:0})document.getElementById(id).textContent=t(id);
+  document.getElementById('consentTitle').textContent=t('consentTitle');
+  document.getElementById('consentCheckText').textContent=t('consentCheck');
+  document.getElementById('consentAgree').textContent=t('consentAgree');
+  document.getElementById('consentDecline').textContent=t('consentDecline');
+  document.getElementById('consentNote').textContent=t('consentNote');
   document.getElementById('lnkPrivacy').textContent=LANG==='zh'?'《隐私政策》':'Privacy Policy';
   document.getElementById('lnkTerms').textContent=LANG==='zh'?'《用户协议》':'User Agreement';
 }
 document.getElementById('bLang').onclick=function(){LANG=LANG==='zh'?'en':'zh';localStorage.setItem('lunaLang',LANG);apply()};
-var MODE='login';
-fetch('/api/auth-state').then(function(r){return r.json()}).then(function(d){
-  MODE=d.password_set?'login':'setup';
-  document.getElementById('confirmRow').style.display=MODE==='setup'?'block':'none';
-  document.getElementById('pw2').required=(MODE==='setup');
-  if(MODE==='setup'){document.getElementById('sub').textContent=t('hint')}
-  apply();
-}).catch(function(){apply()});
+function showConsent(){document.getElementById('consentBox').style.display='block';document.getElementById('formBox').style.display='none'}
+function showForm(){
+  document.getElementById('consentBox').style.display='none';
+  var box=document.getElementById('formBox');box.style.display='block';
+  fetch('/api/auth-state').then(function(r){return r.json()}).then(function(d){
+    MODE=d.password_set?'login':'setup';
+    document.getElementById('confirmRow').style.display=MODE==='setup'?'block':'none';
+    document.getElementById('pw2').required=(MODE==='setup');
+    if(MODE==='setup'){document.getElementById('sub').textContent=t('hint')}
+    apply();
+  }).catch(function(){apply()});
+}
+document.getElementById('consentCheck').onchange=function(){document.getElementById('consentAgree').disabled=!this.checked};
+document.getElementById('consentDecline').onclick=function(){location.href='/declined'};
+document.getElementById('consentAgree').onclick=function(){
+  var btn=this;btn.disabled=true;
+  fetch('/api/privacy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accepted:true})}).then(function(r){
+    if(!r.ok)throw new Error('consent');
+    showForm();
+  }).catch(function(){btn.disabled=false;var err=document.getElementById('err');err.textContent=t('consentFailed');err.style.display='block'});
+};
 document.getElementById('form').onsubmit=function(e){
   e.preventDefault();
   var err=document.getElementById('err');err.style.display='none';
@@ -99,6 +162,10 @@ document.getElementById('form').onsubmit=function(e){
     });
   }).catch(function(){err.textContent=t('failed');err.style.display='block'});
 };
+fetch('/api/privacy').then(function(r){return r.json()}).then(function(d){
+  apply();
+  if(d.accepted){showForm()}else{showConsent()}
+}).catch(function(){apply();showForm()});
 </script>
 </body>
 </html>

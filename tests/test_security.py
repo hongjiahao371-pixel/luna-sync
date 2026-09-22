@@ -191,6 +191,22 @@ class SecurityFixTests(unittest.TestCase):
         self.assertFalse(self.web_app.bool_value(self.web_app.CFG.get('auto_sync'), False),
                          'fresh deployments must not start auto sync')
 
+    def test_login_page_offers_consent_before_password(self):
+        login = self.client.get('/login')
+        self.assertEqual(login.status_code, 200)
+        body = login.get_data(as_text=True)
+        # consent view with an explicit decline option comes first
+        self.assertIn('consentDecline', body)
+        self.assertIn('/declined', body)
+        self.assertIn("location.href='/declined'", body)
+        # no implied-consent wording on the password form
+        self.assertNotIn('登录即代表', body)
+        # privacy policy discloses the collected web access password
+        privacy = self.client.get('/privacy')
+        privacy_body = privacy.get_data(as_text=True)
+        self.assertIn('PBKDF2', privacy_body)
+        self.assertIn('Web 访问密码', privacy_body)
+
     def test_decline_survives_router_for_index_route(self):
         with self.web_app.lk:
             self.web_app.ST['privacy_version'] = ''

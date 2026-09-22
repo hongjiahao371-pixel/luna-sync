@@ -403,6 +403,7 @@ td.muted{color:var(--muted);font-size:12.5px}
     <p id="consentIntro">Luna Sync 仅在您的设备和局域网内处理以下信息，用于连接相机和备份素材：</p>
     <ul class="consent-list">
       <li id="consentWifi">相机 Wi-Fi 名称与密码；密码仅在开启“记住密码”后保存在本机。</li>
+      <li id="consentWebPw">Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。</li>
       <li id="consentMedia">相机媒体目录、下载进度、缩略图与兼容预览缓存。</li>
       <li id="consentLocal">所有信息均保存在您的设备中，不会上传给开发者或第三方。</li>
       <li id="consentRetention">凭据保留至清除记住或卸载；缓存保留至清除缓存；素材保留至您主动删除。</li>
@@ -445,7 +446,7 @@ var TEXT={
     selectFilesFirst:'请先勾选文件',visibleAllDone:'当前可见文件都已下载',clearCacheConfirm:'清空全部预览缓存（缩略图 + 转码预览）？\n已下载的文件不受影响，下次查看会重新生成。',
     clearing:'清理中…',cacheCleared:'已清理 {count} 个文件',clearFailed:'清理失败，请重试',ready:'就绪',done:'完成',doneLocal:'完成(本地)',
     consentTitle:'使用前请阅读并同意',consentIntro:'Luna Sync 仅在您的设备和局域网内处理以下信息，用于连接相机和备份素材：',
-    consentWifi:'相机 Wi-Fi 名称与密码；密码仅在开启“记住密码”后保存在本机。',consentMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
+    consentWifi:'相机 Wi-Fi 名称与密码；密码仅在开启“记住密码”后保存在本机。',consentWebPw:'Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。',consentMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
     consentLocal:'所有信息均保存在您的设备中，不会上传给开发者或第三方。',consentRetention:'凭据保留至清除记住或卸载；缓存保留至清除缓存；素材保留至您主动删除。',
     privacyPolicy:'隐私政策',userAgreement:'用户协议',consentCheck:'我已阅读并同意《隐私政策》和《用户协议》',consentAgree:'同意并进入应用',consentDecline:'不同意并退出',
     consentNote:'同意或拒绝完全自愿；选择“不同意并退出”即停止使用，Wi-Fi 扫描、相机访问和自动同步均保持停用。',consentFailed:'保存同意状态失败，请重试',
@@ -477,7 +478,7 @@ var TEXT={
     selectFilesFirst:'Select files first',visibleAllDone:'All visible files are already downloaded',clearCacheConfirm:'Clear all preview cache, including thumbnails and transcoded previews?\nDownloaded files will not be affected and previews will be regenerated when needed.',
     clearing:'Clearing...',cacheCleared:'Cleared {count} files',clearFailed:'Clear failed. Please try again',ready:'Ready',done:'Done',doneLocal:'Done (local)',
     consentTitle:'Please review and agree before use',consentIntro:'Luna Sync processes the following information only on your device and local network to connect to the camera and back up media:',
-    consentWifi:'Camera Wi-Fi SSID and password. The password is stored locally only when Remember password is enabled.',consentMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
+    consentWifi:'Camera Wi-Fi SSID and password. The password is stored locally only when Remember password is enabled.',consentWebPw:'Web access password: stored on this device as a hash only, to protect the console.',consentMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
     consentLocal:'All information stays on your device and is not uploaded to the developer or any third party.',consentRetention:'Credentials remain until cleared or the app is removed; cache remains until cleared; media remains until you delete it.',
     privacyPolicy:'Privacy Policy',userAgreement:'User Agreement',consentCheck:'I have read and agree to the Privacy Policy and User Agreement',consentAgree:'Agree and continue',consentDecline:'Decline and exit',
     consentNote:'Consent is voluntary. Choosing "Decline and exit" stops here; Wi-Fi scanning, camera access, and auto sync remain disabled.',consentFailed:'Failed to save consent. Please try again.',
@@ -594,7 +595,7 @@ function applyLang(){
   setTableHeaders('#viewCam .file-table',[null,'preview','fileName','storage','type','date','size','status','actions']);$('empty').textContent=tr('waitingCameraFiles');
   $('lfAll').textContent=tr('all');$('lfImg').textContent=tr('photos');$('lfVid').textContent=tr('videos');$('lvGrid').title=tr('gridView');$('lvGrid').setAttribute('data-tip',tr('gridView'));$('lvGrid').setAttribute('aria-label',tr('gridView'));$('lvTable').title=tr('tableView');$('lvTable').setAttribute('data-tip',tr('tableView'));$('lvTable').setAttribute('aria-label',tr('tableView'));$('lq').placeholder=tr('searchLocal');$('bClearCache').textContent=tr('clearCache');$('bClearCache').title=tr('cacheTitle');
   setTableHeaders('#viewLocal .file-table',['preview','fileName','type','date','size','actions']);$('lempty').textContent=tr('noLocalFiles');$('cur').textContent=tr('idle');$('tot').textContent=tr('totalDone',{count:STATE.completed||0});$('ovc').setAttribute('aria-label',tr('closePreview'));
-  $('consentTitle').textContent=tr('consentTitle');$('consentIntro').textContent=tr('consentIntro');$('consentWifi').textContent=tr('consentWifi');$('consentMedia').textContent=tr('consentMedia');$('consentLocal').textContent=tr('consentLocal');$('consentRetention').textContent=tr('consentRetention');$('privacyLink').textContent=tr('privacyPolicy');$('termsLink').textContent=tr('userAgreement');$('consentCheckText').textContent=tr('consentCheck');$('consentAgree').textContent=tr('consentAgree');$('consentDecline').textContent=tr('consentDecline');$('consentNote').textContent=tr('consentNote');
+  $('consentTitle').textContent=tr('consentTitle');$('consentIntro').textContent=tr('consentIntro');$('consentWifi').textContent=tr('consentWifi');$('consentWebPw').textContent=tr('consentWebPw');$('consentMedia').textContent=tr('consentMedia');$('consentLocal').textContent=tr('consentLocal');$('consentRetention').textContent=tr('consentRetention');$('privacyLink').textContent=tr('privacyPolicy');$('termsLink').textContent=tr('userAgreement');$('consentCheckText').textContent=tr('consentCheck');$('consentAgree').textContent=tr('consentAgree');$('consentDecline').textContent=tr('consentDecline');$('consentNote').textContent=tr('consentNote');
   $('legalTabPrivacy').textContent=tr('privacyPolicy');$('legalTabTerms').textContent=tr('userAgreement');$('legalOv').setAttribute('aria-label',tr('legalViewer'));$('legalFrame').setAttribute('title',tr('legalViewer'));
   applyWifiGuidance();
   updateMetrics();renderLocal();

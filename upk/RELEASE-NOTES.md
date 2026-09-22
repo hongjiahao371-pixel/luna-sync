@@ -13,6 +13,8 @@ zh-CN:
 4. LRV 与视频文件在列表中直接显示缩略图
 5. Web 界面升级为加密访问（HTTPS），首次打开请按浏览器提示确认证书
 6. 首次使用提供「同意/不同意」的明确选择，应用内可随时查看隐私政策与用户协议
+7. 修复通过 UGOS 内网穿透远程访问应用失败的问题
+8. 首次使用流程调整：先完成隐私授权（可选择同意或不同意），再设置访问密码
 
 en-US:
 
@@ -22,4 +24,5 @@ en-US:
 4. LRV and video files now show thumbnails in the lists
 5. The web console now uses encrypted HTTPS access; confirm the certificate prompt on first visit
 6. First launch offers an explicit agree/decline choice, with the privacy policy and terms available in-app at any time
-   7. Fixed remote access through the UGOS relay failing to open the app
+7. Fixed remote access through the UGOS relay failing to open the app
+8. First-run flow now asks for privacy consent (agree or decline) before setting the access password

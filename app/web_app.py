@@ -17,7 +17,7 @@ logging.basicConfig(level='INFO', format='%(asctime)s %(levelname)s %(message)s'
 log = logging.getLogger('luna')
 app = Flask(__name__)
 
-PRIVACY_VERSION = '2026-09-18'
+PRIVACY_VERSION = '2026-09-22'
 PRIVACY_POLICY_URL = '/privacy'
 TERMS_URL = '/terms'
 DECLINED_URL = '/declined'
@@ -885,8 +885,9 @@ def api_privacy():
 
 AUTH_COOKIE = 'luna_session'
 AUTH_SESSION_SECONDS = 30 * 24 * 3600
-AUTH_PUBLIC_PATHS = {'/login', '/privacy', '/terms', '/declined', '/api/auth-state',
-                     '/api/auth/login', '/api/auth/setup', '/api/auth/logout'}
+AUTH_PUBLIC_PATHS = {'/login', '/privacy', '/terms', '/declined', '/api/privacy',
+                     '/api/auth-state', '/api/auth/login', '/api/auth/setup',
+                     '/api/auth/logout'}
 
 def config_auth_password():
     value = (os.environ.get('LUNA_AUTH_TOKEN') or config_value(CFG.get('web_auth_token')) or '').strip()

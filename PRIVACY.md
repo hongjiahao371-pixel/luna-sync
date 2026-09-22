@@ -1,6 +1,6 @@
 # Luna Sync 隐私政策 / Privacy Policy
 
-**生效及更新日期 / Effective and last updated: 2026-09-18**
+**生效及更新日期 / Effective and last updated: 2026-09-22**
 
 Luna Sync（“本应用”）是一款部署在用户自有 NAS 或电脑上的相机素材备份与同步工具。本应用完全在用户自己的设备与局域网内运行，不主动向开发者、云端或第三方上传、出售或共享用户数据。
 
@@ -8,12 +8,14 @@ Luna Sync is a camera media backup and sync tool deployed on the user's own NAS 
 
 ## 1. 处理的信息 / Information Processed
 
-- 相机 Wi-Fi 名称（SSID）与密码。密码仅在用户开启“记住密码”后保存。
+- Web 访问密码：首次使用时由用户设置，仅以 PBKDF2 加密哈希保存在应用状态目录，用于验证登录，不保存明文。
+- 相机 Wi-Fi 名称（SSID）与密码（仅自部署版本在应用内保存；应用商店版本不收集 Wi-Fi 信息，请在系统 Wi-Fi 设置中连接相机）。
 - 无线网卡状态和本地连接配置，例如相机网段地址。
 - 相机媒体目录，以及用户选择下载的照片、视频、动图和 LRV 文件。
 - 下载进度、自动同步设置、同意记录、缩略图和视频兼容预览缓存。
 
-- Camera Wi-Fi SSID and password. The password is stored only when Remember password is enabled.
+- Web access password: set by you on first use, stored in the app state directory as a PBKDF2 hash for login verification; the plaintext is never saved.
+- Camera Wi-Fi SSID and password (saved in-app only in self-hosted deployments; the store-distributed version does not collect Wi-Fi information — connect the camera in your system Wi-Fi settings instead).
 - Wireless adapter status and local connection settings, such as the camera subnet address.
 - Camera media listings and photos, videos, animated images, or LRV files selected for download.
 - Download progress, auto-sync settings, consent record, thumbnails, and compatible video preview cache.
