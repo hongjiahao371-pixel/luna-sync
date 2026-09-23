@@ -16,6 +16,8 @@ zh-CN:
 7. 修复通过 UGOS 内网穿透远程访问应用失败的问题
 8. 首次使用流程调整：先完成隐私授权（可选择同意或不同意），再设置访问密码
 9. 新增本地照片挑选模式：逐张全屏审片，入选/落选一键标记（NAS 持久保存），支持筛选查看与一键导出精选、批量删除落选
+10. 新增相册与项目：按拍摄日期自动归组、可命名保存项目并随时添加照片
+11. 新增「自动选片」：本地智能分析照片质量并按连拍聚类推荐最佳照片，一键应用为入选
 
 en-US:
 
@@ -28,3 +30,5 @@ en-US:
 7. Fixed remote access through the UGOS relay failing to open the app
 8. First-run flow now asks for privacy consent (agree or decline) before setting the access password
 9. New local photo culling mode: full-screen review with keep/reject marks persisted on the NAS, plus filtering, one-tap export of keepers, and bulk delete of rejects
+10. Albums and projects: automatic grouping by shoot date, plus named projects you can keep adding photos to
+11. Auto select: fully local photo quality analysis with burst clustering, one tap to apply the recommended keeps

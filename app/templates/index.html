@@ -211,6 +211,21 @@ td.muted{color:var(--muted);font-size:12.5px}
 .badge.pk-reject{left:auto;right:8px;top:auto;bottom:38px;background:rgba(196,68,60,.92);color:#fff}
 .file-table .tag.pk-keep{background:rgba(47,163,119,.14);color:#1d8a5f;border-color:rgba(47,163,119,.3)}
 .file-table .tag.pk-reject{background:rgba(196,68,60,.1);color:var(--danger);border-color:rgba(196,68,60,.3)}
+/* ---------- albums / auto-select ---------- */
+.albumbar{display:flex;gap:8px;align-items:center;padding:10px 20px;border-bottom:1px solid rgba(31,44,67,.07);flex-wrap:wrap}
+.albumbar .alabel{color:var(--muted);font-size:12.5px;font-weight:500}
+.albumbar select{height:32px;max-width:280px}
+.as-panel{width:min(1000px,94vw);max-height:86vh;background:rgba(255,255,255,.97);border:1px solid rgba(255,255,255,.95);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 30px 80px rgba(16,26,38,.4)}
+.as-panel h3{margin:0;font-size:16px;font-weight:600;color:var(--ink)}
+#asProg{display:flex;gap:10px;align-items:center}
+#asProg .bar{flex:1;margin-top:0}
+.as-results{flex:1;min-height:120px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;align-content:start}
+.as-card{position:relative;border-radius:8px;overflow:hidden;background:rgba(38,49,64,.05);cursor:pointer;border:2px solid transparent}
+.as-card img{width:100%;height:100px;object-fit:cover;display:block}
+.as-card .as-score{position:absolute;top:6px;left:6px;background:rgba(38,49,64,.85);color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
+.as-card.rec::after{content:'推荐';position:absolute;top:6px;right:6px;background:#d09a3a;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
+.as-card.sel{border-color:#263140;box-shadow:0 0 0 2px rgba(38,49,64,.3)}
+.as-actions{display:flex;gap:8px;justify-content:flex-end}
 /* ---------- live photo & panorama viewer ---------- */
 .pano-view{position:relative;width:min(94vw,1200px);height:min(66vh,600px);overflow:hidden;background:#05070a;border-radius:10px;cursor:grab;touch-action:none}
 .pano-view:active{cursor:grabbing}
@@ -361,6 +376,14 @@ td.muted{color:var(--muted);font-size:12.5px}
     </div><!-- /viewCam -->
     <!-- Local downloads view -->
     <div id="viewLocal" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="albumbar">
+        <span class="alabel">相册</span>
+        <select id="albumSel"></select>
+        <button id="bSaveProject" class="tonal">存为项目</button>
+        <button id="bDelProject" class="danger">删除项目</button>
+        <button id="bAddPhotos" class="secondary">添加照片</button>
+        <button id="bAutoSelect" class="primary">自动选片</button>
+      </div>
       <div class="locbar">
         <div class="seg">
           <button id="lfAll" class="on">全部</button>
@@ -433,6 +456,27 @@ td.muted{color:var(--muted);font-size:12.5px}
     </div>
   </div>
 </div>
+<div id="asOv" class="overlay">
+  <div class="as-panel">
+    <h3 id="asTitle">自动选片</h3>
+    <div id="asProg"><div class="bar"><i id="asBar"></i></div><span id="asStat" class="cull-pos">0/0</span></div>
+    <div id="asResults" class="as-results"></div>
+    <div class="as-actions">
+      <button id="asApply" class="primary">应用推荐为入选</button>
+      <button id="asClose" class="ghost">关闭</button>
+    </div>
+  </div>
+</div>
+<div id="addProjOv" class="overlay">
+  <div class="as-panel">
+    <h3 id="addProjTitle">添加照片到项目</h3>
+    <div id="addProjGrid" class="as-results"></div>
+    <div class="as-actions">
+      <button id="addProjSave" class="primary">保存</button>
+      <button id="addProjCancel" class="ghost">取消</button>
+    </div>
+  </div>
+</div>
 <div id="consent" class="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
   <section class="consent-dialog">
     <div class="consent-mark">L</div>
@@ -490,6 +534,12 @@ var TEXT={
     exportPrompt:'将入选文件导出到下载目录下的文件夹，文件夹名：',exportDone:'已导出 {count} 个文件到「{folder}」',
     delRejectsConfirm:'确定删除 {count} 个落选文件？此操作不可恢复。',rejectsDeleted:'已删除 {count} 个落选文件',
     cullKeep:'入选 (F)',cullReject:'落选 (X)',cullUnmark:'取消 (U)',cullPrev:'上一张 (←)',cullNext:'下一张 (→)',cullExit:'退出 (Esc)',
+    albumAll:'全部',albumByDate:'按拍摄日期',albumProjects:'我的项目',saveProject:'存为项目',delProject:'删除项目',
+    addPhotos:'添加照片',autoSelect:'自动选片',projNamePrompt:'项目名称：',
+    projectSaved:'已创建项目「{name}」（{count} 个文件）',projectDeleted:'项目已删除',
+    autosNone:'当前相册没有可分析的照片',asRunning:'分析中',asApply:'应用推荐为入选',asClose:'关闭',
+    asApplied:'已将 {count} 张推荐照片应用为入选',asNoRec:'本次没有达到推荐阈值的照片，可手动挑选',
+    addTitle:'添加照片到项目',addSave:'保存',analyzing:'分析中',scoreUnit:'分',
     consentTitle:'使用前请阅读并同意',consentIntro:'Luna Sync 仅在您的设备和局域网内处理以下信息，用于连接相机和备份素材：',
     consentWifi:'相机 Wi-Fi 名称与密码；密码仅在开启“记住密码”后保存在本机。',consentWebPw:'Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。',consentMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
     consentLocal:'所有信息均保存在您的设备中，不会上传给开发者或第三方。',consentRetention:'凭据保留至清除记住或卸载；缓存保留至清除缓存；素材保留至您主动删除。',
@@ -530,6 +580,12 @@ var TEXT={
     exportPrompt:'Export kept files into a folder inside the download directory. Folder name:',exportDone:'Exported {count} files to "{folder}"',
     delRejectsConfirm:'Delete {count} rejected files? This cannot be undone.',rejectsDeleted:'Deleted {count} rejected files',
     cullKeep:'Keep (F)',cullReject:'Reject (X)',cullUnmark:'Unmark (U)',cullPrev:'Prev (←)',cullNext:'Next (→)',cullExit:'Exit (Esc)',
+    albumAll:'All',albumByDate:'By shoot date',albumProjects:'My projects',saveProject:'Save as project',delProject:'Delete project',
+    addPhotos:'Add photos',autoSelect:'Auto select',projNamePrompt:'Project name:',
+    projectSaved:'Project "{name}" created ({count} files)',projectDeleted:'Project deleted',
+    autosNone:'No analyzable photos in this album',asRunning:'Analyzing',asApply:'Apply recommendations as keeps',asClose:'Close',
+    asApplied:'Applied {count} recommended photos as keeps',asNoRec:'No photos reached the recommendation threshold; cull manually',
+    addTitle:'Add photos to project',addSave:'Save',analyzing:'Analyzing',scoreUnit:'pts',
     consentTitle:'Please review and agree before use',consentIntro:'Luna Sync processes the following information only on your device and local network to connect to the camera and back up media:',
     consentWifi:'Camera Wi-Fi SSID and password. The password is stored locally only when Remember password is enabled.',consentWebPw:'Web access password: stored on this device as a hash only, to protect the console.',consentMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
     consentLocal:'All information stays on your device and is not uploaded to the developer or any third party.',consentRetention:'Credentials remain until cleared or the app is removed; cache remains until cleared; media remains until you delete it.',
@@ -653,6 +709,9 @@ function applyLang(){
   $('bCull').textContent=tr('pickBtn');$('bExportPicks').textContent=tr('exportPicks');$('bDelRejects').textContent=tr('delRejects');
   $('pkAll').textContent=tr('pickFilterAll');$('pkUn').textContent=tr('pickFilterUn');$('pkKeep').textContent=tr('pickFilterKeep');$('pkReject').textContent=tr('pickFilterReject');
   $('cKeep').textContent=tr('cullKeep');$('cReject').textContent=tr('cullReject');$('cUnmark').textContent=tr('cullUnmark');$('cPrev').textContent=tr('cullPrev');$('cNext').textContent=tr('cullNext');$('cExit').textContent=tr('cullExit');
+  $('bSaveProject').textContent=tr('saveProject');$('bDelProject').textContent=tr('delProject');$('bAddPhotos').textContent=tr('addPhotos');$('bAutoSelect').textContent=tr('autoSelect');
+  $('asApply').textContent=tr('asApply');$('asClose').textContent=tr('asClose');$('addProjSave').textContent=tr('addSave');$('addProjCancel').textContent=tr('asClose');
+  $('addProjTitle').textContent=tr('addTitle');refreshAlbumSel();
   applyWifiGuidance();
   updateMetrics();renderLocal();
 }
@@ -671,7 +730,7 @@ async function setPick(it,mark){
     renderLocal();updateMetrics();
   }catch(e){alert(tr('pickFailed'))}
 }
-function localVisible(){var q=$('lq').value.trim().toLowerCase();return localFiles().filter(function(x){if(LFIL==='img'&&!isImg(x.kind))return false;if(LFIL==='vid'&&!isVid(x.kind))return false;if(LPICK==='keep'&&pickState(x)!=='keep')return false;if(LPICK==='reject'&&pickState(x)!=='reject')return false;if(LPICK==='un'&&pickState(x))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
+function localVisible(){var q=$('lq').value.trim().toLowerCase();return localFiles().filter(function(x){if(LFIL==='img'&&!isImg(x.kind))return false;if(LFIL==='vid'&&!isVid(x.kind))return false;if(LPICK==='keep'&&pickState(x)!=='keep')return false;if(LPICK==='reject'&&pickState(x)!=='reject')return false;if(LPICK==='un'&&pickState(x))return false;if(!inAlbum(x))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
 var SORT={key:'date',dir:'desc'};
 var SORT_DEFAULTS={name:'asc',storage:'asc',kind:'asc',date:'desc',size:'desc'};
 var MONTHS={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
@@ -809,6 +868,7 @@ async function scan(){
     var rs=await Promise.all([fetch('/api/files'),fetch('/api/local-files')]);
     var d=await rs[0].json(), l=await rs[1].json();
     FILES=d.items;LOCAL=l.items||[];await loadPicks();
+    refreshAlbumSel();
     setPill($('cameraPill'),d.connected?tr('cameraOnline'):tr('cameraOffline'),d.connected?'ok':'bad');render()
   }
   catch(e){setPill($('cameraPill'),tr('cameraError'),'bad')}
@@ -1082,6 +1142,144 @@ document.addEventListener('keydown',function(e){
   else if(e.key==='u'||e.key==='U')cullMarkDo('');
   else if(e.key==='Escape')closeCull();
 });
+var PROJECTS={},SCORES={},ALBUM={type:'all',date:'',id:''},ADDSEL=new Set(),AS_TIMER=null;
+function itemDateKey(it){
+  var m=(it.name||'').match(/20\d{6}/);
+  if(m)return m[0].slice(0,4)+'-'+m[0].slice(4,6)+'-'+m[0].slice(6,8);
+  var d=String(it.date||'').match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if(d)return d[3]+'-'+String(MONTHS[d[2]]||1).padStart(2,'0')+'-'+String(parseInt(d[1],10)).padStart(2,'0');
+  return '';
+}
+async function loadProjects(){try{var d=await(await fetch('/api/projects')).json();PROJECTS=d.projects||{}}catch(e){PROJECTS={}}refreshAlbumSel()}
+function inAlbum(x){
+  if(ALBUM.type==='date')return itemDateKey(x)===ALBUM.date;
+  if(ALBUM.type==='proj'){var p=PROJECTS[ALBUM.id];return !!(p&&(p.files||[]).indexOf(pickKey(x))>=0)}
+  return true;
+}
+function albumMemberPaths(){
+  return localFiles().filter(function(x){return inAlbum(x)&&['JPG','JPEG','PNG','WEBP','INSP'].indexOf(x.kind)>=0}).map(pickKey);
+}
+function refreshAlbumSel(){
+  var sel=$('albumSel');if(!sel)return;
+  var dates={};
+  localFiles().forEach(function(x){var k=itemDateKey(x);if(k)dates[k]=(dates[k]||0)+1});
+  var html='<option value="all">'+tr('albumAll')+'</option>';
+  var dkeys=Object.keys(dates).sort().reverse();
+  if(dkeys.length){
+    html+='<optgroup label="'+tr('albumByDate')+'">';
+    dkeys.forEach(function(k){html+='<option value="date:'+k+'">'+k+'（'+dates[k]+'）</option>'});
+    html+='</optgroup>';
+  }
+  var pids=Object.keys(PROJECTS);
+  if(pids.length){
+    html+='<optgroup label="'+tr('albumProjects')+'">';
+    pids.forEach(function(id){html+='<option value="proj:'+id+'">'+esc(PROJECTS[id].name)+'（'+(PROJECTS[id].files||[]).length+'）</option>'});
+    html+='</optgroup>';
+  }
+  sel.innerHTML=html;
+  var cur=ALBUM.type==='all'?'all':(ALBUM.type==='date'?'date:'+ALBUM.date:'proj:'+ALBUM.id);
+  sel.value=cur;if(sel.value!==cur)sel.value='all';
+  $('bSaveProject').style.display=ALBUM.type==='date'?'':'none';
+  $('bDelProject').style.display=ALBUM.type==='proj'?'':'none';
+  $('bAddPhotos').style.display=ALBUM.type==='proj'?'':'none';
+}
+function setAlbum(v){
+  if(v==='all'||!v){ALBUM={type:'all',date:'',id:''}}
+  else if(v.indexOf('date:')===0){ALBUM={type:'date',date:v.slice(5),id:''}}
+  else if(v.indexOf('proj:')===0){ALBUM={type:'proj',date:'',id:v.slice(5)}}
+  renderLocal();refreshAlbumSel();
+}
+$('albumSel').onchange=function(){setAlbum(this.value)};
+$('bSaveProject').onclick=async function(){
+  var members=localFiles().filter(function(x){return inAlbum(x)}).map(pickKey);
+  if(!members.length)return alert(tr('autosNone'));
+  var name=prompt(tr('projNamePrompt'),ALBUM.date);if(!name)return;
+  try{var d=await(await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,files:members})})).json();
+    if(!d.ok)throw new Error('create');
+    ALBUM={type:'proj',date:'',id:d.id};await loadProjects();renderLocal();alert(tr('projectSaved',{name:name,count:members.length}));
+  }catch(e){alert(tr('pickFailed'))}
+};
+$('bDelProject').onclick=async function(){
+  if(!confirm(tr('delProject')+'?'))return;
+  try{await fetch('/api/projects/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ALBUM.id})});}catch(e){}
+  ALBUM={type:'all',date:'',id:''};await loadProjects();renderLocal();alert(tr('projectDeleted'));
+};
+$('bAddPhotos').onclick=function(){
+  var p=PROJECTS[ALBUM.id];if(!p)return;
+  ADDSEL=new Set();
+  var grid=$('addProjGrid');grid.innerHTML='';
+  localFiles().filter(function(x){return (p.files||[]).indexOf(pickKey(x))<0&&x.kind!=='LRV'}).forEach(function(x){
+    var key=pickKey(x);
+    var c=document.createElement('div');c.className='as-card';
+    c.innerHTML='<img src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" alt=""><div style="padding:4px 6px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name)+'</div>';
+    c.onclick=function(){if(ADDSEL.has(key)){ADDSEL.delete(key);c.classList.remove('sel')}else{ADDSEL.add(key);c.classList.add('sel')}};
+    grid.appendChild(c);
+  });
+  $('addProjOv').classList.add('open');
+};
+$('addProjCancel').onclick=function(){$('addProjOv').classList.remove('open')};
+$('addProjSave').onclick=async function(){
+  if(!ADDSEL.size)return $('addProjOv').classList.remove('open');
+  try{await fetch('/api/projects/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ALBUM.id,files:Array.from(ADDSEL)})});}catch(e){}
+  $('addProjOv').classList.remove('open');await loadProjects();renderLocal();
+};
+function stopAsTimer(){if(AS_TIMER){clearTimeout(AS_TIMER);AS_TIMER=null}}
+function closeAs(){stopAsTimer();$('asOv').classList.remove('open')}
+$('bAutoSelect').onclick=async function(){
+  var paths=albumMemberPaths();
+  if(!paths.length)return alert(tr('autosNone'));
+  try{var d=await(await fetch('/api/autoselect/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:paths})})).json();
+    if(!d.ok){alert(d.error==='already_running'?tr('analyzing'):tr('pickFailed'));return}
+  }catch(e){return alert(tr('pickFailed'))}
+  $('asOv').classList.add('open');$('asResults').innerHTML='';$('asApply').style.display='none';
+  $('asStat').textContent='0/'+paths.length;$('asBar').style.width='0';
+  var pollAs=async function(){
+    try{var st=await(await fetch('/api/autoselect/status')).json();
+      $('asStat').textContent=st.done+'/'+st.total;
+      $('asBar').style.width=(st.total?Math.round(st.done/st.total*100):0)+'%';
+      if(st.results&&Object.keys(st.results).length)SCORES=st.results;
+      if(!st.running){
+        SCORES=st.results||{};
+        renderAsResults(st.recommended||[]);
+        return;
+      }
+    }catch(e){}
+    AS_TIMER=setTimeout(pollAs,800);
+  };
+  pollAs();
+};
+function renderAsResults(recommended){
+  stopAsTimer();
+  $('asStat').textContent=Object.keys(SCORES).length+' '+tr('asDone');
+  $('asBar').style.width='100%';
+  var grid=$('asResults');grid.innerHTML='';
+  var recSet={};recommended.forEach(function(p){recSet[p]=1});
+  Object.keys(SCORES).sort(function(a,b){return SCORES[b].score-SCORES[a].score}).forEach(function(path){
+    var meta=SCORES[path];
+    var c=document.createElement('div');c.className='as-card'+(recSet[path]?' rec':'');
+    c.innerHTML='<img src="/thumb/'+encodeURIComponent(path)+'" loading="lazy" alt="">'
+      +'<span class="as-score">'+meta.score+' '+tr('scoreUnit')+'</span>'
+      +'<div style="padding:4px 6px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(path.split('/').pop())+'</div>';
+    c.onclick=function(){c.classList.toggle('sel')};
+    grid.appendChild(c);
+  });
+  var btn=$('asApply');
+  btn.textContent=tr('asApply')+' ('+recommended.length+')';
+  btn.style.display='';
+  btn.onclick=async function(){
+    var sel=Array.prototype.slice.call(grid.querySelectorAll('.as-card.sel')).length;
+    var apply_paths=[];
+    if(sel){grid.querySelectorAll('.as-card.sel').forEach(function(card,idx){
+      var imgs=card.querySelectorAll('img');var path=decodeURIComponent(imgs[0].src.split('/thumb/')[1]||'');
+      if(path)apply_paths.push(path);
+    });}
+    if(!apply_paths.length)apply_paths=recommended;
+    if(!apply_paths.length)return alert(tr('asNoRec'));
+    try{await fetch('/api/autoselect/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:apply_paths})});}catch(e){}
+    await loadPicks();closeAs();renderLocal();alert(tr('asApplied',{count:apply_paths.length}));
+  };
+}
+$('asClose').onclick=closeAs;
 applyLang();bindSort();markSort();poll();checkConsent();setInterval(function(){if(!document.hidden)poll()},1500);
 </script>
 </body>

@@ -7,7 +7,7 @@ from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
 try:
-    from PIL import Image
+    from PIL import Image, ImageFilter, ImageStat
 except Exception:
     Image = None
 
@@ -61,6 +61,8 @@ LIV_DIR = os.path.join(STATE_DIR, 'liv')
 WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
 SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
 PICKS_FILE = os.path.join(STATE_DIR, 'picks.json')
+PROJECTS_FILE = os.path.join(STATE_DIR, 'projects.json')
+SCORES_FILE = os.path.join(STATE_DIR, 'scores.json')
 for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR):
     os.makedirs(d, exist_ok=True)
 
@@ -70,6 +72,7 @@ refresh_lk = threading.Lock()
 auto_sync_lk = threading.Lock()
 preview_lk = threading.Lock()
 picks_lk = threading.Lock()
+alb_lk = threading.Lock()
 _scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
 SCAN_CACHE_TTL = 8
 SCAN_RESCAN_INTERVAL = 12
@@ -1232,6 +1235,242 @@ def api_picks_export():
     addlog('导出入选 ' + str(exported) + ' 个文件到 ' + folder)
     return jsonify({'ok': True, 'exported': exported, 'missing': missing,
                     'folder': folder})
+
+# ---------------- albums / projects / auto-select ----------------
+
+def _load_json_file(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data if isinstance(data, (dict, list)) else {}
+    except Exception:
+        return {}
+
+def _save_json_file(path, data):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.chmod(path, 0o600)
+    except Exception as e:
+        log.warning('save ' + os.path.basename(path) + ':' + str(e)[:60])
+
+def load_projects():
+    data = _load_json_file(PROJECTS_FILE)
+    return data if isinstance(data, dict) else {}
+
+def save_projects(data):
+    _save_json_file(PROJECTS_FILE, data)
+
+AUTO = {'running': False, 'done': 0, 'total': 0, 'results': {}, 'recommended': []}
+auto_lk = threading.Lock()
+
+def _dhash(image, size=8):
+    small = image.convert('L').resize((size + 1, size), Image.LANCZOS)
+    pixels = list(small.getdata())
+    bits = 0
+    for row in range(size):
+        for col in range(size):
+            if pixels[row * (size + 1) + col] < pixels[row * (size + 1) + col + 1]:
+                bits |= 1 << (row * size + col)
+    return bits
+
+def _dhash_distance(a, b):
+    return bin(a ^ b).count('1')
+
+def _analyze_image(path):
+    """Local technical quality score (0-100) plus metrics. Pure PIL."""
+    img = Image.open(path)
+    img = img.convert('RGB')
+    img.thumbnail((640, 640), Image.BILINEAR)
+    gray = img.convert('L')
+    edges = gray.filter(ImageFilter.FIND_EDGES)
+    edge_stat = ImageStat.Stat(edges)
+    sharp = edge_stat.stddev[0]
+    hist = gray.histogram()
+    total = sum(hist) or 1
+    dark = sum(hist[:8]) / total
+    bright = sum(hist[248:]) / total
+    mean_l = ImageStat.Stat(gray).mean[0]
+    std_l = ImageStat.Stat(gray).stddev[0]
+    hsv = img.convert('HSV')
+    sat_mean = ImageStat.Stat(hsv.split()[1]).mean[0]
+    expo_penalty = max(0.0, dark - 0.06) * 400 + max(0.0, bright - 0.06) * 400
+    sharp_s = max(0.0, min(100.0, sharp * 2.2))
+    mean_penalty = max(0.0, 90 - mean_l) * 0.6 + max(0.0, mean_l - 195) * 0.6
+    expo_s = max(0.0, min(100.0, 100 - expo_penalty - mean_penalty))
+    contrast_s = max(0.0, min(100.0, std_l * 1.8))
+    sat_s = max(0.0, min(100.0, 100 - max(0.0, 25 - sat_mean) * 1.5 - max(0.0, sat_mean - 190) * 0.4))
+    score = round(0.40 * sharp_s + 0.30 * expo_s + 0.20 * contrast_s + 0.10 * sat_s, 1)
+    return {'score': score, 'sharp': round(sharp, 1), 'exposure': round(expo_s, 1),
+            'contrast': round(contrast_s, 1), 'saturation': round(sat_mean, 1),
+            'dhash': _dhash(img)}
+
+def _cluster_hashes(entries, max_distance=6):
+    """Greedy burst clustering: near-duplicate hashes share a cluster."""
+    clusters = []
+    for item in entries:
+        placed = False
+        for cluster in clusters:
+            if _dhash_distance(item['dhash'], cluster['dhash']) <= max_distance:
+                item['cluster'] = cluster['id']
+                placed = True
+                break
+        if not placed:
+            clusters.append({'id': len(clusters), 'dhash': item['dhash']})
+            item['cluster'] = clusters[-1]['id']
+    return clusters
+
+def _autoselect_worker(paths):
+    try:
+        entries = []
+        for idx, rel in enumerate(paths):
+            src = local_path(rel)
+            if not src or not rel.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.insp')):
+                continue
+            try:
+                metrics = _analyze_image(src)
+                metrics['path'] = rel
+                entries.append(metrics)
+            except Exception as e:
+                log.warning('autoselect ' + rel + ':' + str(e)[:60])
+            with auto_lk:
+                AUTO['done'] = idx + 1
+        _cluster_hashes(entries)
+        best_of_cluster = {}
+        for item in entries:
+            cid = item['cluster']
+            if cid not in best_of_cluster or item['score'] > best_of_cluster[cid]['score']:
+                best_of_cluster[cid] = item
+        recommended = sorted({item['path'] for item in best_of_cluster.values()
+                              if item['score'] >= 60})
+        results = {}
+        for item in entries:
+            results[item['path']] = {k: item[k] for k in
+                                     ('score', 'sharp', 'exposure', 'contrast',
+                                      'saturation', 'cluster')}
+        with auto_lk:
+            AUTO['results'] = dict(sorted(results.items(),
+                                          key=lambda kv: -kv[1]['score']))
+            AUTO['recommended'] = recommended
+            AUTO['running'] = False
+        addlog('自动选片完成：分析 ' + str(len(results)) + ' 张，推荐 ' + str(len(recommended)) + ' 张')
+    except Exception as e:
+        log.warning('autoselect worker:' + str(e)[:80])
+        with auto_lk:
+            AUTO['running'] = False
+
+@app.route('/api/autoselect/start', methods=['POST'])
+def api_autoselect_start():
+    data = request.json or {}
+    paths = [str(x) for x in (data.get('paths') or []) if str(x)]
+    if not paths:
+        return jsonify({'ok': False, 'error': 'paths_required'}), 400
+    with auto_lk:
+        if AUTO['running']:
+            return jsonify({'ok': False, 'error': 'already_running'}), 409
+        AUTO.update({'running': True, 'done': 0, 'total': len(paths),
+                     'results': {}, 'recommended': []})
+    threading.Thread(target=_autoselect_worker, args=(paths,), daemon=True).start()
+    return jsonify({'ok': True, 'total': len(paths)})
+
+@app.route('/api/autoselect/status')
+def api_autoselect_status():
+    with auto_lk:
+        return jsonify({'running': AUTO['running'], 'done': AUTO['done'],
+                        'total': AUTO['total'], 'results': AUTO['results'],
+                        'recommended': AUTO['recommended']})
+
+@app.route('/api/autoselect/apply', methods=['POST'])
+def api_autoselect_apply():
+    data = request.json or {}
+    paths = [str(x) for x in (data.get('paths') or []) if str(x)]
+    with picks_lk:
+        picks = load_picks()
+        now = int(time.time())
+        for rel in paths:
+            picks[rel] = {'mark': 'keep', 'ts': now}
+        save_picks(picks)
+    addlog('自动选片推荐已应用为入选 ' + str(len(paths)) + ' 个')
+    return jsonify({'ok': True, 'applied': len(paths)})
+
+@app.route('/api/projects', methods=['GET'])
+def api_projects_get():
+    with alb_lk:
+        projects = load_projects()
+    return jsonify({'projects': projects})
+
+@app.route('/api/projects', methods=['POST'])
+def api_projects_create():
+    data = request.json or {}
+    name = str(data.get('name') or '').strip()
+    files = [str(x) for x in (data.get('files') or []) if str(x)]
+    if not name or len(name) > 60:
+        return jsonify({'ok': False, 'error': 'invalid_name'}), 400
+    with alb_lk:
+        projects = load_projects()
+        pid = 'p%d' % int(time.time() * 1000)
+        projects[pid] = {'name': name, 'files': sorted(set(files)),
+                         'created': int(time.time())}
+        save_projects(projects)
+    addlog('新建项目「' + name + '」（' + str(len(files)) + ' 个文件）')
+    return jsonify({'ok': True, 'id': pid, 'name': name})
+
+@app.route('/api/projects/delete', methods=['POST'])
+def api_projects_delete():
+    pid = str((request.json or {}).get('id') or '')
+    with alb_lk:
+        projects = load_projects()
+        removed = projects.pop(pid, None)
+        if removed is None:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        save_projects(projects)
+    return jsonify({'ok': True})
+
+@app.route('/api/projects/rename', methods=['POST'])
+def api_projects_rename():
+    data = request.json or {}
+    pid = str(data.get('id') or '')
+    name = str(data.get('name') or '').strip()
+    if not pid or not name or len(name) > 60:
+        return jsonify({'ok': False, 'error': 'invalid_name'}), 400
+    with alb_lk:
+        projects = load_projects()
+        if pid not in projects:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        projects[pid]['name'] = name
+        save_projects(projects)
+    return jsonify({'ok': True})
+
+@app.route('/api/projects/add', methods=['POST'])
+def api_projects_add():
+    data = request.json or {}
+    pid = str(data.get('id') or '')
+    files = [str(x) for x in (data.get('files') or []) if str(x)]
+    if not pid or not files:
+        return jsonify({'ok': False, 'error': 'invalid_args'}), 400
+    with alb_lk:
+        projects = load_projects()
+        if pid not in projects:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        projects[pid]['files'] = sorted(set(projects[pid]['files']) | set(files))
+        save_projects(projects)
+    return jsonify({'ok': True, 'count': len(projects[pid]['files'])})
+
+@app.route('/api/projects/remove', methods=['POST'])
+def api_projects_remove():
+    data = request.json or {}
+    pid = str(data.get('id') or '')
+    files = [str(x) for x in (data.get('files') or []) if str(x)]
+    if not pid or not files:
+        return jsonify({'ok': False, 'error': 'invalid_args'}), 400
+    with alb_lk:
+        projects = load_projects()
+        if pid not in projects:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        projects[pid]['files'] = sorted(set(projects[pid]['files']) - set(files))
+        save_projects(projects)
+    return jsonify({'ok': True, 'count': len(projects[pid]['files'])})
 
 @app.route('/api/download', methods=['POST'])
 def api_dl():
