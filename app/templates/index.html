@@ -199,6 +199,18 @@ td.muted{color:var(--muted);font-size:12.5px}
 .viewer img,.viewer video{max-width:94vw;max-height:84vh;border-radius:12px;background:#05070a;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .viewer-note{margin-top:10px;color:#e8eef4;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center}
 .viewer-actions{margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+/* ---------- photo culling ---------- */
+.cull-stage{flex:1;min-height:0;width:100%;display:grid;place-items:center}
+.cull-media img,.cull-media video{max-width:92vw;max-height:72vh;border-radius:10px;background:#05070a}
+.cull-bar{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;color:#e8eef4}
+.cull-pos{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#cbd6df}
+.cull-name{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.cull-mark{font-size:12.5px;font-weight:600}
+.cull-mark.keep{color:#7be0ae}.cull-mark.reject{color:#ff9d94}
+.badge.pk-keep{left:auto;right:8px;top:auto;bottom:38px;background:rgba(47,163,119,.92);color:#fff}
+.badge.pk-reject{left:auto;right:8px;top:auto;bottom:38px;background:rgba(196,68,60,.92);color:#fff}
+.file-table .tag.pk-keep{background:rgba(47,163,119,.14);color:#1d8a5f;border-color:rgba(47,163,119,.3)}
+.file-table .tag.pk-reject{background:rgba(196,68,60,.1);color:var(--danger);border-color:rgba(196,68,60,.3)}
 /* ---------- live photo & panorama viewer ---------- */
 .pano-view{position:relative;width:min(94vw,1200px);height:min(66vh,600px);overflow:hidden;background:#05070a;border-radius:10px;cursor:grab;touch-action:none}
 .pano-view:active{cursor:grabbing}
@@ -359,8 +371,17 @@ td.muted{color:var(--muted);font-size:12.5px}
           <button id="lvGrid" class="icon-btn on" title="网格墙" data-tip="网格墙" aria-label="网格墙"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
           <button id="lvTable" class="icon-btn" title="表格" data-tip="表格" aria-label="表格"><svg viewBox="0 0 24 24"><path d="M9 6h12"/><path d="M9 12h12"/><path d="M9 18h12"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></button>
         </div>
+        <div class="seg">
+          <button id="pkAll" class="on">全部</button>
+          <button id="pkUn">未挑</button>
+          <button id="pkKeep">入选</button>
+          <button id="pkReject">落选</button>
+        </div>
         <input id="lq" class="grow" type="text" placeholder="搜索本地文件名">
         <span class="stat" id="lstat">-</span>
+        <button id="bCull" class="tonal">挑选照片</button>
+        <button id="bExportPicks" class="secondary">导出入选</button>
+        <button id="bDelRejects" class="danger">删除落选</button>
         <button id="bClearCache" class="ghost" title="清空缩略图和转码预览缓存（不影响已下载文件）">清除缓存</button>
       </div>
       <div id="wall" class="wall"></div>
@@ -394,6 +415,22 @@ td.muted{color:var(--muted);font-size:12.5px}
       <button id="legalClose" class="legal-close" type="button" aria-label="关闭">✕</button>
     </div>
     <iframe id="legalFrame" title="Luna Sync 隐私政策与用户协议"></iframe>
+  </div>
+</div>
+<div id="cullOv" class="overlay">
+  <div class="cull-stage"><div id="cullMedia" class="cull-media"></div></div>
+  <div class="cull-bar">
+    <span id="cullPos" class="cull-pos">0/0</span>
+    <span id="cullName" class="cull-name"></span>
+    <span id="cullMark" class="cull-mark"></span>
+    <div class="cull-actions">
+      <button id="cPrev" class="secondary">上一张 (←)</button>
+      <button id="cKeep" class="primary">入选 (F)</button>
+      <button id="cReject" class="danger">落选 (X)</button>
+      <button id="cUnmark" class="secondary">取消 (U)</button>
+      <button id="cNext" class="secondary">下一张 (→)</button>
+      <button id="cExit" class="ghost">退出 (Esc)</button>
+    </div>
   </div>
 </div>
 <div id="consent" class="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
@@ -445,6 +482,14 @@ var TEXT={
     cancelResult:'正在停止当前下载，已移除 {count} 个排队任务',cancelQueued:'已移除 {count} 个排队任务',cancelCurrent:'正在停止当前下载',cancelNone:'当前没有下载任务',cancelFailed:'取消下载失败，请重试',autoSyncMayResume:'自动同步仍处于开启状态，后续检查可能再次加入未完成素材。',
     selectFilesFirst:'请先勾选文件',visibleAllDone:'当前可见文件都已下载',clearCacheConfirm:'清空全部预览缓存（缩略图 + 转码预览）？\n已下载的文件不受影响，下次查看会重新生成。',
     clearing:'清理中…',cacheCleared:'已清理 {count} 个文件',clearFailed:'清理失败，请重试',ready:'就绪',done:'完成',doneLocal:'完成(本地)',
+    pickBtn:'挑选照片',exportPicks:'导出入选',delRejects:'删除落选',
+    pickFilterAll:'全部',pickFilterUn:'未挑',pickFilterKeep:'入选',pickFilterReject:'落选',
+    pickKept:'已入选',pickRejected:'已落选',pickUnmarked:'未标记',pickFailed:'标记保存失败，请重试',
+    cullEmpty:'没有可挑选的文件（已自动跳过 LRV 代理视频）',
+    noKeepers:'还没有标记入选的文件',noRejects:'还没有标记落选的文件',
+    exportPrompt:'将入选文件导出到下载目录下的文件夹，文件夹名：',exportDone:'已导出 {count} 个文件到「{folder}」',
+    delRejectsConfirm:'确定删除 {count} 个落选文件？此操作不可恢复。',rejectsDeleted:'已删除 {count} 个落选文件',
+    cullKeep:'入选 (F)',cullReject:'落选 (X)',cullUnmark:'取消 (U)',cullPrev:'上一张 (←)',cullNext:'下一张 (→)',cullExit:'退出 (Esc)',
     consentTitle:'使用前请阅读并同意',consentIntro:'Luna Sync 仅在您的设备和局域网内处理以下信息，用于连接相机和备份素材：',
     consentWifi:'相机 Wi-Fi 名称与密码；密码仅在开启“记住密码”后保存在本机。',consentWebPw:'Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。',consentMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
     consentLocal:'所有信息均保存在您的设备中，不会上传给开发者或第三方。',consentRetention:'凭据保留至清除记住或卸载；缓存保留至清除缓存；素材保留至您主动删除。',
@@ -477,6 +522,14 @@ var TEXT={
     cancelResult:'Stopping the current download and removed {count} queued items',cancelQueued:'Removed {count} queued items',cancelCurrent:'Stopping the current download',cancelNone:'There are no download tasks',cancelFailed:'Failed to cancel downloads. Please try again',autoSyncMayResume:'Auto sync is still enabled, so a later scan may enqueue unfinished media again.',
     selectFilesFirst:'Select files first',visibleAllDone:'All visible files are already downloaded',clearCacheConfirm:'Clear all preview cache, including thumbnails and transcoded previews?\nDownloaded files will not be affected and previews will be regenerated when needed.',
     clearing:'Clearing...',cacheCleared:'Cleared {count} files',clearFailed:'Clear failed. Please try again',ready:'Ready',done:'Done',doneLocal:'Done (local)',
+    pickBtn:'Cull photos',exportPicks:'Export picks',delRejects:'Delete rejects',
+    pickFilterAll:'All',pickFilterUn:'Unmarked',pickFilterKeep:'Keep',pickFilterReject:'Reject',
+    pickKept:'Marked keep',pickRejected:'Marked reject',pickUnmarked:'Unmarked',pickFailed:'Failed to save mark. Please try again',
+    cullEmpty:'Nothing to cull (LRV proxy videos are skipped)',
+    noKeepers:'No files marked as keep yet',noRejects:'No files marked as reject yet',
+    exportPrompt:'Export kept files into a folder inside the download directory. Folder name:',exportDone:'Exported {count} files to "{folder}"',
+    delRejectsConfirm:'Delete {count} rejected files? This cannot be undone.',rejectsDeleted:'Deleted {count} rejected files',
+    cullKeep:'Keep (F)',cullReject:'Reject (X)',cullUnmark:'Unmark (U)',cullPrev:'Prev (←)',cullNext:'Next (→)',cullExit:'Exit (Esc)',
     consentTitle:'Please review and agree before use',consentIntro:'Luna Sync processes the following information only on your device and local network to connect to the camera and back up media:',
     consentWifi:'Camera Wi-Fi SSID and password. The password is stored locally only when Remember password is enabled.',consentWebPw:'Web access password: stored on this device as a hash only, to protect the console.',consentMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
     consentLocal:'All information stays on your device and is not uploaded to the developer or any third party.',consentRetention:'Credentials remain until cleared or the app is removed; cache remains until cleared; media remains until you delete it.',
@@ -597,11 +650,28 @@ function applyLang(){
   setTableHeaders('#viewLocal .file-table',['preview','fileName','type','date','size','actions']);$('lempty').textContent=tr('noLocalFiles');$('cur').textContent=tr('idle');$('tot').textContent=tr('totalDone',{count:STATE.completed||0});$('ovc').setAttribute('aria-label',tr('closePreview'));
   $('consentTitle').textContent=tr('consentTitle');$('consentIntro').textContent=tr('consentIntro');$('consentWifi').textContent=tr('consentWifi');$('consentWebPw').textContent=tr('consentWebPw');$('consentMedia').textContent=tr('consentMedia');$('consentLocal').textContent=tr('consentLocal');$('consentRetention').textContent=tr('consentRetention');$('privacyLink').textContent=tr('privacyPolicy');$('termsLink').textContent=tr('userAgreement');$('consentCheckText').textContent=tr('consentCheck');$('consentAgree').textContent=tr('consentAgree');$('consentDecline').textContent=tr('consentDecline');$('consentNote').textContent=tr('consentNote');
   $('legalTabPrivacy').textContent=tr('privacyPolicy');$('legalTabTerms').textContent=tr('userAgreement');$('legalOv').setAttribute('aria-label',tr('legalViewer'));$('legalFrame').setAttribute('title',tr('legalViewer'));
+  $('bCull').textContent=tr('pickBtn');$('bExportPicks').textContent=tr('exportPicks');$('bDelRejects').textContent=tr('delRejects');
+  $('pkAll').textContent=tr('pickFilterAll');$('pkUn').textContent=tr('pickFilterUn');$('pkKeep').textContent=tr('pickFilterKeep');$('pkReject').textContent=tr('pickFilterReject');
+  $('cKeep').textContent=tr('cullKeep');$('cReject').textContent=tr('cullReject');$('cUnmark').textContent=tr('cullUnmark');$('cPrev').textContent=tr('cullPrev');$('cNext').textContent=tr('cullNext');$('cExit').textContent=tr('cullExit');
   applyWifiGuidance();
   updateMetrics();renderLocal();
 }
 function localFiles(){return LOCAL}
-function localVisible(){var q=$('lq').value.trim().toLowerCase();return localFiles().filter(function(x){if(LFIL==='img'&&!isImg(x.kind))return false;if(LFIL==='vid'&&!isVid(x.kind))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
+var PICKS={},LPICK='all';
+function pickKey(it){return it.id||it.name}
+function pickState(it){var p=PICKS[pickKey(it)];return p&&p.mark?p.mark:''}
+function pickBadge(key){var m=PICKS[key]&&PICKS[key].mark;if(!m)return '';return m==='keep'?'<span class="badge pk-keep">✓ 入选</span>':'<span class="badge pk-reject">✕ 落选</span>'}
+function pickTag(key){var m=PICKS[key]&&PICKS[key].mark;if(!m)return '';return m==='keep'?' <span class="tag pk-keep">✓ 入选</span>':' <span class="tag pk-reject">✕ 落选</span>'}
+async function loadPicks(){try{var d=await(await fetch('/api/picks')).json();PICKS=d.picks||{}}catch(e){PICKS={}}}
+async function setPick(it,mark){
+  var key=pickKey(it);
+  try{var d=await(await fetch('/api/picks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:key,mark:mark})})).json();
+    if(!d.ok)throw new Error('pick');
+    if(mark)PICKS[key]={mark:mark,ts:1};else delete PICKS[key];
+    renderLocal();updateMetrics();
+  }catch(e){alert(tr('pickFailed'))}
+}
+function localVisible(){var q=$('lq').value.trim().toLowerCase();return localFiles().filter(function(x){if(LFIL==='img'&&!isImg(x.kind))return false;if(LFIL==='vid'&&!isVid(x.kind))return false;if(LPICK==='keep'&&pickState(x)!=='keep')return false;if(LPICK==='reject'&&pickState(x)!=='reject')return false;if(LPICK==='un'&&pickState(x))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
 var SORT={key:'date',dir:'desc'};
 var SORT_DEFAULTS={name:'asc',storage:'asc',kind:'asc',date:'desc',size:'desc'};
 var MONTHS={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
@@ -706,7 +776,8 @@ function renderWall(list){
     var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):tr('photos')))+'</span>';
     var play=(isVid(it.kind)||it.kind==='LIV')?'<div class="play"><i>▶</i></div>':'';
     var deleteTip=esc(tr('deleteLocal'));var del='<button type="button" class="icon-btn danger-icon del" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button>';
-    c.innerHTML=img+badge+play+del+'<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+fmt(it.bytes)+' · '+esc(fmtDate(it.date,it.time))+'</span></div>';
+    var pk=pickBadge(key);
+    c.innerHTML=img+badge+play+pk+del+'<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+fmt(it.bytes)+' · '+esc(fmtDate(it.date,it.time))+'</span></div>';
     var im=c.querySelector('img');if(im){revealImg(im);im.onerror=function(){var ph=document.createElement('div');ph.className='ph';ph.textContent=isVid(it.kind)?'▶':it.kind;im.replaceWith(ph)}}
     c.querySelector('.del').onclick=function(e){e.stopPropagation();delLocal(key)};
     c.onclick=function(){openPrev(it)};
@@ -720,7 +791,7 @@ function renderLocalTable(list){
     var row=document.createElement('tr');
     var key=keyOf(it);
     var prev=(isImg(it.kind)||isVid(it.kind))?'<img class="thumb" src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" decoding="async" alt="">':'<div class="thumb-fallback">file</div>';
-    var previewTip=esc(tr('preview')),deleteTip=esc(tr('deleteLocal'));row.innerHTML='<td>'+prev+'</td><td><div class="name" title="'+esc(it.name)+'">'+esc(it.name)+'</div></td><td><span class="tag done">'+esc(it.kind)+'</span></td><td class="muted">'+esc(fmtDate(it.date,it.time))+'</td><td class="num">'+fmt(it.bytes)+'</td><td><button type="button" class="icon-btn act-preview" title="'+previewTip+'" data-tip="'+previewTip+'" aria-label="'+previewTip+'">'+icon('eye')+'</button> <button type="button" class="icon-btn danger-icon act-delete" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button></td>';
+    var previewTip=esc(tr('preview')),deleteTip=esc(tr('deleteLocal'));row.innerHTML='<td>'+prev+'</td><td><div class="name" title="'+esc(it.name)+'">'+esc(it.name)+'</div></td><td><span class="tag done">'+esc(it.kind)+'</span>'+pickTag(key)+'</td><td class="muted">'+esc(fmtDate(it.date,it.time))+'</td><td class="num">'+fmt(it.bytes)+'</td><td><button type="button" class="icon-btn act-preview" title="'+previewTip+'" data-tip="'+previewTip+'" aria-label="'+previewTip+'">'+icon('eye')+'</button> <button type="button" class="icon-btn danger-icon act-delete" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button></td>';
     var vim=row.querySelector('img.thumb');
     revealImg(vim);
     if(vim&&isVid(it.kind))vim.onerror=function(){var ph=document.createElement('div');ph.className='thumb-fallback';ph.textContent='vid';vim.replaceWith(ph)};
@@ -737,7 +808,7 @@ async function scan(){
   try{
     var rs=await Promise.all([fetch('/api/files'),fetch('/api/local-files')]);
     var d=await rs[0].json(), l=await rs[1].json();
-    FILES=d.items;LOCAL=l.items||[];
+    FILES=d.items;LOCAL=l.items||[];await loadPicks();
     setPill($('cameraPill'),d.connected?tr('cameraOnline'):tr('cameraOffline'),d.connected?'ok':'bad');render()
   }
   catch(e){setPill($('cameraPill'),tr('cameraError'),'bad')}
@@ -949,6 +1020,68 @@ $('legalClose').onclick=closeLegal;
 $('legalOv').onclick=function(e){if(e.target===$('legalOv'))closeLegal()};
 $('bLang').onclick=function(){LANG=LANG==='zh'?'en':'zh';localStorage.setItem('lunaLang',LANG);applyLang();render();poll()};
 $('bLogout').onclick=function(){fetch('/api/auth/logout',{method:'POST'}).catch(function(){}).then(function(){location.href='/login'})};
+var CULL={open:false,list:[],idx:0};
+function cullList(){return localFiles().filter(function(x){if(x.kind==='LRV')return false;if((x.name||'').toLowerCase().indexOf('.lrv')===x.name.length-4)return false;return true})}
+function openCull(){
+  CULL.list=cullList();CULL.idx=0;
+  if(!CULL.list.length)return alert(tr('cullEmpty'));
+  CULL.open=true;$('cullOv').classList.add('open');cullShow();
+}
+function closeCull(){CULL.open=false;$('cullOv').classList.remove('open');$('cullMedia').innerHTML='';renderLocal()}
+function cullShow(){
+  var it=CULL.list[CULL.idx];if(!it)return;
+  var key=pickKey(it);
+  $('cullMedia').innerHTML=isVid(it.kind)
+    ?'<video src="/video/'+encodeURIComponent(key)+'" controls autoplay loop muted playsinline></video>'
+    :'<img src="/img/'+encodeURIComponent(key)+'" alt="">';
+  $('cullName').textContent=it.name+' · '+fmt(it.bytes);
+  $('cullPos').textContent=(CULL.idx+1)+'/'+CULL.list.length;
+  var m=pickState(it);
+  $('cullMark').textContent=m==='keep'?tr('pickKept'):(m==='reject'?tr('pickRejected'):tr('pickUnmarked'));
+  $('cullMark').className='cull-mark '+(m||'');
+}
+function cullMove(d){if(!CULL.open||!CULL.list.length)return;CULL.idx=(CULL.idx+d+CULL.list.length)%CULL.list.length;cullShow()}
+async function cullMarkDo(mark){
+  var it=CULL.list[CULL.idx];if(!it)return;
+  var next=pickState(it)===mark?'':mark;
+  await setPick(it,next);cullShow();
+  if(next&&CULL.idx<CULL.list.length-1)cullMove(1);
+}
+function setPK(v){LPICK=v;['pkAll','pkUn','pkKeep','pkReject'].forEach(function(id){$(id).classList.toggle('on',id===('pk'+{all:'All',un:'Un',keep:'Keep',reject:'Reject'}[v]))});renderLocal()}
+$('bCull').onclick=openCull;$('cExit').onclick=closeCull;
+$('cPrev').onclick=function(){cullMove(-1)};$('cNext').onclick=function(){cullMove(1)};
+$('cKeep').onclick=function(){cullMarkDo('keep')};$('cReject').onclick=function(){cullMarkDo('reject')};
+$('cUnmark').onclick=function(){cullMarkDo('')};
+$('cullOv').onclick=function(e){if(e.target===$('cullOv'))closeCull()};
+$('pkAll').onclick=function(){setPK('all')};$('pkUn').onclick=function(){setPK('un')};
+$('pkKeep').onclick=function(){setPK('keep')};$('pkReject').onclick=function(){setPK('reject')};
+$('bExportPicks').onclick=async function(){
+  var n=localFiles().filter(function(x){return pickState(x)==='keep'}).length;
+  if(!n)return alert(tr('noKeepers'));
+  var folder=prompt(tr('exportPrompt'),'精选');if(!folder)return;
+  try{var d=await(await fetch('/api/picks/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:folder})})).json();
+    if(!d.ok)throw new Error('export');
+    alert(tr('exportDone',{count:d.exported,folder:d.folder}));scan();
+  }catch(e){alert(tr('pickFailed'))}
+};
+$('bDelRejects').onclick=async function(){
+  var list=localFiles().filter(function(x){return pickState(x)==='reject'});
+  if(!list.length)return alert(tr('noRejects'));
+  if(!confirm(tr('delRejectsConfirm',{count:list.length})))return;
+  for(var i=0;i<list.length;i++){await fetch('/api/file/'+encodeURIComponent(pickKey(list[i])),{method:'DELETE'})}
+  await loadPicks();scan();alert(tr('rejectsDeleted',{count:list.length}));
+};
+document.addEventListener('keydown',function(e){
+  if(!CULL.open)return;
+  var tag=((e.target&&e.target.tagName)||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select')return;
+  if(e.key==='ArrowLeft')cullMove(-1);
+  else if(e.key==='ArrowRight')cullMove(1);
+  else if(e.key==='f'||e.key==='F'||e.key==='ArrowUp')cullMarkDo('keep');
+  else if(e.key==='x'||e.key==='X'||e.key==='ArrowDown')cullMarkDo('reject');
+  else if(e.key==='u'||e.key==='U')cullMarkDo('');
+  else if(e.key==='Escape')closeCull();
+});
 applyLang();bindSort();markSort();poll();checkConsent();setInterval(function(){if(!document.hidden)poll()},1500);
 </script>
 </body>

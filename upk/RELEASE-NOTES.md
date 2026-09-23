@@ -15,6 +15,7 @@ zh-CN:
 6. 首次使用提供「同意/不同意」的明确选择，应用内可随时查看隐私政策与用户协议
 7. 修复通过 UGOS 内网穿透远程访问应用失败的问题
 8. 首次使用流程调整：先完成隐私授权（可选择同意或不同意），再设置访问密码
+9. 新增本地照片挑选模式：逐张全屏审片，入选/落选一键标记（NAS 持久保存），支持筛选查看与一键导出精选、批量删除落选
 
 en-US:
 
@@ -26,3 +27,4 @@ en-US:
 6. First launch offers an explicit agree/decline choice, with the privacy policy and terms available in-app at any time
 7. Fixed remote access through the UGOS relay failing to open the app
 8. First-run flow now asks for privacy consent (agree or decline) before setting the access password
+9. New local photo culling mode: full-screen review with keep/reject marks persisted on the NAS, plus filtering, one-tap export of keepers, and bulk delete of rejects

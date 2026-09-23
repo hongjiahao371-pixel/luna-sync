@@ -60,6 +60,7 @@ PREVIEW_SRC_DIR = os.path.join(STATE_DIR, 'preview_sources')
 LIV_DIR = os.path.join(STATE_DIR, 'liv')
 WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
 SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
+PICKS_FILE = os.path.join(STATE_DIR, 'picks.json')
 for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR):
     os.makedirs(d, exist_ok=True)
 
@@ -68,6 +69,7 @@ scan_lk = threading.Lock()
 refresh_lk = threading.Lock()
 auto_sync_lk = threading.Lock()
 preview_lk = threading.Lock()
+picks_lk = threading.Lock()
 _scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
 SCAN_CACHE_TTL = 8
 SCAN_RESCAN_INTERVAL = 12
@@ -1153,6 +1155,84 @@ def api_files():
 def api_local_files():
     return jsonify({'items': local_items()})
 
+def load_picks():
+    try:
+        with open(PICKS_FILE) as picks_file:
+            data = json.load(picks_file)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def save_picks(data):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(PICKS_FILE, 'w') as picks_file:
+            json.dump(data, picks_file, ensure_ascii=False)
+        os.chmod(PICKS_FILE, 0o600)
+    except Exception as e:
+        log.warning('save_picks:' + str(e)[:60])
+
+@app.route('/api/picks', methods=['GET'])
+def api_picks_get():
+    with picks_lk:
+        return jsonify({'picks': load_picks()})
+
+@app.route('/api/picks', methods=['POST'])
+def api_picks_set():
+    data = request.json or {}
+    rel = str(data.get('path') or '')
+    mark = str(data.get('mark') or '')
+    if not rel:
+        return jsonify({'ok': False, 'error': 'path_required'}), 400
+    if mark not in ('keep', 'reject', ''):
+        return jsonify({'ok': False, 'error': 'invalid_mark'}), 400
+    with picks_lk:
+        picks = load_picks()
+        if mark:
+            picks[rel] = {'mark': mark, 'ts': int(time.time())}
+        else:
+            picks.pop(rel, None)
+        save_picks(picks)
+    return jsonify({'ok': True, 'mark': mark})
+
+@app.route('/api/picks/clear', methods=['POST'])
+def api_picks_clear():
+    with picks_lk:
+        save_picks({})
+    return jsonify({'ok': True})
+
+@app.route('/api/picks/export', methods=['POST'])
+def api_picks_export():
+    """Copy keep-marked files into a subfolder of the download directory."""
+    data = request.json or {}
+    folder = str(data.get('folder') or '').strip()
+    if not folder or len(folder) > 80 or any(ch in folder for ch in '/\\') or folder in ('.', '..'):
+        return jsonify({'ok': False, 'error': 'invalid_folder'}), 400
+    with picks_lk:
+        picks = load_picks()
+    keepers = [rel for rel, meta in picks.items()
+               if isinstance(meta, dict) and meta.get('mark') == 'keep']
+    dest_dir = safe_path(DLDIR, folder)
+    os.makedirs(dest_dir, exist_ok=True)
+    exported = missing = 0
+    for rel in sorted(keepers):
+        src = local_path(rel)
+        if not src:
+            missing += 1
+            continue
+        dst = safe_path(dest_dir, os.path.basename(src))
+        if os.path.exists(dst):
+            dst = safe_path(dest_dir, rel.replace('/', '_'))
+        try:
+            shutil.copy2(src, dst)
+            exported += 1
+        except OSError as e:
+            log.warning('picks export ' + rel + ':' + str(e)[:60])
+            missing += 1
+    addlog('导出入选 ' + str(exported) + ' 个文件到 ' + folder)
+    return jsonify({'ok': True, 'exported': exported, 'missing': missing,
+                    'folder': folder})
+
 @app.route('/api/download', methods=['POST'])
 def api_dl():
     ns = (request.json or {}).get('files', [])
@@ -1214,6 +1294,10 @@ def api_del(name):
     liv_cache = safe_path(LIV_DIR, name + '.d')
     if os.path.isdir(liv_cache):
         shutil.rmtree(liv_cache, ignore_errors=True)
+    with picks_lk:
+        picks = load_picks()
+        if picks.pop(name, None) is not None:
+            save_picks(picks)
     addlog('删除 ' + name)
     return jsonify({'ok': True})
 
