@@ -38,3 +38,23 @@ en-US:
 12. Deleted files now go to a trash folder kept for 7 days, with a trash management panel
 13. Cull mode adds side-by-side compare (C) and a slideshow of kept photos (P)
 14. Photo preview now shows shooting parameters (model/lens/focal/aperture/shutter/ISO)
+
+## v1.1.0 (build 20) · 安全与合规强化 / Security & compliance hardening
+
+zh-CN:
+
+1. 隐私政策全面扩充（2026-09-25 版）：新增运营者信息、投诉与举报渠道、已收集个人信息清单、与第三方共享个人信息清单、用户权利及行权途径、跨境传输说明与儿童信息说明
+2. 新增「撤回授权」：在隐私政策页一键撤回同意并清除应用数据（素材文件不受影响），应用回到首次使用状态
+3. 商店版彻底移除应用内 Wi-Fi 表单与扫描功能（界面与后端接口均不再提供），隐私描述与实际行为保持一致
+4. 自部署版记住的 Wi-Fi 密码改为加密存储，不再以明文形式落盘
+5. 相机连接认证数据改为按设备配置（首次运行自动生成独立配置，可按设备覆盖），不再完全依赖内置固定值
+6. 修复素材目录中存在符号链接时可能被用于读取目录之外文件的安全问题
+
+en-US:
+
+1. Privacy policy greatly expanded (2026-09-25): operator information, complaint & reporting channels, list of collected personal information, list of third-party sharing, user rights with real exercise paths, cross-border transfer statement, and children's information statement
+2. New "Withdraw consent" action: revoke consent and clear app data from the privacy page (media files are untouched), returning the app to its first-run state
+3. The store version has fully removed the in-app Wi-Fi form and scanning (hidden in the UI and disabled in the backend), keeping the policy consistent with actual behavior
+4. Remembered Wi-Fi passwords in self-hosted deployments are now stored encrypted instead of in plaintext
+5. Camera connection authentication data is now per-device (auto-generated on first run, overridable per device) instead of relying solely on a compiled-in constant
+6. Fixed a security issue where symbolic links inside the media folder could be used to read files outside the folder

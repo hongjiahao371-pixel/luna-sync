@@ -1,7 +1,9 @@
 import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress
-import hashlib, hmac, re, ssl, datetime, shutil, zipfile
+import hashlib, hmac, re, secrets, ssl, datetime, shutil, zipfile, base64
+import luna_client
 import urllib.request, urllib.error
 from flask import Flask, jsonify, request, render_template, send_file, Response, abort, redirect
+from werkzeug.exceptions import HTTPException
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from luna_client import LunaClient, file_kind
 from downloader import download_file
@@ -17,7 +19,7 @@ logging.basicConfig(level='INFO', format='%(asctime)s %(levelname)s %(message)s'
 log = logging.getLogger('luna')
 app = Flask(__name__)
 
-PRIVACY_VERSION = '2026-09-22'
+PRIVACY_VERSION = '2026-09-25'
 PRIVACY_POLICY_URL = '/privacy'
 TERMS_URL = '/terms'
 DECLINED_URL = '/declined'
@@ -33,7 +35,6 @@ def security_headers(response):
     return response
 
 HOST = CFG['camera_host']
-CAMERA_CLIENT = LunaClient(HOST)
 DLDIR = os.environ.get('DOWNLOAD_DIR') or CFG['download_dir']
 def configured_wifi_backend():
     return os.environ.get('LUNA_WIFI_BACKEND') or CFG.get('wifi_backend', 'auto')
@@ -41,6 +42,9 @@ def configured_wifi_backend():
 # Appliance deployments (UGOS store package) set this to swap the in-app Wi-Fi
 # controls for guidance pointing at the system's own Wi-Fi settings.
 WIFI_GUIDANCE = (os.environ.get('LUNA_WIFI_GUIDANCE') or str(CFG.get('wifi_guidance') or '')).strip().lower()
+# Store builds must not expose any in-app Wi-Fi collection surface at all:
+# the form is hidden in the UI and the collection endpoints refuse to run.
+STORE_WIFI_LOCKED = bool(WIFI_GUIDANCE)
 
 WIFI_BACKEND = wifi.configure(configured_wifi_backend(), CFG.get('wpa_ctrl'))
 IFACE = None
@@ -67,6 +71,47 @@ PROJECTS_FILE = os.path.join(STATE_DIR, 'projects.json')
 SCORES_FILE = os.path.join(STATE_DIR, 'scores.json')
 for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR, TRASH_DIR):
     os.makedirs(d, exist_ok=True)
+
+CAMERA_AUTH_FILE = os.path.join(STATE_DIR, 'camera_auth.json')
+
+def load_camera_auth():
+    """Per-device camera handshake data: env override > state config > vendor
+    default. The first run persists a per-install copy so each deployment owns
+    its own auth data instead of relying solely on a compiled-in constant."""
+    payloads = None
+    env = (os.environ.get('LUNA_CAMERA_AUTH') or '').strip()
+    if env:
+        payloads = [part for part in re.split(r'[,;\s]+', env) if part]
+    if not payloads:
+        try:
+            if os.path.exists(CAMERA_AUTH_FILE):
+                with open(CAMERA_AUTH_FILE) as auth_file:
+                    data = json.load(auth_file)
+                payloads = [str(h) for h in data.get('payloads', []) if h]
+        except Exception as e:
+            log.warning('load_camera_auth:' + str(e)[:50])
+            payloads = None
+    parsed = []
+    for hex_text in payloads or []:
+        try:
+            blob = bytes.fromhex(re.sub(r'[^0-9a-fA-F]', '', hex_text))
+            if blob:
+                parsed.append(blob)
+        except ValueError:
+            continue
+    if not parsed:
+        parsed = [bytes(p) for p in luna_client.AUTH_PAYLOADS]
+        try:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            if not os.path.exists(CAMERA_AUTH_FILE):
+                with open(CAMERA_AUTH_FILE, 'w') as auth_file:
+                    json.dump({'payloads': [p.hex() for p in parsed]}, auth_file)
+                os.chmod(CAMERA_AUTH_FILE, 0o600)
+        except Exception as e:
+            log.warning('save_camera_auth:' + str(e)[:50])
+    return parsed
+
+CAMERA_CLIENT = LunaClient(HOST, auth_payloads=load_camera_auth())
 
 lk = threading.RLock()
 scan_lk = threading.Lock()
@@ -113,6 +158,18 @@ def save_settings(data):
         os.chmod(SETTINGS_FILE, 0o600)
     except Exception as e:
         log.warning('save_settings:' + str(e)[:50])
+
+def rewrite_settings(mutate):
+    """Apply mutations to the on-disk settings in one pass (supports key removal)."""
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        current = load_settings()
+        mutate(current)
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(current, f)
+        os.chmod(SETTINGS_FILE, 0o600)
+    except Exception as e:
+        log.warning('rewrite_settings:' + str(e)[:50])
 
 SETTINGS = load_settings()
 
@@ -312,12 +369,76 @@ def cam_on():
     except OSError:
         return False
 
+WIFI_KEY_FILE = os.path.join(STATE_DIR, 'wifi.key')
+SECRET_ENC_PREFIX = 'enc:v1:'
+
+def _secret_key():
+    """Per-install 256-bit key kept in a 0600 file in the state directory."""
+    try:
+        if os.path.exists(WIFI_KEY_FILE):
+            with open(WIFI_KEY_FILE) as key_file:
+                key = bytes.fromhex(key_file.read().strip())
+            if len(key) == 32:
+                return key
+        key = secrets.token_bytes(32)
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(WIFI_KEY_FILE, 'w') as key_file:
+            key_file.write(key.hex())
+        os.chmod(WIFI_KEY_FILE, 0o600)
+        return key
+    except Exception as e:
+        log.warning('secret_key:' + str(e)[:50])
+        return None
+
+def _secret_keystream(key, nonce, length):
+    stream = bytearray()
+    counter = 0
+    while len(stream) < length:
+        block = hmac.new(key, nonce + counter.to_bytes(4, 'big'), hashlib.sha256).digest()
+        stream.extend(block)
+        counter += 1
+    return bytes(stream[:length])
+
+def encrypt_secret(plaintext):
+    """Encrypt a credential for at-rest storage (HMAC-SHA256 CTR + MAC tag)."""
+    data = str(plaintext or '').encode('utf-8')
+    key = _secret_key()
+    if not data or key is None:
+        return ''
+    nonce = secrets.token_bytes(12)
+    mask = _secret_keystream(key, nonce, len(data))
+    cipher = bytes(a ^ b for a, b in zip(data, mask))
+    tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()
+    return SECRET_ENC_PREFIX + base64.b64encode(nonce + tag + cipher).decode('ascii')
+
+def decrypt_secret(token):
+    """Inverse of encrypt_secret; legacy plaintext values are returned as-is."""
+    token = str(token or '')
+    if not token.startswith(SECRET_ENC_PREFIX):
+        return token
+    try:
+        raw = base64.b64decode(token[len(SECRET_ENC_PREFIX):])
+        nonce, tag, cipher = raw[:12], raw[12:44], raw[44:]
+        key = _secret_key()
+        if key is None or len(cipher) == 0:
+            return ''
+        if not hmac.compare_digest(hmac.new(key, nonce + cipher, hashlib.sha256).digest(), tag):
+            return ''
+        mask = _secret_keystream(key, nonce, len(cipher))
+        return bytes(a ^ b for a, b in zip(cipher, mask)).decode('utf-8')
+    except Exception:
+        return ''
+
 def load_saved_wifi():
     try:
         if os.path.exists(WIFI_FILE):
             with open(WIFI_FILE) as wifi_file:
                 data = json.load(wifi_file)
             if data.get('ssid') and data.get('password'):
+                data['password'] = decrypt_secret(data.get('password'))
+                if not data.get('password'):
+                    log.warning('saved wifi password unreadable (key mismatch?)')
+                    return None
                 return data
             if data.get('ssid'):
                 log.warning('saved wifi has no password: ' + data.get('ssid', '')[:60])
@@ -328,6 +449,9 @@ def load_saved_wifi():
 
 def save_wifi(ssid, pw):
     try:
+        if STORE_WIFI_LOCKED:
+            addlog('商店版不保存 WiFi（应用内不收集 Wi-Fi 信息）')
+            return
         existing = load_saved_wifi() or {}
         if not pw and existing.get('ssid') == ssid and existing.get('password'):
             pw = existing['password']
@@ -338,7 +462,7 @@ def save_wifi(ssid, pw):
             return
         os.makedirs(STATE_DIR, exist_ok=True)
         with open(WIFI_FILE, 'w') as f:
-            json.dump({'ssid': ssid, 'password': pw}, f)
+            json.dump({'ssid': ssid, 'password': encrypt_secret(pw)}, f)
         os.chmod(WIFI_FILE, 0o600)
         with lk:
             ST['wifi_target'] = ssid; ST['wifi_password'] = pw; ST['wifi_saved'] = True
@@ -483,6 +607,10 @@ def local_files():
                 if f.endswith('.part'):
                     continue
                 p = os.path.join(root, f)
+                # never follow user-visible symlinks: a planted link would turn
+                # the library browser into an arbitrary file reader
+                if os.path.islink(p) or not os.path.isfile(p):
+                    continue
                 rel = os.path.relpath(p, DLDIR)
                 out[rel] = {'path': p, 'size': os.path.getsize(p)}
     return out
@@ -503,8 +631,10 @@ def local_items():
     return items
 
 def safe_path(base, name):
-    root = os.path.abspath(base)
-    path = os.path.abspath(os.path.join(root, name))
+    # realpath containment: a symlink planted inside the tree that resolves
+    # outside the base (arbitrary file read) is rejected the same as '../'
+    root = os.path.realpath(os.path.abspath(base))
+    path = os.path.realpath(os.path.join(root, name))
     if path == root or not path.startswith(root + os.sep):
         abort(400)
     return path
@@ -890,6 +1020,44 @@ def api_privacy():
                     'version': PRIVACY_VERSION, 'privacy_url': PRIVACY_POLICY_URL,
                     'terms_url': TERMS_URL, 'declined_url': DECLINED_URL})
 
+@app.route('/api/privacy/withdraw', methods=['POST'])
+def api_privacy_withdraw():
+    """撤回隐私授权：清除同意记录、访问密码、会话与本应用保存的凭据/缓存，
+    应用回到首次使用状态；素材目录中的用户文件不受影响。"""
+    new_secret = secrets.token_hex(32)
+    with lk:
+        ST['privacy_version'] = ''
+        ST['wifi_password'] = None
+        ST['wifi_saved'] = False
+        ST['wifi_target'] = CAM_SSID
+        ST['auto_sync'] = False
+        SETTINGS['privacy_version'] = ''
+        SETTINGS['web_secret'] = new_secret
+        SETTINGS.pop('web_password', None)
+    def _purge(settings):
+        settings.pop('web_password', None)
+        settings.pop('auto_sync', None)
+        settings.pop('auto_sync_lrv', None)
+        settings['privacy_version'] = ''
+        settings['web_secret'] = new_secret
+    rewrite_settings(_purge)
+    for path in (WIFI_FILE, PICKS_FILE, PROJECTS_FILE, SCORES_FILE):
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except OSError as e:
+            log.warning('withdraw remove:' + str(e)[:50])
+    for cache_dir in (THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR):
+        try:
+            shutil.rmtree(cache_dir, ignore_errors=True)
+            os.makedirs(cache_dir, exist_ok=True)
+        except OSError as e:
+            log.warning('withdraw cache:' + str(e)[:50])
+    addlog('用户已撤回隐私授权，应用数据已清除（素材目录未动）')
+    response = jsonify({'ok': True, 'declined_url': DECLINED_URL})
+    response.delete_cookie(AUTH_COOKIE, path='/')
+    return response
+
 AUTH_COOKIE = 'luna_session'
 AUTH_SESSION_SECONDS = 30 * 24 * 3600
 AUTH_PUBLIC_PATHS = {'/login', '/privacy', '/terms', '/declined', '/api/privacy',
@@ -963,7 +1131,8 @@ def login_page():
 @app.route('/api/auth-state')
 def api_auth_state():
     return jsonify({'password_set': auth_password_set(), 'authenticated': session_valid(),
-                    'managed_by_config': bool(config_auth_password())})
+                    'managed_by_config': bool(config_auth_password()),
+                    'wifi_guidance': WIFI_GUIDANCE})
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_auth_login():
@@ -1083,6 +1252,10 @@ def api_auto_sync():
 
 @app.route('/api/wifi/scan')
 def wifi_scan():
+    if STORE_WIFI_LOCKED:
+        return jsonify({'nets': [], 'current': '', 'camera_ssid': CAM_SSID,
+                        'wifi_iface': IFACE, 'wifi_backend': WIFI_BACKEND,
+                        'error': '商店版不提供应用内 Wi-Fi 管理，请在系统设置中连接相机'}), 403
     refresh_wifi_backend(start_wpa=True)
     if not wifi.can_control():
         return jsonify({'nets': [], 'current': '', 'camera_ssid': CAM_SSID,
@@ -1114,6 +1287,8 @@ def wifi_scan():
 
 @app.route('/api/wifi/connect', methods=['POST'])
 def wifi_connect():
+    if STORE_WIFI_LOCKED:
+        return jsonify({'ok': False, 'msg': '商店版不提供应用内 Wi-Fi 管理，请在系统设置中连接相机'}), 403
     refresh_wifi_backend(start_wpa=True)
     if not wifi.can_control():
         return jsonify({'ok': False, 'msg': '当前为手动连接模式'}), 400
@@ -1139,6 +1314,8 @@ def wifi_connect():
 
 @app.route('/api/wifi/forget', methods=['POST'])
 def wifi_forget():
+    if STORE_WIFI_LOCKED:
+        return jsonify({'ok': False, 'msg': '商店版不提供应用内 Wi-Fi 管理'}), 403
     try:
         if os.path.exists(WIFI_FILE):
             os.remove(WIFI_FILE)
@@ -1926,6 +2103,8 @@ def thumb(name):
         try:
             preview = dng_preview(name, tp, 220)
             return send_file(preview, mimetype='image/jpeg') if preview else ('', 204)
+        except HTTPException:
+            raise
         except Exception as e:
             log.warning('thumb(dng) ' + name + ':' + str(e)[:60])
             return ('', 204)
@@ -1964,6 +2143,8 @@ def thumb(name):
     if is_live_name(name):
         try:
             parts = liv_parts(name)
+        except HTTPException:
+            raise
         except Exception as e:
             log.warning('thumb(liv) ' + name + ':' + str(e)[:60])
             return ('', 204)
@@ -1996,6 +2177,8 @@ def thumb(name):
             return Response(data, mimetype='image/jpeg')
         im = Image.open(io.BytesIO(data)); im.thumbnail((220, 220)); im.convert('RGB').save(tp, 'JPEG', quality=75)
         return send_file(tp, mimetype='image/jpeg')
+    except HTTPException:
+        raise
     except Exception as e:
         log.warning('thumb ' + name + ':' + str(e)[:60])
         return ('', 204)

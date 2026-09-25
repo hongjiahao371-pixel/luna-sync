@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{% if document == 'privacy' %}Luna Sync 隐私政策{% else %}Luna Sync 用户协议{% endif %}</title>
 <style>
-:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#dce3ea;--green:#176b58;--bg:#f4f7f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}main{width:min(860px,calc(100% - 32px));margin:36px auto 64px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:36px 44px}h1{margin:0 0 4px;font-size:28px}h2{margin:30px 0 8px;font-size:18px}p,li{color:#344054}.muted{color:var(--muted)}a{color:var(--green)}.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:24px}.back{white-space:nowrap;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:5px 10px}.en{margin-top:34px;padding-top:28px;border-top:1px solid var(--line)}@media(max-width:600px){main{margin:0;width:100%;border:0;border-radius:0;padding:24px 20px}.top{display:block}.back{display:inline-block;margin-top:14px}}
+:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#dce3ea;--green:#176b58;--bg:#f4f7f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}main{width:min(860px,calc(100% - 32px));margin:36px auto 64px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:36px 44px}h1{margin:0 0 4px;font-size:28px}h2{margin:30px 0 8px;font-size:18px}p,li{color:#344054}.muted{color:var(--muted)}a{color:var(--green)}.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:24px}.back{white-space:nowrap;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:5px 10px}.en{margin-top:34px;padding-top:28px;border-top:1px solid var(--line)}table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;color:#344054}th{background:#f8fafc;color:#172033}@media(max-width:600px){main{margin:0;width:100%;border:0;border-radius:0;padding:24px 20px}.top{display:block}.back{display:inline-block;margin-top:14px}table{font-size:13px}}
+.withdraw{margin-top:18px;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:#f8fafc}.withdraw button{border:0;border-radius:6px;background:#b42318;color:#fff;padding:8px 14px;font-size:14px;cursor:pointer}.withdraw .hint{font-size:13px;color:var(--muted);margin:8px 0 0}
 </style>
 </head>
 <body>
@@ -13,32 +14,109 @@
   <div class="top">
     <div>
       <h1>{% if document == 'privacy' %}Luna Sync 隐私政策{% else %}Luna Sync 用户协议{% endif %}</h1>
-      <div class="muted">生效及更新日期：2026年9月22日</div>
+      <div class="muted">{% if document == 'privacy' %}生效及更新日期：2026年9月25日（版本 2026-09-25）{% else %}生效及更新日期：2026年9月25日{% endif %}</div>
     </div>
     <a class="back" href="/">返回应用</a>
   </div>
   {% if document == 'privacy' %}
-  <h2>1. 处理的信息</h2>
-  <p>Luna Sync 在用户自己的 NAS 或电脑中本地处理：Web 访问密码（首次使用时由您设置，仅以 PBKDF2 加密哈希保存在本机状态目录，用于验证登录，不保存明文）；相机 Wi-Fi 名称与密码（仅自部署版本在应用内保存；应用商店版本不收集 Wi-Fi 信息，请在系统 Wi-Fi 设置中连接相机）；无线网卡状态、相机媒体目录、下载进度、缩略图和兼容预览缓存。应用不收集账号、手机号、精确位置、通讯录或支付信息。</p>
-  <h2>2. 处理目的与范围</h2>
-  <p>Wi-Fi 凭据仅用于连接用户选择的 Luna 相机；媒体目录仅用于展示、预览和增量备份；运行状态与缓存仅用于恢复任务和提升预览速度。上述信息仅在用户自己的设备和局域网中处理，不会发送给开发者，也不会上传到云端或第三方。</p>
-  <h2>3. 保存位置与期限</h2>
+  <h2>1. 运营者信息</h2>
+  <p>本应用（Luna Sync）由个人开发者 jvsheng（GitHub 主页：<a href="https://github.com/hongjiahao371-pixel" target="_blank" rel="noopener">hongjiahao371-pixel</a>）开发并运营。</p>
   <ul>
-    <li>Wi-Fi 名称与密码保存在应用状态目录，直至用户点击“清除记住”、清除应用数据或卸载应用。</li>
+    <li>运营者主体：个人开发者 jvsheng，无企业主体；运营者真实身份信息已按绿联云开发者平台要求完成实名认证，并由平台在应用详情页按规定披露。</li>
+    <li>注册/办公地址：不适用（个人开发者，无注册企业及固定经营场所；运营地为中国境内）。</li>
+    <li>个人信息保护负责人：jvsheng。</li>
+    <li>联系方式：邮箱 <a href="mailto:1981940361@qq.com">1981940361@qq.com</a>；或 <a href="https://github.com/hongjiahao371-pixel/luna-sync/issues" target="_blank" rel="noopener">GitHub Issues</a>。</li>
+  </ul>
+  <h2>2. 处理的信息</h2>
+  <p>Luna Sync 在用户自己的 NAS 或电脑中本地处理：Web 访问密码（首次使用时由您设置，仅以 PBKDF2 加密哈希保存在本机状态目录，用于验证登录，不保存明文）；相机 Wi-Fi 名称与密码（<strong>仅自部署版本</strong>提供应用内 Wi-Fi 管理并加密保存；<strong>应用商店版本已彻底移除应用内 Wi-Fi 表单与扫描功能</strong>，不收集 Wi-Fi 名称与密码，请在系统 Wi-Fi 设置中连接相机）；无线网卡状态、相机媒体目录、下载进度、缩略图和兼容预览缓存。应用不收集账号、手机号、精确位置、通讯录或支付信息。</p>
+  <h2>3. 处理目的与范围</h2>
+  <p>Wi-Fi 凭据仅用于连接用户选择的 Luna 相机；媒体目录仅用于展示、预览和增量备份；运行状态与缓存仅用于恢复任务和提升预览速度。上述信息仅在用户自己的设备和局域网中处理，不会发送给开发者，也不会上传到云端或第三方。</p>
+  <h2>4. 已收集个人信息清单</h2>
+  <table>
+    <tr><th>信息类型</th><th>处理场景</th><th>使用目的</th><th>处理方式与存放</th><th>保存期限</th></tr>
+    <tr><td>Web 访问密码</td><td>首次使用设置访问密码</td><td>登录验证</td><td>PBKDF2 单向哈希，存本机状态目录，不保存明文</td><td>直至撤回授权、清除应用数据或卸载应用</td></tr>
+    <tr><td>相机 Wi-Fi 名称与密码</td><td>仅自部署版：应用内连接相机并选择“记住”</td><td>自动连接相机 Wi-Fi</td><td>加密后存本机状态目录；商店版不收集（无表单与扫描接口）</td><td>直至“清除记住”、撤回授权或卸载应用</td></tr>
+    <tr><td>相机媒体目录与文件列表</td><td>连接相机后扫描</td><td>展示、预览与增量同步</td><td>本机内存与状态文件处理</td><td>随应用数据清除</td></tr>
+    <tr><td>已下载素材</td><td>用户主动下载或自动同步</td><td>本地备份与管理</td><td>存放于用户安装时指定的目录</td><td>由用户自主删除，卸载应用不主动删除</td></tr>
+    <tr><td>缩略图与预览缓存</td><td>浏览素材时生成</td><td>加速预览</td><td>本机缓存目录</td><td>“清除缓存”、撤回授权或卸载应用</td></tr>
+    <tr><td>运行设置与同意记录</td><td>用户操作与首次授权</td><td>恢复设置、留存合规记录</td><td>本机状态文件</td><td>清除应用数据或卸载应用</td></tr>
+  </table>
+  <h2>5. 与第三方共享个人信息清单</h2>
+  <p><strong>无。</strong>本应用不向任何第三方共享、转让或公开披露个人信息；不集成广告、分析、统计或数据上报 SDK，不存在向开发者或云端上传用户数据的通道。</p>
+  <h2>6. 保存位置与期限</h2>
+  <ul>
+    <li>Wi-Fi 名称与密码经加密保存在应用状态目录，直至用户点击“清除记住”、撤回授权、清除应用数据或卸载应用。</li>
     <li>设置、同步状态与同意记录保留至用户清除应用状态数据或卸载应用。</li>
-    <li>缩略图和转码预览保留至用户点击“清除缓存”、清除应用数据或卸载应用。</li>
+    <li>缩略图和转码预览保留至用户点击“清除缓存”、撤回授权、清除应用数据或卸载应用。</li>
     <li>已下载素材保存在安装时指定的独立目录，直至用户主动删除；卸载应用不会主动删除该目录中的素材。</li>
   </ul>
-  <h2>4. 用户控制与安全</h2>
-  <p>用户可随时清除记住的 Wi-Fi、预览缓存及已下载素材。Wi-Fi 凭据文件设置为仅容器运行用户可读写。Web 管理界面默认通过 HTTPS（TLS）加密传输，登录密码、Wi-Fi 凭据等信息均在加密通道中传输，会话 Cookie 仅经加密通道发送。请仅在可信局域网内使用应用，并为素材选择独立目录，避免与其他个人数据混存。</p>
-  <h2>5. 第三方服务与联系</h2>
-  <p>应用不集成广告、分析或数据上报 SDK。开源运行组件受各自许可证约束。隐私问题可通过 <a href="https://github.com/hongjiahao371-pixel/luna-sync/issues" target="_blank" rel="noopener">GitHub Issues</a> 联系开发者。</p>
+  <h2>7. 用户权利及行权途径</h2>
+  <ul>
+    <li><strong>访问</strong>：应用内即可查看全部被处理的数据——素材库、下载记录、设置与缓存均在界面中呈现。</li>
+    <li><strong>更正</strong>：可在应用内修改 Wi-Fi 配置（自部署版）与素材目录；如需更正访问密码，可通过“撤回授权”后重新初始化。</li>
+    <li><strong>删除</strong>：可在应用内“清除记住的 Wi-Fi”“清除缓存”、删除素材或选片记录；卸载应用即删除全部应用状态数据（素材目录中的文件除外，由用户自主管理）。</li>
+    <li><strong>撤销同意</strong>：点击下方“撤回授权”，或通过联系方式提出。撤回后应用将清除同意记录、Web 访问密码、登录会话、已保存的 Wi-Fi 凭据及缓存，回到首次使用状态，并停止一切数据处理。</li>
+    <li><strong>注销账号</strong>：本应用不提供账号注册服务，无账号注销事项；卸载应用即等同于删除全部本地数据。</li>
+  </ul>
+  <div class="withdraw">
+    <button type="button" onclick="withdrawConsent(this)">撤回授权并清除应用数据</button>
+    <p class="hint">将清除同意记录、访问密码、登录会话、已保存的 Wi-Fi 凭据、选片/相册记录与缓存；素材目录中的文件不会被删除。操作后需重新授权方可继续使用。</p>
+  </div>
+  <h2>8. 用户控制与安全</h2>
+  <p>用户可随时清除记住的 Wi-Fi、预览缓存及已下载素材。Wi-Fi 凭据以加密形式存储，文件权限设置为仅应用运行用户可读写；对素材与缓存文件的访问经路径合法性校验，不跟踪符号链接。Web 管理界面默认通过 HTTPS（TLS）加密传输，登录密码、Wi-Fi 凭据等信息均在加密通道中传输，会话 Cookie 仅经加密通道发送。请仅在可信局域网内使用应用，并为素材选择独立目录，避免与其他个人数据混存。</p>
+  <h2>9. 跨境传输说明</h2>
+  <p>本应用所有个人信息仅存储和处理于用户自有设备本地，不存在向境外提供个人信息的行为；应用不提供任何云端服务。如用户自行将素材目录或应用数据迁移至境外服务器，属于用户自主行为，与本应用无关。</p>
+  <h2>10. 儿童信息说明</h2>
+  <p>本应用为相机素材备份工具，面向普通用户，不面向儿童运营，不主动收集儿童个人信息，亦无账号注册。如监护人发现本应用意外处理了儿童个人信息，可通过第 13 节渠道联系我们，核实后将立即删除。</p>
+  <h2>11. 第三方组件</h2>
+  <p>应用使用 Docker、Flask、Pillow、ffmpeg 等开源组件。组件受各自开源许可证约束；本应用不会借助这些组件主动将用户信息发送到外部服务。</p>
+  <h2>12. 政策更新</h2>
+  <p>本政策如有实质性变更，将在应用内以弹窗形式重新征求您的同意；您也可以随时在应用内“隐私与协议”查看当前版本。拒绝更新后的政策时，可撤回授权并停止使用。</p>
+  <h2>13. 投诉与举报渠道</h2>
+  <p>如您对本应用个人信息处理有任何疑问、意见或投诉，可通过以下渠道联系我们，我们承诺在 15 个工作日内答复：</p>
+  <ul>
+    <li>个人信息保护负责人邮箱：<a href="mailto:1981940361@qq.com">1981940361@qq.com</a></li>
+    <li>GitHub Issues：<a href="https://github.com/hongjiahao371-pixel/luna-sync/issues" target="_blank" rel="noopener">github.com/hongjiahao371-pixel/luna-sync/issues</a></li>
+  </ul>
+  <p class="muted">您还可以通过绿联云应用中心的应用详情页或平台客服对应用进行投诉、举报，平台将按规定受理处理。</p>
   <section class="en" lang="en">
     <h1>Privacy Policy</h1>
-    <p class="muted">Effective and last updated: September 22, 2026</p>
-    <p>Luna Sync locally processes: the web access password (set by you on first use and stored on the device only as a PBKDF2 hash for login verification; the plaintext is never saved); the camera Wi-Fi SSID and password (saved in-app only in self-hosted deployments — the store-distributed version does not collect Wi-Fi information, connect the camera in your system Wi-Fi settings instead); wireless adapter status, camera media listings, download progress, thumbnails, and compatible preview cache. It does not collect accounts, phone numbers, precise location, contacts, or payment information.</p>
+    <p class="muted">Effective and last updated: September 25, 2026 (version 2026-09-25)</p>
+    <h2>1. Operator</h2>
+    <p>Luna Sync is developed and operated by the individual developer jvsheng (<a href="https://github.com/hongjiahao371-pixel" target="_blank" rel="noopener">hongjiahao371-pixel</a>). The operator has no corporate entity or registered business address; the operator's real identity has been verified and is disclosed by the UGREEN App Center on the app detail page as required by the platform. Personal information protection contact: jvsheng — <a href="mailto:1981940361@qq.com">1981940361@qq.com</a> or <a href="https://github.com/hongjiahao371-pixel/luna-sync/issues" target="_blank" rel="noopener">GitHub Issues</a>.</p>
+    <h2>2. Information Processed</h2>
+    <p>Luna Sync locally processes: the web access password (set by you on first use and stored on the device only as a PBKDF2 hash for login verification; the plaintext is never saved); the camera Wi-Fi SSID and password (<strong>self-hosted deployments only</strong>, stored encrypted — <strong>the store-distributed version has fully removed the in-app Wi-Fi form and scanning feature and does not collect Wi-Fi information</strong>; connect the camera in your system Wi-Fi settings instead); wireless adapter status, camera media listings, download progress, thumbnails, and compatible preview cache. It does not collect accounts, phone numbers, precise location, contacts, or payment information.</p>
+    <h2>3. Purpose and Scope</h2>
     <p>Credentials are used only to connect to the selected Luna camera. Media listings are used only for browsing, preview, and incremental backup. This information stays on the user's device and local network and is not sent to the developer, cloud services, advertisers, or analytics providers.</p>
-    <p>The web console is served over HTTPS (TLS) by default, so the login password and Wi-Fi credentials are transmitted through an encrypted channel, and the session cookie is only sent over that secure channel. Saved Wi-Fi credentials remain until the user clears them or removes the app state. Settings and consent records remain until app data is removed. Preview cache remains until cleared. Downloaded media remains in the chosen folder until the user deletes it; uninstalling the app does not remove that external media folder.</p>
+    <h2>4. List of Personal Information Collected</h2>
+    <ul>
+      <li>Web access password — login verification; PBKDF2 hash stored locally, never the plaintext; kept until withdrawn or app data is cleared.</li>
+      <li>Camera Wi-Fi SSID and password — self-hosted deployments only, encrypted at rest; not collected by the store version; kept until cleared or withdrawn.</li>
+      <li>Camera media listings — browsing, preview, incremental sync; processed in memory and local state files.</li>
+      <li>Downloaded media — stored in the folder you selected; deleted only by you.</li>
+      <li>Thumbnail and preview cache — stored locally until cleared or withdrawn.</li>
+      <li>Settings and consent record — stored locally until app data is cleared.</li>
+    </ul>
+    <h2>5. List of Third-Party Sharing</h2>
+    <p><strong>None.</strong> The app does not share, transfer, or disclose personal information to any third party, and integrates no advertising, analytics, statistics, or telemetry SDK — there is no channel that uploads user data to the developer or any cloud service.</p>
+    <h2>6. Storage and Retention</h2>
+    <p>Wi-Fi credentials are stored encrypted in the app state directory until cleared or withdrawn. Settings and consent records remain until app data is removed. Preview cache remains until cleared. Downloaded media remains in the chosen folder until the user deletes it; uninstalling the app does not remove that external media folder.</p>
+    <h2>7. Your Rights and How to Exercise Them</h2>
+    <ul>
+      <li><strong>Access</strong>: all processed data (library, downloads, settings, cache) is visible inside the app.</li>
+      <li><strong>Correction</strong>: Wi-Fi settings (self-hosted) and the media folder can be changed in the app; the access password can be reset by withdrawing consent and re-initializing.</li>
+      <li><strong>Deletion</strong>: clear saved Wi-Fi, cache, media, and curation records inside the app; uninstalling removes all app state (files in your media folder are kept for you to manage).</li>
+      <li><strong>Withdrawal of consent</strong>: use the "Withdraw consent" action below or contact us. Withdrawing clears the consent record, web password, sessions, saved Wi-Fi credentials, and caches, returns the app to its first-run state, and stops all processing.</li>
+      <li><strong>Account deletion</strong>: not applicable — the app has no account system; uninstalling deletes all local data.</li>
+    </ul>
+    <h2>8. Security</h2>
+    <p>Wi-Fi credentials are stored encrypted with permissions restricted to the app runtime user; file access is path-validated and does not follow symbolic links. The web console is served over HTTPS (TLS) by default, so the login password and Wi-Fi credentials are transmitted through an encrypted channel, and the session cookie is only sent over that secure channel. Use the app only on a trusted local network and select a dedicated Luna Sync media folder.</p>
+    <h2>9. Cross-Border Transfer</h2>
+    <p>All personal information is stored and processed only on the user's own device. The app has no cloud service and does not transfer personal information across borders. Migrating the media folder or app data to an overseas server by yourself is a user action unrelated to the app.</p>
+    <h2>10. Children's Information</h2>
+    <p>The app is a camera media backup tool for general users. It is not directed at children, does not knowingly collect children's personal information, and has no account registration. If you believe a child's information was processed unintentionally, contact us through the channels above and we will delete it promptly.</p>
+    <h2>11. Policy Updates</h2>
+    <p>Material changes to this policy will be presented in-app for your consent again; the current version is always available under "Privacy &amp; Terms" in the app. You may withdraw consent if you do not accept an updated policy.</p>
   </section>
   {% else %}
   <h2>1. 服务说明</h2>
@@ -51,12 +129,21 @@
   <p>本应用依据 MIT License 提供。在适用法律允许的最大范围内，软件按现状提供，不承诺适用于所有设备、相机固件或网络环境。源代码、许可证和问题反馈入口均位于 <a href="https://github.com/hongjiahao371-pixel/luna-sync" target="_blank" rel="noopener">GitHub 项目主页</a>。</p>
   <section class="en" lang="en">
     <h1>User Agreement</h1>
-    <p class="muted">Effective and last updated: September 22, 2026</p>
+    <p class="muted">Effective and last updated: September 25, 2026</p>
     <p>Luna Sync is an open-source, local camera media backup and management tool. It is not officially authorized by, affiliated with, or endorsed by Insta360.</p>
     <p>Use the app only with cameras and networks you own or are authorized to access. Select a dedicated media folder during installation and do not mix personal files or other application data with Luna Sync data. Review the directory and keep backups before deleting, cleaning, remounting, or uninstalling.</p>
     <p>The software is provided under the MIT License and is supplied as-is to the fullest extent permitted by law.</p>
   </section>
   {% endif %}
 </main>
+<script>
+function withdrawConsent(btn){
+  if (!confirm('确定撤回隐私授权并清除应用数据吗？\\n\\n将清除同意记录、访问密码、会话、Wi-Fi 凭据与缓存；素材文件不会被删除。')) return;
+  btn.disabled = true; btn.textContent = '正在清除…';
+  fetch('/api/privacy/withdraw', {method:'POST', headers:{'Content-Type':'application/json'}})
+    .then(function(res){ if (!res.ok) throw new Error(res.status); window.location.href = '/declined'; })
+    .catch(function(){ btn.disabled = false; btn.textContent = '操作失败，请重试'; });
+}
+</script>
 </body>
 </html>

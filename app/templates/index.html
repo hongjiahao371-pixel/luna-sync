@@ -578,7 +578,7 @@ var TEXT={
     asApplied:'已将 {count} 张推荐照片应用为入选',asNoRec:'本次没有达到推荐阈值的照片，可手动挑选',
     addTitle:'添加照片到项目',addSave:'保存',analyzing:'分析中',scoreUnit:'分',
     consentTitle:'使用前请阅读并同意',consentIntro:'Luna Sync 仅在您的设备和局域网内处理以下信息，用于连接相机和备份素材：',
-    consentWifi:'相机 Wi-Fi 名称与密码；密码仅在开启“记住密码”后保存在本机。',consentWebPw:'Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。',consentMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
+    consentWifi:'相机 Wi-Fi 名称与密码；密码仅在开启“记住密码”后保存在本机。',consentWifiStore:'相机 Wi-Fi：商店版不在应用内收集 Wi-Fi 信息，请在系统 Wi-Fi 设置中连接相机。',consentWebPw:'Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。',consentMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
     consentLocal:'所有信息均保存在您的设备中，不会上传给开发者或第三方。',consentRetention:'凭据保留至清除记住或卸载；缓存保留至清除缓存；素材保留至您主动删除。',
     privacyPolicy:'隐私政策',userAgreement:'用户协议',consentCheck:'我已阅读并同意《隐私政策》和《用户协议》',consentAgree:'同意并进入应用',consentDecline:'不同意并退出',
     consentNote:'同意或拒绝完全自愿；选择“不同意并退出”即停止使用，Wi-Fi 扫描、相机访问和自动同步均保持停用。',consentFailed:'保存同意状态失败，请重试',
@@ -624,7 +624,7 @@ var TEXT={
     asApplied:'Applied {count} recommended photos as keeps',asNoRec:'No photos reached the recommendation threshold; cull manually',
     addTitle:'Add photos to project',addSave:'Save',analyzing:'Analyzing',scoreUnit:'pts',
     consentTitle:'Please review and agree before use',consentIntro:'Luna Sync processes the following information only on your device and local network to connect to the camera and back up media:',
-    consentWifi:'Camera Wi-Fi SSID and password. The password is stored locally only when Remember password is enabled.',consentWebPw:'Web access password: stored on this device as a hash only, to protect the console.',consentMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
+    consentWifi:'Camera Wi-Fi SSID and password. The password is stored locally only when Remember password is enabled.',consentWifiStore:'Camera Wi-Fi: the store version does not collect Wi-Fi information in-app; connect the camera in your system Wi-Fi settings.',consentWebPw:'Web access password: stored on this device as a hash only, to protect the console.',consentMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
     consentLocal:'All information stays on your device and is not uploaded to the developer or any third party.',consentRetention:'Credentials remain until cleared or the app is removed; cache remains until cleared; media remains until you delete it.',
     privacyPolicy:'Privacy Policy',userAgreement:'User Agreement',consentCheck:'I have read and agree to the Privacy Policy and User Agreement',consentAgree:'Agree and continue',consentDecline:'Decline and exit',
     consentNote:'Consent is voluntary. Choosing "Decline and exit" stops here; Wi-Fi scanning, camera access, and auto sync remain disabled.',consentFailed:'Failed to save consent. Please try again.',
@@ -721,9 +721,13 @@ function revealImg(im){
   im.addEventListener('load',show,{once:true});
 }
 var _guidedShown=null;
+function applyConsentWifiText(){
+  var guided=STATE.wifi_guidance==='ugos';
+  var el=$('consentWifi');if(el)el.textContent=tr(guided?'consentWifiStore':'consentWifi');
+}
 function applyWifiGuidance(){
   var guided=STATE.wifi_guidance==='ugos';
-  if(_guidedShown!==guided){_guidedShown=guided;$('wifiHint').style.display=guided?'block':'none';$('wifiControls').style.display=guided?'none':'block';$('wifiPill').style.display=guided?'none':''}
+  if(_guidedShown!==guided){_guidedShown=guided;$('wifiHint').style.display=guided?'block':'none';$('wifiControls').style.display=guided?'none':'block';$('wifiPill').style.display=guided?'none':'';applyConsentWifiText()}
   if(guided){$('wifiHintTitle').textContent=tr('wifiHintTitle');$('wifiHintBody').textContent=tr('wifiHintBody');var online=!!STATE.connected,d=$('wifiHintDot');d.className=online?'ok':'bad';$('wifiHintStatus').textContent=tr(online?'hintCamOnline':'hintCamOffline')}
 }
 function applyLang(){
@@ -741,7 +745,7 @@ function applyLang(){
   setTableHeaders('#viewCam .file-table',[null,'preview','fileName','storage','type','date','size','status','actions']);$('empty').textContent=tr('waitingCameraFiles');
   $('lfAll').textContent=tr('all');$('lfImg').textContent=tr('photos');$('lfVid').textContent=tr('videos');$('lvGrid').title=tr('gridView');$('lvGrid').setAttribute('data-tip',tr('gridView'));$('lvGrid').setAttribute('aria-label',tr('gridView'));$('lvTable').title=tr('tableView');$('lvTable').setAttribute('data-tip',tr('tableView'));$('lvTable').setAttribute('aria-label',tr('tableView'));$('lq').placeholder=tr('searchLocal');$('bClearCache').textContent=tr('clearCache');$('bClearCache').title=tr('cacheTitle');
   setTableHeaders('#viewLocal .file-table',['preview','fileName','type','date','size','actions']);$('lempty').textContent=tr('noLocalFiles');$('cur').textContent=tr('idle');$('tot').textContent=tr('totalDone',{count:STATE.completed||0});$('ovc').setAttribute('aria-label',tr('closePreview'));
-  $('consentTitle').textContent=tr('consentTitle');$('consentIntro').textContent=tr('consentIntro');$('consentWifi').textContent=tr('consentWifi');$('consentWebPw').textContent=tr('consentWebPw');$('consentMedia').textContent=tr('consentMedia');$('consentLocal').textContent=tr('consentLocal');$('consentRetention').textContent=tr('consentRetention');$('privacyLink').textContent=tr('privacyPolicy');$('termsLink').textContent=tr('userAgreement');$('consentCheckText').textContent=tr('consentCheck');$('consentAgree').textContent=tr('consentAgree');$('consentDecline').textContent=tr('consentDecline');$('consentNote').textContent=tr('consentNote');
+  $('consentTitle').textContent=tr('consentTitle');$('consentIntro').textContent=tr('consentIntro');$('consentWebPw').textContent=tr('consentWebPw');applyConsentWifiText();$('consentMedia').textContent=tr('consentMedia');$('consentLocal').textContent=tr('consentLocal');$('consentRetention').textContent=tr('consentRetention');$('privacyLink').textContent=tr('privacyPolicy');$('termsLink').textContent=tr('userAgreement');$('consentCheckText').textContent=tr('consentCheck');$('consentAgree').textContent=tr('consentAgree');$('consentDecline').textContent=tr('consentDecline');$('consentNote').textContent=tr('consentNote');
   $('legalTabPrivacy').textContent=tr('privacyPolicy');$('legalTabTerms').textContent=tr('userAgreement');$('legalOv').setAttribute('aria-label',tr('legalViewer'));$('legalFrame').setAttribute('title',tr('legalViewer'));
   $('bCull').textContent=tr('pickBtn');$('bExportPicks').textContent=tr('exportPicks');$('bDelRejects').textContent=tr('delRejects');
   $('pkAll').textContent=tr('pickFilterAll');$('pkUn').textContent=tr('pickFilterUn');$('pkKeep').textContent=tr('pickFilterKeep');$('pkReject').textContent=tr('pickFilterReject');

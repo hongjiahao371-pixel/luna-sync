@@ -179,7 +179,7 @@ class LunaTcpProtocolTests(unittest.TestCase):
         class Session:
             created = 0
 
-            def __init__(self, *_):
+            def __init__(self, *_, **__):
                 self.index = Session.created
                 Session.created += 1
 

@@ -219,10 +219,13 @@ def remember_size(url, size):
         _size_cache[url] = (time.monotonic(), size)
 
 class LunaAuthSession:
-    def __init__(self, host=DEFAULT_HOST, port=6666, timeout=3.0):
+    def __init__(self, host=DEFAULT_HOST, port=6666, timeout=3.0, payloads=None):
         self.host = host
         self.port = port
         self.timeout = timeout
+        # per-device auth data: injected by the caller (state config), never
+        # assumed from a single compiled-in constant when a device overrides it
+        self.payloads = list(payloads) if payloads else list(AUTH_PAYLOADS)
         self._sock = None
         self._buffer = b''
         self._sequence = 0x2c
@@ -275,7 +278,7 @@ class LunaAuthSession:
             self._buffer = b''
 
     def _send_auth(self, sock):
-        for payload in AUTH_PAYLOADS:
+        for payload in self.payloads:
             sock.sendall(payload)
             time.sleep(0.03)
         sock.settimeout(0.05)
@@ -367,8 +370,9 @@ class LunaAuthSession:
         return list(dict.fromkeys(paths))
 
 class LunaClient:
-    def __init__(self, host=DEFAULT_HOST):
+    def __init__(self, host=DEFAULT_HOST, auth_payloads=None):
         self.host = host
+        self.auth_payloads = list(auth_payloads) if auth_payloads else None
         self.roots = [
             dict(root, url="http://" + host + root['path'])
             for root in STORAGE_ROOTS
@@ -377,10 +381,13 @@ class LunaClient:
         self.auth = None
         self._lk = threading.RLock()
 
+    def _new_session(self):
+        return LunaAuthSession(self.host, payloads=self.auth_payloads)
+
     def connect(self):
         with self._lk:
             if self.auth is None:
-                self.auth = LunaAuthSession(self.host)
+                self.auth = self._new_session()
             self.auth.refresh()
 
     def close(self):
@@ -392,12 +399,12 @@ class LunaClient:
     def keepalive(self):
         with self._lk:
             if self.auth is None:
-                self.auth = LunaAuthSession(self.host)
+                self.auth = self._new_session()
             try:
                 self.auth.keepalive()
             except Exception:
                 self.auth.close()
-                self.auth = LunaAuthSession(self.host)
+                self.auth = self._new_session()
                 try:
                     self.auth.keepalive()
                 except Exception:
@@ -410,7 +417,7 @@ class LunaClient:
             last_error = None
             for _ in range(2):
                 if self.auth is None:
-                    self.auth = LunaAuthSession(self.host)
+                    self.auth = self._new_session()
                 try:
                     self.auth.refresh()
                     return self.auth.list_file_paths(location)

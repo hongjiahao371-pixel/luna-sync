@@ -80,6 +80,7 @@ var T={
       consentTitle:'使用前请阅读并同意',
       cWeb:'Web 访问密码：仅以加密哈希保存在本机，用于保护管理界面。',
       cWifi:'相机 Wi-Fi 名称与密码：仅用于连接您选择的相机并保存在本机。',
+      cWifiStore:'相机 Wi-Fi：商店版不在应用内收集 Wi-Fi 信息，请在系统 Wi-Fi 设置中连接相机。',
       cMedia:'相机媒体目录、下载进度、缩略图与兼容预览缓存。',
       cLocal:'所有信息均保存在您的设备中，不会上传给开发者或第三方。',
       consentCheck:'我已阅读并同意《隐私政策》和《用户协议》',
@@ -92,6 +93,7 @@ var T={
       consentTitle:'Please review and agree before use',
       cWeb:'Web access password: stored on this device as a hash only, to protect the console.',
       cWifi:'Camera Wi-Fi SSID and password: used to connect to the camera you choose and stored on this device.',
+      cWifiStore:'Camera Wi-Fi: the store version does not collect Wi-Fi information in-app; connect the camera in your system Wi-Fi settings.',
       cMedia:'Camera media listings, download progress, thumbnails, and compatible preview cache.',
       cLocal:'All information stays on your device and is not uploaded to the developer or any third party.',
       consentCheck:'I have read and agree to the Privacy Policy and User Agreement',
@@ -104,6 +106,10 @@ var LANG=(P==='en'||P==='zh')?P:(localStorage.getItem('lunaLang')||(((navigator.
 if(P==='en'||P==='zh')localStorage.setItem('lunaLang',LANG);
 function t(k){return (T[LANG]&&T[LANG][k])||T.zh[k]||k}
 var MODE='login';
+var WIFI_GUIDED=false;
+function applyWifiLine(){
+  document.getElementById('cWifi').textContent=t(WIFI_GUIDED?'cWifiStore':'cWifi');
+}
 function apply(){
   document.documentElement.lang=LANG==='zh'?'zh-CN':'en';
   document.getElementById('bLang').textContent=LANG==='zh'?'EN':'中文';
@@ -112,7 +118,8 @@ function apply(){
   document.getElementById('pw2Label').textContent=t('confirm');
   document.getElementById('btn').textContent=MODE==='setup'?t('btnSave'):t('btnLogin');
   document.getElementById('title').textContent=MODE==='setup'?t('setpw'):t('login');
-  for(var id in {cWeb:0,cWifi:0,cMedia:0,cLocal:0})document.getElementById(id).textContent=t(id);
+  for(var id in {cWeb:0,cMedia:0,cLocal:0})document.getElementById(id).textContent=t(id);
+  applyWifiLine();
   document.getElementById('consentTitle').textContent=t('consentTitle');
   document.getElementById('consentCheckText').textContent=t('consentCheck');
   document.getElementById('consentAgree').textContent=t('consentAgree');
@@ -162,6 +169,10 @@ document.getElementById('form').onsubmit=function(e){
     });
   }).catch(function(){err.textContent=t('failed');err.style.display='block'});
 };
+fetch('/api/auth-state').then(function(r){return r.json()}).then(function(d){
+  WIFI_GUIDED=d.wifi_guidance==='ugos';
+  applyWifiLine();
+}).catch(function(){});
 fetch('/api/privacy').then(function(r){return r.json()}).then(function(d){
   apply();
   if(d.accepted){showForm()}else{showConsent()}
