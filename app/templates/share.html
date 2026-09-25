@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Luna Sync 精选分享</title>
+<style>
+:root{color-scheme:light;--ink:#1a2430;--muted:#64748b;--line:#dde5ec}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f7f9fa,#eef1f4);color:var(--ink);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 48px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;margin-bottom:4px}
+.mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(180deg,#33404e,#202a35);color:#fff;display:grid;place-items:center;font-size:13px}
+.muted{color:var(--muted);font-size:12.5px;margin:0 0 18px}
+.lock{max-width:380px;margin:48px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px;text-align:center}
+.lock input{width:100%;padding:10px 11px;border:1px solid #d3dde5;border-radius:8px;font:inherit;margin:8px 0 12px}
+.lock button{width:100%;padding:10px;border:0;border-radius:8px;background:#263140;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.err{color:#c4443c;font-size:12.5px;margin-top:8px;display:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.card{position:relative;border-radius:10px;overflow:hidden;background:#fff;border:1px solid var(--line);cursor:zoom-in}
+.card img{width:100%;height:160px;object-fit:cover;display:block;background:#eef1f4}
+.card .name{padding:6px 8px;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.viewer{display:none;position:fixed;inset:0;background:rgba(10,16,24,.92);z-index:9;padding:20px;align-items:center;justify-content:center;flex-direction:column}
+.viewer.open{display:flex}
+.viewer img{max-width:96vw;max-height:82vh;border-radius:8px}
+.viewer .nav{margin-top:12px;display:flex;gap:10px;align-items:center;color:#e8eef4;font-size:13px}
+.viewer .nav button{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;font:inherit}
+.viewer .nav a{color:#fff;text-decoration:none;background:#263140;border-radius:8px;padding:8px 14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="mark">L</span>Luna Sync · 精选分享</div>
+  {% if locked %}
+  <div class="lock">
+    <h3 style="margin:0 0 4px">此分享已加密</h3>
+    <p class="muted" style="margin:0">请输入分享口令查看照片</p>
+    <input id="code" type="password" placeholder="分享口令">
+    <button onclick="unlock()">查看</button>
+    <div class="err" id="err">口令不正确，请重试</div>
+  </div>
+  <script>
+  function unlock(){
+    var code=document.getElementById('code').value;
+    location.href=location.pathname+'?code='+encodeURIComponent(code);
+  }
+  document.getElementById('code').addEventListener('keydown',function(e){if(e.key==='Enter')unlock()});
+  {% if code %}document.getElementById('err').style.display='block';{% endif %}
+  </script>
+  {% else %}
+  <p class="muted">共 {{ count }} 张精选照片 · 点按查看大图并可保存</p>
+  <div class="grid" id="grid"></div>
+  <div class="viewer" id="viewer">
+    <img id="big" src="" alt="">
+    <div class="nav">
+      <button onclick="step(-1)">‹ 上一张</button>
+      <span id="pos"></span>
+      <button onclick="step(1)">下一张 ›</button>
+      <a id="save" href="" download>保存此图</a>
+      <button onclick="document.getElementById('viewer').classList.remove('open')">关闭</button>
+    </div>
+  </div>
+  <script>
+  var TOKEN='{{ token }}',CODE='{{ code }}',COUNT={{ count }};
+  var qs=CODE?('?code='+encodeURIComponent(CODE)):'';
+  function src(i){return '/share/'+TOKEN+'/img/'+i+qs}
+  var grid=document.getElementById('grid');
+  for(var i=0;i<COUNT;i++){
+    (function(i){
+      var c=document.createElement('div');c.className='card';
+      c.innerHTML='<img loading="lazy" src="'+src(i)+'" alt=""><div class="name">照片 '+(i+1)+'</div>';
+      c.onclick=function(){openAt(i)};
+      grid.appendChild(c);
+    })(i);
+  }
+  var cur=0;
+  function openAt(i){cur=i;document.getElementById('big').src=src(i);
+    document.getElementById('save').href=src(i);
+    document.getElementById('pos').textContent=(i+1)+' / '+COUNT;
+    document.getElementById('viewer').classList.add('open');}
+  function step(d){openAt((cur+d+COUNT)%COUNT)}
+  document.addEventListener('keydown',function(e){
+    if(!document.getElementById('viewer').classList.contains('open'))return;
+    if(e.key==='ArrowLeft')step(-1);
+    if(e.key==='ArrowRight')step(1);
+    if(e.key==='Escape')document.getElementById('viewer').classList.remove('open');
+  });
+  </script>
+  {% endif %}
+</div>
+</body>
+</html>

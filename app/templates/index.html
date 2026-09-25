@@ -226,6 +226,8 @@ td.muted{color:var(--muted);font-size:12.5px}
 .as-card.rec::after{content:'推荐';position:absolute;top:6px;right:6px;background:#d09a3a;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
 .as-card.sel{border-color:#263140;box-shadow:0 0 0 2px rgba(38,49,64,.3)}
 .as-actions{display:flex;gap:8px;justify-content:flex-end}
+.vdiv2{width:1px;height:22px;background:rgba(31,44,67,.12);flex:none}
+.daily-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer}
 /* ---------- compare / trash / slideshow ---------- */
 .cmp-wrap{display:flex;gap:12px;align-items:stretch;width:min(96vw,1500px)}
 .cmp-pane{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
@@ -298,6 +300,9 @@ td.muted{color:var(--muted);font-size:12.5px}
   .log-body{min-height:180px}
 }
 @media (max-width:600px){
+  .cull-actions{position:fixed;bottom:0;left:0;right:0;background:rgba(16,24,40,.85);padding:10px 8px;gap:6px}
+  .cull-actions button{flex:1 1 30%;height:46px;font-size:14px}
+  .cull-bar{padding-bottom:70px}
   .consent-backdrop{padding:12px;align-items:flex-end}
   .consent-dialog{padding:22px 18px;max-height:calc(100vh - 24px)}
   .consent-dialog h2{font-size:19px}
@@ -393,6 +398,14 @@ td.muted{color:var(--muted);font-size:12.5px}
         <button id="bDelProject" class="danger">删除项目</button>
         <button id="bAddPhotos" class="secondary">添加照片</button>
         <button id="bAutoSelect" class="primary">自动选片</button>
+        <span class="vdiv2"></span>
+        <button id="bShare" class="secondary">精选分享</button>
+        <button id="bMiniExport" class="secondary">朋友圈包</button>
+        <button id="bCollage" class="secondary">拼图</button>
+        <button id="bXmp" class="ghost">XMP</button>
+        <button id="bStats" class="ghost">统计</button>
+        <label class="daily-toggle"><input type="checkbox" id="dailyBest"> 每日精选</label>
+        <input id="dailyTime" type="time" value="03:00" style="width:104px;height:32px" title="每日精选执行时间">
       </div>
       <div class="locbar">
         <div class="seg">
@@ -502,6 +515,42 @@ td.muted{color:var(--muted);font-size:12.5px}
     <button id="slidePrev" class="secondary">上一张 (←)</button>
     <button id="slideNext" class="secondary">下一张 (→)</button>
     <button id="slideExit" class="ghost">退出 (Esc)</button>
+  </div>
+</div>
+<div id="shareOv" class="overlay">
+  <div class="as-panel" style="width:min(560px,94vw)">
+    <h3 id="shareTitle">精选分享页</h3>
+    <div id="shareStep1">
+      <p style="margin:0 0 10px;color:var(--muted);font-size:12.5px" id="shareIntro"></p>
+      <label style="display:block;font-size:12px;color:var(--muted);margin:8px 0 4px">访问口令（可选）</label>
+      <input id="sharePass" type="text" placeholder="留空则凭链接即可访问" style="width:100%;height:34px">
+      <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 4px">有效期</label>
+      <select id="shareDays" style="width:100%;height:34px">
+        <option value="7">7 天</option><option value="30">30 天</option><option value="0">永久</option>
+      </select>
+      <div class="as-actions" style="margin-top:14px">
+        <button id="shareCreate" class="primary">生成分享链接</button>
+        <button id="shareCancel" class="ghost">取消</button>
+      </div>
+    </div>
+    <div id="shareStep2" style="display:none">
+      <p style="margin:0 0 6px;color:var(--muted);font-size:12.5px">把下面的链接发给朋友（同一局域网可打开）：</p>
+      <input id="shareUrl" readonly style="width:100%;height:36px;font-size:12px" onclick="this.select()">
+      <div class="as-actions" style="margin-top:14px">
+        <button id="shareCopy" class="primary">复制链接</button>
+        <button id="shareDone" class="ghost">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="statsOv" class="overlay">
+  <div class="as-panel">
+    <h3 id="statsTitle">存储统计</h3>
+    <div id="statsBody" style="font-size:13px;color:var(--text2)">…</div>
+    <div class="as-actions">
+      <button id="statsClearCache" class="secondary">清空预览缓存</button>
+      <button id="statsClose" class="ghost">关闭</button>
+    </div>
   </div>
 </div>
 <div id="addProjOv" class="overlay">

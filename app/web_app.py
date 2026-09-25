@@ -5,6 +5,7 @@ import urllib.request, urllib.error
 from flask import Flask, jsonify, request, render_template, send_file, Response, abort, redirect
 from werkzeug.exceptions import HTTPException
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import luna_client
 from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
@@ -68,6 +69,8 @@ PICKS_FILE = os.path.join(STATE_DIR, 'picks.json')
 TRASH_DIR = os.path.join(DLDIR, '.trash')
 TRASH_KEEP_DAYS = 7
 PROJECTS_FILE = os.path.join(STATE_DIR, 'projects.json')
+SHARES_FILE = os.path.join(STATE_DIR, 'shares.json')
+SCORES_CACHE_TTL = 86400
 SCORES_FILE = os.path.join(STATE_DIR, 'scores.json')
 for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR, TRASH_DIR):
     os.makedirs(d, exist_ok=True)
@@ -1169,6 +1172,8 @@ def api_auth_logout():
 
 @app.before_request
 def require_web_auth():
+    if request.path in AUTH_PUBLIC_PATHS or request.path.startswith('/share/'):
+        return None
     if request.path in AUTH_PUBLIC_PATHS or request.path.startswith('/static/'):
         return None
     if session_valid():
@@ -1180,7 +1185,8 @@ def require_web_auth():
 @app.before_request
 def require_privacy_consent():
     public_paths = {'/', '/privacy', '/terms', '/declined', '/api/privacy', '/api/state'} | AUTH_PUBLIC_PATHS
-    if request.path in public_paths or request.path.startswith('/static/'):
+    if request.path in public_paths or request.path.startswith('/static/') \
+            or request.path.startswith('/share/'):
         return None
     if not privacy_accepted():
         return jsonify({'ok': False, 'error': 'privacy_consent_required'}), 451
@@ -1650,6 +1656,396 @@ def api_projects_remove():
         projects[pid]['files'] = sorted(set(projects[pid]['files']) - set(files))
         save_projects(projects)
     return jsonify({'ok': True, 'count': len(projects[pid]['files'])})
+
+# ---------------- mini export / collage / share / xmp / stats / gps / daily best ----------------
+
+def _keep_paths():
+    with picks_lk:
+        picks = load_picks()
+    return sorted(rel for rel, meta in picks.items()
+                  if isinstance(meta, dict) and meta.get('mark') == 'keep')
+
+def _mini_image(src, dst, long_edge, quality):
+    img = Image.open(src)
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    w, h = img.size
+    scale = long_edge / max(w, h)
+    if scale < 1:
+        img = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
+    img.save(dst, 'JPEG', quality=quality)
+
+@app.route('/api/export/mini', methods=['POST'])
+def api_export_mini():
+    """Export keep-marked photos in a WeChat-friendly size, zipped."""
+    data = request.json or {}
+    folder = str(data.get('folder') or '精选-朋友圈').strip()
+    long_edge = int(data.get('size') or 2048)
+    quality = int(data.get('quality') or 85)
+    if not folder or len(folder) > 60 or any(ch in folder for ch in '/\\') or folder in ('.', '..'):
+        return jsonify({'ok': False, 'error': 'invalid_folder'}), 400
+    long_edge = max(480, min(4096, long_edge))
+    quality = max(50, min(95, quality))
+    keepers = _keep_paths()
+    dest_dir = safe_path(DLDIR, folder)
+    os.makedirs(dest_dir, exist_ok=True)
+    exported = missing = 0
+    for rel in keepers:
+        src = local_path(rel)
+        if not src or not rel.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.insp')):
+            missing += 1
+            continue
+        dst = safe_path(dest_dir, os.path.basename(src))
+        if os.path.exists(dst):
+            dst = safe_path(dest_dir, rel.replace('/', '_'))
+        try:
+            _mini_image(src, dst, long_edge, quality)
+            exported += 1
+        except OSError as e:
+            log.warning('mini export ' + rel + ':' + str(e)[:60])
+            missing += 1
+    zip_path = ''
+    if exported and data.get('zip', True):
+        zip_base = safe_path(DLDIR, folder)
+        zip_path = shutil.make_archive(zip_base, 'zip', dest_dir)
+        zip_path = os.path.basename(zip_path)
+    addlog('朋友圈导出 ' + str(exported) + ' 张（长边 ' + str(long_edge) + 'px）')
+    return jsonify({'ok': True, 'exported': exported, 'missing': missing,
+                    'folder': folder, 'zip': zip_path})
+
+@app.route('/api/picks/xmp', methods=['POST'])
+def api_picks_xmp():
+    """Write photography-standard XMP sidecars for keep/reject marks."""
+    data = request.json or {}
+    folder = str(data.get('folder') or 'xmp').strip()
+    if not folder or len(folder) > 60 or any(ch in folder for ch in '/\\') or folder in ('.', '..'):
+        return jsonify({'ok': False, 'error': 'invalid_folder'}), 400
+    with picks_lk:
+        picks = load_picks()
+    dest_dir = safe_path(DLDIR, folder)
+    os.makedirs(dest_dir, exist_ok=True)
+    written = 0
+    for rel, meta in sorted(picks.items()):
+        if not isinstance(meta, dict) or meta.get('mark') not in ('keep', 'reject'):
+            continue
+        src = local_path(rel)
+        if not src:
+            continue
+        rating = 5 if meta['mark'] == 'keep' else 1
+        label = 'Keep' if meta['mark'] == 'keep' else 'Reject'
+        base = os.path.basename(src)
+        xmp = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+               '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
+               ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
+               '  <rdf:Description rdf:about=""\n'
+               '    xmlns:xmp="http://ns.adobe.com/xap/1.0/"\n'
+               '    xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"\n'
+               '    xmp:Rating="%d"\n'
+               '    xmp:Label="%s"\n'
+               '    photoshop:Headline="Luna Sync pick"/>\n'
+               ' </rdf:RDF>\n'
+               '</x:xmpmeta>\n') % (rating, label)
+        dst = safe_path(dest_dir, base + '.xmp')
+        with open(dst, 'w') as xmp_file:
+            xmp_file.write(xmp)
+        written += 1
+    addlog('导出 XMP 标记 ' + str(written) + ' 个')
+    return jsonify({'ok': True, 'written': written, 'folder': folder})
+
+@app.route('/api/collage', methods=['POST'])
+def api_collage():
+    """Compose kept photos into a grid or strip image, fully local."""
+    data = request.json or {}
+    layout = str(data.get('layout') or '3x3')
+    cols = 3 if layout == '3x3' else 2
+    per_page = {'2x2': 4, '3x3': 9, 'strip': 6}.get(layout)
+    if per_page is None:
+        return jsonify({'ok': False, 'error': 'invalid_layout'}), 400
+    paths = [str(x) for x in (data.get('paths') or []) if str(x)][:per_page]
+    if len(paths) < 2:
+        return jsonify({'ok': False, 'error': 'need_two'}), 400
+    cell = 1200
+    if layout == 'strip':
+        cell_h = 900
+        canvas = Image.new('RGB', (cell * len(paths), cell_h), (24, 30, 38))
+    else:
+        rows = -(-len(paths) // cols)
+        canvas = Image.new('RGB', (cell * cols, cell * rows), (24, 30, 38))
+    used = 0
+    for idx, rel in enumerate(paths):
+        src = local_path(rel)
+        if not src:
+            continue
+        try:
+            img = Image.open(src).convert('RGB')
+        except Exception:
+            continue
+        cw = cell if layout != 'strip' else cell
+        ch = cell if layout != 'strip' else cell_h
+        ratio = max(cw / img.width, ch / img.height)
+        img = img.resize((max(1, round(img.width * ratio)), max(1, round(img.height * ratio))),
+                         Image.LANCZOS)
+        left = (img.width - cw) // 2
+        top = (img.height - ch) // 2
+        canvas.paste(img.crop((left, top, left + cw, top + ch)),
+                     ((idx % cols) * cell, (idx // cols) * (ch if layout != 'strip' else 0) if layout != 'strip' else 0))
+        used += 1
+    if used < 2:
+        return jsonify({'ok': False, 'error': 'no_images'}), 400
+    out_dir = safe_path(DLDIR, '拼图')
+    os.makedirs(out_dir, exist_ok=True)
+    out_name = '拼图-%s.jpg' % time.strftime('%Y%m%d-%H%M%S')
+    out_path = safe_path(out_dir, out_name)
+    canvas.save(out_path, 'JPEG', quality=90)
+    addlog('生成拼图 ' + out_name + '（' + str(used) + ' 张，' + layout + '）')
+    return jsonify({'ok': True, 'file': '拼图/' + out_name, 'used': used,
+                    'layout': layout, 'width': canvas.width, 'height': canvas.height})
+
+def _load_shares():
+    data = _load_json_file(SHARES_FILE)
+    return data if isinstance(data, dict) else {}
+
+def _save_shares(data):
+    _save_json_file(SHARES_FILE, data)
+
+def _prune_shares():
+    shares = _load_shares()
+    now = time.time()
+    changed = False
+    for token in list(shares):
+        expires = shares[token].get('expires', 0)
+        if expires and expires < now:
+            del shares[token]
+            changed = True
+    if changed:
+        _save_shares(shares)
+    return shares
+
+@app.route('/api/share/create', methods=['POST'])
+def api_share_create():
+    data = request.json or {}
+    paths = [str(x) for x in (data.get('paths') or []) if str(x)]
+    paths = [x for x in paths if local_path(x)]
+    if len(paths) < 1:
+        return jsonify({'ok': False, 'error': 'paths_required'}), 400
+    passcode = str(data.get('passcode') or '').strip()
+    days = int(data.get('days') or 7)
+    token = secrets.token_urlsafe(12)
+    share = {'paths': paths,
+             'created': int(time.time()),
+             'expires': (int(time.time()) + days * 86400) if days > 0 else 0,
+             'pass': hashlib.sha256(passcode.encode()).hexdigest() if passcode else ''}
+    with alb_lk:
+        shares = _prune_shares()
+        shares[token] = share
+        _save_shares(shares)
+    addlog('创建精选分享页（' + str(len(paths)) + ' 张，口令 ' + ('开' if passcode else '关') + '）')
+    return jsonify({'ok': True, 'token': token, 'count': len(paths)})
+
+@app.route('/api/share/list')
+def api_share_list():
+    with alb_lk:
+        shares = _prune_shares()
+    return jsonify({'shares': [{'token': t, 'count': len(v.get('paths', [])),
+                                'created': v.get('created', 0),
+                                'expires': v.get('expires', 0),
+                                'locked': bool(v.get('pass'))}
+                               for t, v in shares.items()]})
+
+@app.route('/api/share/revoke', methods=['POST'])
+def api_share_revoke():
+    token = str((request.json or {}).get('token') or '')
+    with alb_lk:
+        shares = _load_shares()
+        if token not in shares:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        del shares[token]
+        _save_shares(shares)
+    return jsonify({'ok': True})
+
+def _share_check(token, code):
+    shares = _prune_shares()
+    share = shares.get(token)
+    if not share:
+        return None, False
+    need = share.get('pass') or ''
+    if need and hashlib.sha256(str(code or '').encode()).hexdigest() != need:
+        return share, False
+    return share, True
+
+@app.route('/share/<token>')
+def share_page(token, code=''):
+    share, ok = _share_check(token, request.args.get('code', ''))
+    if not share:
+        abort(404)
+    if not ok:
+        return render_template('share.html', token=token, locked=True,
+                               count=0, items=[], code='')
+    items = [{'idx': i, 'name': os.path.basename(p)}
+             for i, p in enumerate(share.get('paths', []))]
+    return render_template('share.html', token=token, locked=False,
+                           count=len(items), items=items,
+                           code=request.args.get('code', ''))
+
+@app.route('/share/<token>/img/<int:idx>')
+def share_img(token, idx):
+    share, ok = _share_check(token, request.args.get('code', ''))
+    if not share or not ok:
+        abort(403 if share else 404)
+    paths = share.get('paths', [])
+    if idx < 0 or idx >= len(paths):
+        abort(404)
+    p = local_path(paths[idx])
+    if not p:
+        abort(404)
+    return send_file(p, mimetype=mimetypes.guess_type(p)[0] or 'application/octet-stream')
+
+@app.route('/api/storage/stats')
+def api_storage_stats():
+    months = {}
+    total = 0
+    for root, dirs, files in os.walk(DLDIR):
+        dirs[:] = [d for d in dirs if d != '.trash']
+        for f in files:
+            fp = os.path.join(root, f)
+            try:
+                size = os.path.getsize(fp)
+                mtime = os.path.getmtime(fp)
+            except OSError:
+                continue
+            total += size
+            month = time.strftime('%Y-%m', time.localtime(mtime))
+            entry = months.setdefault(month, {'bytes': 0, 'count': 0})
+            entry['bytes'] += size
+            entry['count'] += 1
+    def dir_size(path):
+        size = 0
+        for r, _, fs in os.walk(path):
+            for f in fs:
+                try:
+                    size += os.path.getsize(os.path.join(r, f))
+                except OSError:
+                    pass
+        return size
+    caches = {name: dir_size(path) for name, path in (
+        ('thumb', THUMB_DIR), ('encoded', ENC_DIR),
+        ('liv', LIV_DIR), ('preview', PREVIEW_SRC_DIR))}
+    caches['trash'] = dir_size(TRASH_DIR)
+    months_list = [{'month': k, 'bytes': v['bytes'], 'count': v['count']}
+                   for k, v in sorted(months.items(), reverse=True)]
+    return jsonify({'total': total, 'months': months_list, 'caches': caches})
+
+def _read_gps(path):
+    """Best-effort GPS extraction; returns {} when unavailable."""
+    try:
+        img = Image.open(path)
+        raw = getattr(img, '_getexif', lambda: None)() or {}
+        gps = raw.get_ifd(34853) if hasattr(raw, 'get_ifd') else raw.get(34853)
+        if not gps:
+            return {}
+        def to_deg(val, ref):
+            if not isinstance(val, tuple) or len(val) != 3:
+                return None
+            deg = val[0] / max(1, val[1]) + val[1] / 60 + val[2] / 3600
+            return -deg if ref in ('S', 'W') else deg
+        lat = to_deg(gps.get(2), str(gps.get(1, 'N')))
+        lon = to_deg(gps.get(4), str(gps.get(3, 'E')))
+        if lat is None or lon is None:
+            return {}
+        return {'lat': round(lat, 6), 'lon': round(lon, 6)}
+    except Exception:
+        return {}
+
+@app.route('/api/gps/scan', methods=['POST'])
+def api_gps_scan():
+    paths = [str(x) for x in (request.json or {}).get('paths') or []]
+    out = {}
+    for rel in paths:
+        src = local_path(rel)
+        if not src:
+            continue
+        gps = _read_gps(src)
+        if gps:
+            out[rel] = gps
+    return jsonify({'gps': out})
+
+@app.route('/api/settings/daily-best', methods=['GET'])
+def api_daily_best_get():
+    return jsonify(_daily_settings())
+
+@app.route('/api/settings/daily-best', methods=['POST'])
+def api_daily_best_set():
+    data = request.json or {}
+    save_settings({'daily_best': bool_value(data.get('enabled')),
+                   'daily_best_time': str(data.get('time') or '03:00')})
+    addlog('每日精选 ' + ('开启，时间 ' + str(data.get('time')) if bool_value(data.get('enabled')) else '关闭'))
+    return jsonify({'ok': True, **_daily_settings()})
+
+@app.route('/api/camera/status')
+def api_camera_status():
+    reachable = cam_on()
+    return jsonify({'reachable': reachable, 'storage': None,
+                    'supported': False})
+
+DAILY_FILE = os.path.join(STATE_DIR, 'dailybest.json')
+DAILY_WORKER_STARTED = False
+
+def _daily_settings():
+    settings = load_settings()
+    return {'enabled': bool_value(settings.get('daily_best'), False),
+            'time': str(settings.get('daily_best_time') or '03:00')}
+
+def _daily_best_run():
+    date_key = time.strftime('%Y-%m-%d')
+    paths = [rel for rel in local_files()
+             if rel.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.insp'))]
+    if not paths:
+        return
+    global AUTO
+    with auto_lk:
+        if AUTO['running']:
+            return
+        AUTO.update({'running': True, 'done': 0, 'total': len(paths),
+                     'results': {}, 'recommended': []})
+    _autoselect_worker(paths)
+    with auto_lk:
+        recommended = list(AUTO['recommended'])
+    if not recommended:
+        addlog('每日精选：今日无推荐')
+        return
+    dest_dir = safe_path(DLDIR, os.path.join('今日精选', date_key))
+    os.makedirs(dest_dir, exist_ok=True)
+    copied = 0
+    for rel in recommended:
+        src = local_path(rel)
+        if not src:
+            continue
+        try:
+            shutil.copy2(src, safe_path(dest_dir, os.path.basename(src)))
+            copied += 1
+        except OSError:
+            pass
+    addlog('每日精选 ' + date_key + '：已复制 ' + str(copied) + ' 张推荐到 今日精选/' + date_key)
+
+def _daily_best_worker():
+    while True:
+        try:
+            conf = _daily_settings()
+            if conf['enabled'] and privacy_accepted():
+                last = ''
+                data = _load_json_file(DAILY_FILE)
+                if isinstance(data, dict):
+                    last = str(data.get('last', ''))
+                today = time.strftime('%Y-%m-%d')
+                now = time.strftime('%H:%M')
+                if last != today and now >= conf['time']:
+                    if wifi_on_target() and cam_on():
+                        refresh()
+                    _daily_best_run()
+                    _save_json_file(DAILY_FILE, {'last': today})
+        except Exception as e:
+            log.warning('daily best:' + str(e)[:60])
+        time.sleep(60)
 
 @app.route('/api/download', methods=['POST'])
 def api_dl():
@@ -2272,6 +2668,7 @@ def start_workers():
     threading.Thread(target=camera_keepalive_worker, daemon=True).start()
     threading.Thread(target=dl_worker, daemon=True).start()
     threading.Thread(target=auto_sync_worker, daemon=True).start()
+    threading.Thread(target=_daily_best_worker, daemon=True).start()
     addlog('Luna Sync 启动，WiFi 后端: ' + WIFI_BACKEND + '，无线网卡: ' + (IFACE or '未检测到'))
     addlog('素材保存目录: ' + DLDIR)
 
