@@ -18,6 +18,8 @@ zh-CN:
 9. 新增本地照片挑选模式：逐张全屏审片，入选/落选一键标记（NAS 持久保存），支持筛选查看与一键导出精选、批量删除落选
 10. 新增相册与项目：按拍摄日期自动归组、可命名保存项目并随时添加照片
 11. 新增「自动选片」：本地智能分析照片质量并按连拍聚类推荐最佳照片，一键应用为入选
+12. 导出支持一键画质优化与自定义文字水印
+13. 自动选片可检测疑似模糊照片并一键标记为落选
 12. 删除改为进回收站（保留 7 天可恢复），新增回收站管理面板
 13. 挑选模式新增两张对比 (C) 与入选照片幻灯片放映 (P)
 14. 照片预览显示拍摄参数（机型/镜头/焦距/光圈/快门/ISO）
@@ -35,6 +37,8 @@ en-US:
 9. New local photo culling mode: full-screen review with keep/reject marks persisted on the NAS, plus filtering, one-tap export of keepers, and bulk delete of rejects
 10. Albums and projects: automatic grouping by shoot date, plus named projects you can keep adding photos to
 11. Auto select: fully local photo quality analysis with burst clustering, one tap to apply the recommended keeps
+12. Exports support one-tap auto enhance and custom text watermark
+13. Auto select detects suspected blurry photos for one-tap rejection
 12. Deleted files now go to a trash folder kept for 7 days, with a trash management panel
 13. Cull mode adds side-by-side compare (C) and a slideshow of kept photos (P)
 14. Photo preview now shows shooting parameters (model/lens/focal/aperture/shutter/ISO)
