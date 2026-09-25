@@ -226,6 +226,16 @@ td.muted{color:var(--muted);font-size:12.5px}
 .as-card.rec::after{content:'推荐';position:absolute;top:6px;right:6px;background:#d09a3a;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
 .as-card.sel{border-color:#263140;box-shadow:0 0 0 2px rgba(38,49,64,.3)}
 .as-actions{display:flex;gap:8px;justify-content:flex-end}
+/* ---------- compare / trash / slideshow ---------- */
+.cmp-wrap{display:flex;gap:12px;align-items:stretch;width:min(96vw,1500px)}
+.cmp-pane{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.cmp-pane img{max-width:100%;max-height:78vh;object-fit:contain;background:#05070a;border-radius:10px}
+.cmp-label{color:#e8eef4;font-size:12.5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trash-list{flex:1;min-height:120px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.trash-item{display:flex;gap:10px;align-items:center;background:rgba(38,49,64,.05);border:1px solid rgba(38,49,64,.1);border-radius:8px;padding:8px 12px}
+.trash-item .tname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.trash-item .twhen{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.trash-item button{height:28px;margin-top:0;padding:0 10px;font-size:12px}
 /* ---------- live photo & panorama viewer ---------- */
 .pano-view{position:relative;width:min(94vw,1200px);height:min(66vh,600px);overflow:hidden;background:#05070a;border-radius:10px;cursor:grab;touch-action:none}
 .pano-view:active{cursor:grabbing}
@@ -405,6 +415,7 @@ td.muted{color:var(--muted);font-size:12.5px}
         <button id="bCull" class="tonal">挑选照片</button>
         <button id="bExportPicks" class="secondary">导出入选</button>
         <button id="bDelRejects" class="danger">删除落选</button>
+        <button id="bSlideshow" class="secondary">放映</button>
         <button id="bClearCache" class="ghost" title="清空缩略图和转码预览缓存（不影响已下载文件）">清除缓存</button>
       </div>
       <div id="wall" class="wall"></div>
@@ -465,6 +476,32 @@ td.muted{color:var(--muted);font-size:12.5px}
       <button id="asApply" class="primary">应用推荐为入选</button>
       <button id="asClose" class="ghost">关闭</button>
     </div>
+  </div>
+</div>
+<div id="cmpOv" class="overlay">
+  <div class="cmp-wrap">
+    <div class="cmp-pane"><img id="cmpA" src="" alt=""><div id="cmpALabel" class="cmp-label"></div></div>
+    <div class="cmp-pane"><img id="cmpB" src="" alt=""><div id="cmpBLabel" class="cmp-label"></div></div>
+  </div>
+  <button id="cmpClose" class="close" aria-label="关闭对比">✕</button>
+</div>
+<div id="trashOv" class="overlay">
+  <div class="as-panel">
+    <h3 id="trashTitle">回收站</h3>
+    <div id="trashList" class="trash-list"></div>
+    <div class="as-actions">
+      <button id="trashPurgeAll" class="danger">清空回收站</button>
+      <button id="trashClose" class="ghost">关闭</button>
+    </div>
+  </div>
+</div>
+<div id="slideOv" class="overlay">
+  <div class="cull-stage"><div id="slideMedia" class="cull-media"></div></div>
+  <div class="cull-bar">
+    <span id="slidePos" class="cull-pos"></span>
+    <button id="slidePrev" class="secondary">上一张 (←)</button>
+    <button id="slideNext" class="secondary">下一张 (→)</button>
+    <button id="slideExit" class="ghost">退出 (Esc)</button>
   </div>
 </div>
 <div id="addProjOv" class="overlay">
@@ -534,7 +571,7 @@ var TEXT={
     exportPrompt:'将入选文件导出到下载目录下的文件夹，文件夹名：',exportDone:'已导出 {count} 个文件到「{folder}」',
     delRejectsConfirm:'确定删除 {count} 个落选文件？此操作不可恢复。',rejectsDeleted:'已删除 {count} 个落选文件',
     cullKeep:'入选 (F)',cullReject:'落选 (X)',cullUnmark:'取消 (U)',cullPrev:'上一张 (←)',cullNext:'下一张 (→)',cullExit:'退出 (Esc)',
-    albumAll:'全部',albumByDate:'按拍摄日期',albumProjects:'我的项目',saveProject:'存为项目',delProject:'删除项目',
+    slideshow:'放映',trashBtn:'回收站',restore:'恢复',purgeItem:'彻底删除',purgeAll:'清空回收站',trashTitle:'回收站',trashEmpty:'回收站是空的',purged:'已彻底删除 {count} 项',restored:'已恢复 {count} 个文件',compareFirst:'先标记两张文件再对比（在挑选模式中给两张各按一次 F）',exifNA:'无拍摄参数',albumAll:'全部',albumByDate:'按拍摄日期',albumProjects:'我的项目',saveProject:'存为项目',delProject:'删除项目',
     addPhotos:'添加照片',autoSelect:'自动选片',projNamePrompt:'项目名称：',
     projectSaved:'已创建项目「{name}」（{count} 个文件）',projectDeleted:'项目已删除',
     autosNone:'当前相册没有可分析的照片',asRunning:'分析中',asApply:'应用推荐为入选',asClose:'关闭',
@@ -580,7 +617,7 @@ var TEXT={
     exportPrompt:'Export kept files into a folder inside the download directory. Folder name:',exportDone:'Exported {count} files to "{folder}"',
     delRejectsConfirm:'Delete {count} rejected files? This cannot be undone.',rejectsDeleted:'Deleted {count} rejected files',
     cullKeep:'Keep (F)',cullReject:'Reject (X)',cullUnmark:'Unmark (U)',cullPrev:'Prev (←)',cullNext:'Next (→)',cullExit:'Exit (Esc)',
-    albumAll:'All',albumByDate:'By shoot date',albumProjects:'My projects',saveProject:'Save as project',delProject:'Delete project',
+    slideshow:'Slideshow',trashBtn:'Trash',restore:'Restore',purgeItem:'Delete forever',purgeAll:'Empty trash',trashTitle:'Trash',trashEmpty:'Trash is empty',purged:'Permanently deleted {count} items',restored:'Restored {count} files',compareFirst:'Mark two files as keep (F) in cull mode to compare',exifNA:'No EXIF',albumAll:'All',albumByDate:'By shoot date',albumProjects:'My projects',saveProject:'Save as project',delProject:'Delete project',
     addPhotos:'Add photos',autoSelect:'Auto select',projNamePrompt:'Project name:',
     projectSaved:'Project "{name}" created ({count} files)',projectDeleted:'Project deleted',
     autosNone:'No analyzable photos in this album',asRunning:'Analyzing',asApply:'Apply recommendations as keeps',asClose:'Close',
@@ -710,6 +747,7 @@ function applyLang(){
   $('pkAll').textContent=tr('pickFilterAll');$('pkUn').textContent=tr('pickFilterUn');$('pkKeep').textContent=tr('pickFilterKeep');$('pkReject').textContent=tr('pickFilterReject');
   $('cKeep').textContent=tr('cullKeep');$('cReject').textContent=tr('cullReject');$('cUnmark').textContent=tr('cullUnmark');$('cPrev').textContent=tr('cullPrev');$('cNext').textContent=tr('cullNext');$('cExit').textContent=tr('cullExit');
   $('bSaveProject').textContent=tr('saveProject');$('bDelProject').textContent=tr('delProject');$('bAddPhotos').textContent=tr('addPhotos');$('bAutoSelect').textContent=tr('autoSelect');
+  $('bSlideshow').textContent=tr('slideshow');$('trashTitle').textContent=tr('trashBtn');$('trashPurgeAll').textContent=tr('purgeAll');$('trashClose').textContent=tr('asClose');
   $('asApply').textContent=tr('asApply');$('asClose').textContent=tr('asClose');$('addProjSave').textContent=tr('addSave');$('addProjCancel').textContent=tr('asClose');
   $('addProjTitle').textContent=tr('addTitle');refreshAlbumSel();
   applyWifiGuidance();
@@ -876,6 +914,7 @@ async function scan(){
 }
 function openPrev(it){
   $('ov').classList.add('open');$('ovn').textContent=it.name+' · '+fmt(it.bytes);$('ova').innerHTML='';var box=$('ovc2');
+  showExif(it).then(function(line){if($('ov').classList.contains('open'))$('ovn').textContent=it.name+' · '+fmt(it.bytes)+(line&&line!==tr('exifNA')?' · '+line:'')});
   var key=keyOf(it);
   if(isImg(it.kind)){
     if(it.kind==='LIV'){openLive(key);return}
@@ -1140,8 +1179,83 @@ document.addEventListener('keydown',function(e){
   else if(e.key==='f'||e.key==='F'||e.key==='ArrowUp')cullMarkDo('keep');
   else if(e.key==='x'||e.key==='X'||e.key==='ArrowDown')cullMarkDo('reject');
   else if(e.key==='u'||e.key==='U')cullMarkDo('');
+  else if(e.key==='c'||e.key==='C')openCompare();
+  else if(e.key==='p'||e.key==='P')openSlideshow();
   else if(e.key==='Escape')closeCull();
 });
+var SLIDE={open:false,list:[],idx:0};
+function slideList(){return localFiles().filter(function(x){return pickState(x)==='keep'})}
+function openSlideshow(){
+  SLIDE.list=slideList();SLIDE.idx=0;
+  if(!SLIDE.list.length)return alert(tr('noKeepers'));
+  SLIDE.open=true;$('slideOv').classList.add('open');slideShow();
+}
+function slideShow(){
+  var it=SLIDE.list[SLIDE.idx];if(!it)return;
+  var key=pickKey(it);
+  $('slideMedia').innerHTML=isVid(it.kind)
+    ?'<video src="/video/'+encodeURIComponent(key)+'" controls autoplay loop muted playsinline></video>'
+    :'<img src="/img/'+encodeURIComponent(key)+'" alt="">';
+  $('slidePos').textContent=(SLIDE.idx+1)+'/'+SLIDE.list.length+' · '+it.name;
+}
+function slideMove(d){if(!SLIDE.open||!SLIDE.list.length)return;SLIDE.idx=(SLIDE.idx+d+SLIDE.list.length)%SLIDE.list.length;slideShow()}
+$('bSlideshow').onclick=openSlideshow;
+$('slidePrev').onclick=function(){slideMove(-1)};$('slideNext').onclick=function(){slideMove(1)};
+$('slideExit').onclick=function(){SLIDE.open=false;$('slideOv').classList.remove('open');$('slideMedia').innerHTML=''};
+$('slideOv').onclick=function(e){if(e.target===$('slideOv')){$('slideExit').onclick()}};
+var CMP={keys:[]};
+function openCompare(){
+  var keeps=localFiles().filter(function(x){return pickState(x)==='keep'});
+  if(keeps.length<2)return alert(tr('compareFirst'));
+  CMP.keys=keeps.slice(-2).map(pickKey);
+  $('cmpA').src='/img/'+encodeURIComponent(CMP.keys[0]);
+  $('cmpB').src='/img/'+encodeURIComponent(CMP.keys[1]);
+  var names=keeps.slice(-2).map(function(x){return x.name+(SCORES[pickKey(x)]?(' · '+SCORES[pickKey(x)].score+' '+tr('scoreUnit')):'')});
+  $('cmpALabel').textContent=names[0];$('cmpBLabel').textContent=names[1];
+  $('cmpOv').classList.add('open');
+}
+$('cmpClose').onclick=function(){$('cmpOv').classList.remove('open')};
+$('cmpOv').onclick=function(e){if(e.target===$('cmpOv'))$('cmpClose').onclick()};
+async function openTrash(){
+  $('trashOv').classList.add('open');
+  try{var d=await(await fetch('/api/trash')).json();var box=$('trashList');box.innerHTML='';
+    if(!d.items.length){box.innerHTML='<div style="color:var(--muted);text-align:center;padding:24px">'+tr('trashEmpty')+'</div>';return}
+    d.items.forEach(function(it){
+      var row=document.createElement('div');row.className='trash-item';
+      row.innerHTML='<span class="tname">'+esc(it.name)+'</span>'
+        +'<span class="twhen">'+new Date(it.when).toLocaleString()+'</span>'
+        +'<button class="secondary" data-act="restore">'+tr('restore')+'</button>'
+        +'<button class="danger" data-act="purge">'+tr('purgeItem')+'</button>';
+      row.querySelector('[data-act=restore]').onclick=async function(){
+        try{var r=await(await fetch('/api/trash/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique:it.unique})})).json();
+          if(!r.ok)throw new Error('restore');openTrash();scan();
+        }catch(e){alert(tr('pickFailed'))}};
+      row.querySelector('[data-act=purge]').onclick=async function(){
+        try{await fetch('/api/trash/purge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique:it.unique})});}catch(e){}
+        openTrash();};
+      box.appendChild(row);
+    });
+  }catch(e){}
+}
+$('trashPurgeAll').onclick=async function(){
+  if(!confirm('purge all?'))return;
+  try{await fetch('/api/trash/purge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({unique:'all'})});}catch(e){}
+  openTrash();
+};
+$('trashClose').onclick=function(){$('trashOv').classList.remove('open')};
+$('trashOv').onclick=function(e){if(e.target===$('trashOv'))$('trashClose').onclick()};
+async function showExif(it){
+  try{var d=await(await fetch('/api/exif/'+encodeURIComponent(pickKey(it)))).json();
+    var bits=[];
+    if(d.model)bits.push(d.model);
+    if(d.lens)bits.push(d.lens);
+    if(d.focal)bits.push(d.focal+'mm');
+    if(d.fnumber)bits.push('f/'+d.fnumber);
+    if(d.exposure!==undefined)bits.push(d.exposure+'s');
+    if(d.iso)bits.push('ISO'+d.iso);
+    return bits.length?bits.join(' · '):tr('exifNA');
+  }catch(e){return tr('exifNA')}
+}
 var PROJECTS={},SCORES={},ALBUM={type:'all',date:'',id:''},ADDSEL=new Set(),AS_TIMER=null;
 function itemDateKey(it){
   var m=(it.name||'').match(/20\d{6}/);

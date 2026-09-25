@@ -1,5 +1,5 @@
 import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress
-import hashlib, hmac, ssl, datetime, shutil, zipfile
+import hashlib, hmac, re, ssl, datetime, shutil, zipfile
 import urllib.request, urllib.error
 from flask import Flask, jsonify, request, render_template, send_file, Response, abort, redirect
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -61,9 +61,11 @@ LIV_DIR = os.path.join(STATE_DIR, 'liv')
 WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
 SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
 PICKS_FILE = os.path.join(STATE_DIR, 'picks.json')
+TRASH_DIR = os.path.join(DLDIR, '.trash')
+TRASH_KEEP_DAYS = 7
 PROJECTS_FILE = os.path.join(STATE_DIR, 'projects.json')
 SCORES_FILE = os.path.join(STATE_DIR, 'scores.json')
-for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR):
+for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR, TRASH_DIR):
     os.makedirs(d, exist_ok=True)
 
 lk = threading.RLock()
@@ -1513,13 +1515,26 @@ def api_can():
     return jsonify({'ok': True, 'cancelled': active, 'removed': removed,
                     'auto_sync': auto_sync})
 
-@app.route('/api/file/<path:name>', methods=['DELETE'])
-def api_del(name):
-    p = local_path(name) or safe_path(DLDIR, name)
-    if os.path.exists(p):
-        os.remove(p)
-    if os.path.exists(p + '.part'):
-        os.remove(p + '.part')
+def _purge_trash_item(unique):
+    base = safe_path(TRASH_DIR, unique)
+    if not os.path.isdir(base):
+        return False
+    shutil.rmtree(base, ignore_errors=True)
+    return True
+
+def _trash_purge_expired():
+    try:
+        cutoff = time.time() - TRASH_KEEP_DAYS * 86400
+        for unique in os.listdir(TRASH_DIR):
+            base = safe_path(TRASH_DIR, unique)
+            stamp = os.path.join(base, '.trashed-at')
+            if os.path.exists(stamp) and os.path.getmtime(stamp) < cutoff:
+                shutil.rmtree(base, ignore_errors=True)
+                addlog('回收站清理 ' + unique[:40])
+    except Exception as e:
+        log.warning('trash purge:' + str(e)[:60])
+
+def _drop_side_files(name):
     for extra in (
         safe_path(ENC_DIR, name + '.mp4'),
         safe_path(THUMB_DIR, name + '.jpg'),
@@ -1537,8 +1552,122 @@ def api_del(name):
         picks = load_picks()
         if picks.pop(name, None) is not None:
             save_picks(picks)
-    addlog('删除 ' + name)
-    return jsonify({'ok': True})
+
+@app.route('/api/file/<path:name>', methods=['DELETE'])
+def api_del(name):
+    p = local_path(name) or safe_path(DLDIR, name)
+    # move the original into the trash folder (restorable for N days)
+    if os.path.exists(p):
+        unique = '%d_%s' % (int(time.time() * 1000), re.sub(r'[^A-Za-z0-9._-]', '_', name))
+        base = safe_path(TRASH_DIR, unique)
+        os.makedirs(base, exist_ok=True)
+        try:
+            shutil.move(p, os.path.join(base, os.path.basename(p)))
+            with open(os.path.join(base, '.trashed-at'), 'w') as stamp:
+                stamp.write(name)
+        except OSError:
+            pass
+    if os.path.exists(p + '.part'):
+        os.remove(p + '.part')
+    _drop_side_files(name)
+    addlog('已移入回收站 ' + name)
+    return jsonify({'ok': True, 'trashed': True})
+
+@app.route('/api/trash', methods=['GET'])
+def api_trash_list():
+    _trash_purge_expired()
+    items = []
+    for unique in sorted(os.listdir(TRASH_DIR), reverse=True):
+        base = safe_path(TRASH_DIR, unique)
+        if not os.path.isdir(base):
+            continue
+        try:
+            with open(os.path.join(base, '.trashed-at')) as stamp:
+                orig_name = stamp.read().strip()
+        except Exception:
+            orig_name = unique
+        files = [f for f in os.listdir(base) if not f.startswith('.')]
+        size = sum(os.path.getsize(os.path.join(base, f)) for f in files)
+        items.append({'unique': unique, 'name': orig_name,
+                      'when': int(os.path.getmtime(base)) * 1000, 'size': size})
+    return jsonify({'items': items, 'keepDays': TRASH_KEEP_DAYS})
+
+@app.route('/api/trash/restore', methods=['POST'])
+def api_trash_restore():
+    unique = str((request.json or {}).get('unique') or '')
+    base = safe_path(TRASH_DIR, unique)
+    if not os.path.isdir(base):
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    try:
+        with open(os.path.join(base, '.trashed-at')) as stamp:
+            orig = stamp.read().strip()
+    except Exception:
+        orig = ''
+    restored = []
+    for f in os.listdir(base):
+        if f.startswith('.'):
+            continue
+        src = os.path.join(base, f)
+        # .trashed-at records the original download-relative path, so the
+        # file goes back exactly where it was deleted from
+        rel = orig or f
+        dst = safe_path(DLDIR, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.move(src, dst)
+        restored.append(rel)
+    shutil.rmtree(base, ignore_errors=True)
+    addlog('从回收站恢复 ' + str(len(restored)) + ' 个文件')
+    return jsonify({'ok': True, 'restored': restored})
+
+@app.route('/api/trash/purge', methods=['POST'])
+def api_trash_purge():
+    unique = str((request.json or {}).get('unique') or '')
+    if unique == 'all':
+        count = 0
+        for u in os.listdir(TRASH_DIR):
+            if _purge_trash_item(u):
+                count += 1
+        return jsonify({'ok': True, 'purged': count})
+    if not _purge_trash_item(unique):
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    return jsonify({'ok': True, 'purged': 1})
+
+def _read_exif(path):
+    """Best-effort EXIF summary via PIL; returns {} when unavailable."""
+    try:
+        img = Image.open(path)
+        raw = getattr(img, '_getexif', lambda: None)()
+        if not raw:
+            return {}
+        tag_map = {271: 'make', 272: 'model', 42036: 'lens',
+                   33437: 'fnumber', 34855: 'iso', 37386: 'focal',
+                   33434: 'exposure', 36867: 'taken'}
+        out = {}
+        for tag, key in tag_map.items():
+            if tag not in raw:
+                continue
+            val = raw[tag]
+            if key == 'fnumber' and isinstance(val, tuple):
+                val = round(val[0] / max(1, val[1]), 1)
+            elif key == 'focal' and isinstance(val, tuple):
+                val = round(val[0] / max(1, val[1]))
+            elif key == 'exposure' and isinstance(val, tuple) and val[1]:
+                expo = val[0] / val[1]
+                val = ('1/%d' % round(1 / expo)) if expo and expo < 1 else round(expo, 2)
+            out[key] = val
+        return out
+    except Exception:
+        return {}
+
+@app.route('/api/exif/<path:name>')
+def api_exif(name):
+    p = local_path(name)
+    if not p:
+        item = file_info(name)
+        if not item:
+            abort(404)
+        return jsonify({})
+    return jsonify(_read_exif(p))
 
 def _wipe_dir(d):
     n = t = 0
