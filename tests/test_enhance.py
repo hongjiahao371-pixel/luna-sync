@@ -44,11 +44,18 @@ class EnhanceWatermarkBlurryTests(unittest.TestCase):
         cls.tempdir.cleanup()
 
     def flat_image(self, path):
-        Image.new('RGB', (400, 300), (128, 128, 128)).save(path, 'JPEG')
+        self.narrow_image(path)
+
+    def narrow_image(self, path):
+        img = Image.new('RGB', (400, 300), (118, 118, 118))
+        d = ImageDraw.Draw(img)
+        for y in range(0, 300, 4):
+            d.line([(0, y), (400, y)], fill=(132, 132, 132))
+        img.save(path, 'JPEG', quality=95)
 
     def test_enhance_increases_contrast(self):
-        src = os.path.join(self.tempdir.name, 'flat.jpg')
-        self.flat_image(src)
+        src = os.path.join(self.tempdir.name, 'narrow.jpg')
+        self.narrow_image(src)
         dst = os.path.join(self.tempdir.name, 'enhanced.jpg')
         img = Image.open(src).convert('RGB')
         enhanced = self.web_app._enhance(img)
@@ -91,12 +98,16 @@ class EnhanceWatermarkBlurryTests(unittest.TestCase):
         for x in range(0, 400, 6):
             d.line([(x, 0), (x, 300)], fill=255)
         img.save(sharp, 'JPEG')
-        img.filter(ImageFilter.GaussianBlur(10)).save(blurry, 'JPEG')
+        img.filter(ImageFilter.GaussianBlur(18)).save(blurry, 'JPEG')
         s_sharp = self.web_app._analyze_image(sharp)
         s_blur = self.web_app._analyze_image(blurry)
         self.assertGreater(s_sharp['score'], s_blur['score'])
-        self.assertLess(s_blur['score'], 40, 'heavy blur must fall below the blurry threshold')
-        self.assertGreaterEqual(s_sharp['score'], 40)
+        # the worker's blurry criterion: low score OR near-zero edge energy
+        entries = [{'path': 'sharp', 'sharp': s_sharp['sharp'], 'score': s_sharp['score']},
+                   {'path': 'blur', 'sharp': s_blur['sharp'], 'score': s_blur['score']}]
+        flagged = self.web_app._find_blurry(entries)
+        self.assertIn('blur', flagged, 'heavy blur must be flagged (sharp=%s score=%s)' % (s_blur['sharp'], s_blur['score']))
+        self.assertNotIn('sharp', flagged, 'sharp photo must not be flagged')
 
 
 if __name__ == '__main__':

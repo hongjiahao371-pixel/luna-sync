@@ -10,7 +10,7 @@ from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
 try:
-    from PIL import Image, ImageFilter, ImageStat
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
 except Exception:
     Image = None
 
@@ -1396,6 +1396,8 @@ def api_picks_export():
     folder = str(data.get('folder') or '').strip()
     if not folder or len(folder) > 80 or any(ch in folder for ch in '/\\') or folder in ('.', '..'):
         return jsonify({'ok': False, 'error': 'invalid_folder'}), 400
+    enhance = bool_value(data.get('enhance'))
+    watermark_text = str(data.get('watermark') or '').strip()
     with picks_lk:
         picks = load_picks()
     keepers = [rel for rel, meta in picks.items()
@@ -1412,8 +1414,10 @@ def api_picks_export():
         if os.path.exists(dst):
             dst = safe_path(dest_dir, rel.replace('/', '_'))
         try:
-            shutil.copy2(src, dst)
-            exported += 1
+            if _process_for_export(src, dst, enhance, watermark_text) == 'processed':
+                exported += 1
+            else:
+                exported += 1
         except OSError as e:
             log.warning('picks export ' + rel + ':' + str(e)[:60])
             missing += 1
@@ -1447,7 +1451,7 @@ def load_projects():
 def save_projects(data):
     _save_json_file(PROJECTS_FILE, data)
 
-AUTO = {'running': False, 'done': 0, 'total': 0, 'results': {}, 'recommended': []}
+AUTO = {'running': False, 'done': 0, 'total': 0, 'results': {}, 'recommended': [], 'blurry': []}
 auto_lk = threading.Lock()
 
 def _dhash(image, size=8):
@@ -1462,6 +1466,18 @@ def _dhash(image, size=8):
 
 def _dhash_distance(a, b):
     return bin(a ^ b).count('1')
+
+def _find_blurry(entries):
+    """Flag low-quality shots relative to the batch: an absolute score bar
+    plus a per-batch adaptive sharpness bar (0.3x the best photo's edge
+    energy), so one-off soft shots get caught without false-flagging whole
+    albums shot in flat light."""
+    if not entries:
+        return []
+    max_sharp = max(item['sharp'] for item in entries)
+    sharp_bar = max(4.0, max_sharp * 0.3)
+    return [item['path'] for item in entries
+            if item['score'] < 40 or item['sharp'] < sharp_bar]
 
 def _analyze_image(path):
     """Local technical quality score (0-100) plus metrics. Pure PIL."""
@@ -1529,6 +1545,7 @@ def _autoselect_worker(paths):
                 best_of_cluster[cid] = item
         recommended = sorted({item['path'] for item in best_of_cluster.values()
                               if item['score'] >= 60})
+        blurry = _find_blurry(entries)
         results = {}
         for item in entries:
             results[item['path']] = {k: item[k] for k in
@@ -1555,7 +1572,7 @@ def api_autoselect_start():
         if AUTO['running']:
             return jsonify({'ok': False, 'error': 'already_running'}), 409
         AUTO.update({'running': True, 'done': 0, 'total': len(paths),
-                     'results': {}, 'recommended': []})
+                     'results': {}, 'recommended': [], 'blurry': []})
     threading.Thread(target=_autoselect_worker, args=(paths,), daemon=True).start()
     return jsonify({'ok': True, 'total': len(paths)})
 
@@ -1564,7 +1581,7 @@ def api_autoselect_status():
     with auto_lk:
         return jsonify({'running': AUTO['running'], 'done': AUTO['done'],
                         'total': AUTO['total'], 'results': AUTO['results'],
-                        'recommended': AUTO['recommended']})
+                        'recommended': AUTO['recommended'], 'blurry': AUTO['blurry']})
 
 @app.route('/api/autoselect/apply', methods=['POST'])
 def api_autoselect_apply():
@@ -1659,13 +1676,94 @@ def api_projects_remove():
 
 # ---------------- mini export / collage / share / xmp / stats / gps / daily best ----------------
 
+def _auto_levels(img, clip=0.005):
+    gray = img.convert('L')
+    hist = gray.histogram()
+    total = sum(hist) or 1
+    lo, acc = 0, 0
+    while lo < 255 and acc < total * clip:
+        acc += hist[lo]
+        lo += 1
+    hi, acc = 255, 0
+    while hi > 0 and acc < total * clip:
+        acc += hist[hi]
+        hi -= 1
+    if hi - lo < 10:
+        return img
+    lut = [max(0, min(255, int((i - lo) * 255 / max(1, hi - lo)))) for i in range(256)]
+    return img.point(lut * 3)
+
+def _gray_world(img):
+    stat = ImageStat.Stat(img)
+    means = stat.mean
+    avg = sum(means) / 3
+    if avg <= 0:
+        return img
+    gains = [max(0.8, min(1.25, avg / m)) if m > 0 else 1.0 for m in means]
+    channels = []
+    for ch, gain in zip(img.split(), gains):
+        channels.append(ch.point(lambda i, g=gain: min(255, int(i * g))))
+    return Image.merge('RGB', channels)
+
+def _enhance(img):
+    """One-tap quality fix: white balance, auto levels, mild sharpening."""
+    img = _gray_world(img)
+    img = _auto_levels(img)
+    return img.filter(ImageFilter.UnsharpMask(radius=2, percent=60, threshold=3))
+
+def _watermark_font(size):
+    for cand in (
+        '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/System/Library/Fonts/PingFang.ttc',
+        '/System/Library/Fonts/STHeiti Light.ttc',
+        'C:/Windows/Fonts/msyh.ttc',
+    ):
+        if os.path.exists(cand):
+            try:
+                return ImageFont.truetype(cand, size)
+            except Exception:
+                continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+def _watermark(img, text):
+    font = _watermark_font(max(18, img.width // 36))
+    draw = ImageDraw.Draw(img)
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    margin = max(12, img.width // 40)
+    pos = (img.width - tw - margin, img.height - th - margin - bbox[1])
+    draw.text(pos, text, fill=(255, 255, 255), font=font,
+              stroke_width=max(1, img.width // 800), stroke_fill=(0, 0, 0))
+    return img
+
+def _process_for_export(src, dst, enhance, watermark_text):
+    if enhance or watermark_text:
+        img = Image.open(src)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        if enhance:
+            img = _enhance(img)
+        if watermark_text:
+            img = _watermark(img, watermark_text)
+        img.save(dst, 'JPEG', quality=92)
+        return 'processed'
+    shutil.copy2(src, dst)
+    return 'copied'
+
 def _keep_paths():
     with picks_lk:
         picks = load_picks()
     return sorted(rel for rel, meta in picks.items()
                   if isinstance(meta, dict) and meta.get('mark') == 'keep')
 
-def _mini_image(src, dst, long_edge, quality):
+def _mini_image(src, dst, long_edge, quality, enhance=False, watermark_text=''):
     img = Image.open(src)
     if img.mode != 'RGB':
         img = img.convert('RGB')
@@ -1673,6 +1771,10 @@ def _mini_image(src, dst, long_edge, quality):
     scale = long_edge / max(w, h)
     if scale < 1:
         img = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
+    if enhance:
+        img = _enhance(img)
+    if watermark_text:
+        img = _watermark(img, watermark_text)
     img.save(dst, 'JPEG', quality=quality)
 
 @app.route('/api/export/mini', methods=['POST'])
@@ -1686,6 +1788,8 @@ def api_export_mini():
         return jsonify({'ok': False, 'error': 'invalid_folder'}), 400
     long_edge = max(480, min(4096, long_edge))
     quality = max(50, min(95, quality))
+    enhance = bool_value(data.get('enhance'))
+    watermark_text = str(data.get('watermark') or '').strip()
     keepers = _keep_paths()
     dest_dir = safe_path(DLDIR, folder)
     os.makedirs(dest_dir, exist_ok=True)
@@ -1699,7 +1803,7 @@ def api_export_mini():
         if os.path.exists(dst):
             dst = safe_path(dest_dir, rel.replace('/', '_'))
         try:
-            _mini_image(src, dst, long_edge, quality)
+            _mini_image(src, dst, long_edge, quality, enhance, watermark_text)
             exported += 1
         except OSError as e:
             log.warning('mini export ' + rel + ':' + str(e)[:60])
@@ -2006,7 +2110,7 @@ def _daily_best_run():
         if AUTO['running']:
             return
         AUTO.update({'running': True, 'done': 0, 'total': len(paths),
-                     'results': {}, 'recommended': []})
+                     'results': {}, 'recommended': [], 'blurry': []})
     _autoselect_worker(paths)
     with auto_lk:
         recommended = list(AUTO['recommended'])
