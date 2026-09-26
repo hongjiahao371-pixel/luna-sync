@@ -2266,6 +2266,11 @@ def _plan_montage(video_segs, photo_rels, target):
         used_photos += 1
     return plan
 
+def _has_audio(src):
+    probe = run(['ffprobe', '-v', 'error', '-select_streams', 'a',
+                 '-show_entries', 'stream=index', '-of', 'csv=p=0', src], 30)
+    return probe.returncode == 0 and bool(probe.stdout.strip())
+
 def _render_montage(plan, music_rel, out_path, progress_cb=None):
     """Assemble the montage with one ffmpeg filter graph (xfade + acrossfade)."""
     fade = CUT_FADE if len(plan) > 1 else 0
@@ -2285,10 +2290,15 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
     parts = []
     for i, p in enumerate(plan):
         if p['kind'] == 'video':
+            src = local_path(p['src'])
+            has_audio = _has_audio(src)
             parts.append('[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,'
-                         'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d];'
-                         '[%d:a]aresample=44100,aformat=channel_layouts=stereo[a%d]'
-                         % (i, i, i, i))
+                         'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d];' % (i, i))
+            if has_audio:
+                parts.append('[%d:a]aresample=44100,aformat=channel_layouts=stereo[a%d];'
+                             % (i, i))
+            else:
+                parts.append('aevalsrc=0:c=stereo:s=44100:d=%.2f[a%d];' % (p['dur'], i))
         else:
             dur = p['dur']
             parts.append("[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,"
