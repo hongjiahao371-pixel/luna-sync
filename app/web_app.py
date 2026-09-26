@@ -2212,18 +2212,22 @@ def _pick_highlights(scores, cuts, window=4, max_segments=2):
         seg = scores[max(0, i - 1):i + 2]
         smooth.append(sum(seg) / len(seg))
     windows = []
+    raw_windows = []
     for i in range(0, n - window + 1):
+        raw_mean = sum(scores[i:i + window]) / window
         seg_score = sum(smooth[i:i + window]) / window
         if any(i + 1 <= c <= i + window - 1 for c in cuts):
             continue
         windows.append((seg_score, i))
+        raw_windows.append((raw_mean, i))
     windows.sort(reverse=True)
-    best = windows[0][0] if windows else 0
-    floor = best * 0.25
+    raw_best = max((r for r, _ in raw_windows), default=0)
+    floor = raw_best * 0.3
+    raw_by_pos = {i: r for r, i in raw_windows}
     picked = []
     for seg_score, i in windows:
-        if seg_score < floor:
-            break
+        if raw_by_pos.get(i, 0) < floor:
+            continue
         if all(i + window <= st or i >= st + du for st, du in picked):
             picked.append((float(i), float(window)))
             if len(picked) >= max_segments:
