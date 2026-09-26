@@ -2304,13 +2304,13 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
     for p in plan[:-1]:
         acc += p['dur'] - fade
         offsets.append(acc)
-    vprev, aprev = '[v0]', '[a0]'
+    vprev, aprev = 'v0', 'a0'
     for i in range(1, len(plan)):
-        vout = '[vx%d]' % i
-        aout = '[ax%d]' % i
-        graph += '[%s][%s]xfade=transition=fade:duration=%.2f:offset=%.2f%s;' % (
-            vprev, '[v%d]' % i, fade, offsets[i - 1], vout)
-        graph += '[%s][%s]acrossfade=d=%.2f%s;' % (aprev, '[a%d]' % i, fade, aout)
+        vout = 'vx%d' % i
+        aout = 'ax%d' % i
+        graph += '[%s][%s]xfade=transition=fade:duration=%.2f:offset=%.2f[%s];' % (
+            vprev, 'v%d' % i, fade, offsets[i - 1], vout)
+        graph += '[%s][%s]acrossfade=d=%.2f[%s];' % (aprev, 'a%d' % i, fade, aout)
         vprev, aprev = vout, aout
     graph += '[%s]format=yuv420p[vout]' % vprev
     cmd += ['-filter_complex', graph, '-map', '[vout]']
