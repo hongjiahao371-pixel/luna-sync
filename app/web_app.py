@@ -2315,7 +2315,8 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
     graph += '[%s]format=yuv420p[vout]' % vprev
     cmd += ['-filter_complex', graph, '-map', '[vout]']
     if music_rel:
-        cmd += ['-map', '%d:a' % len(plan), '-t', '%.2f' % sum(p['dur'] for p in plan) - fade * (len(plan) - 1)]
+        total = sum(p['dur'] for p in plan) - fade * (len(plan) - 1)
+        cmd += ['-map', '%d:a' % len(plan), '-t', '%.2f' % total]
     else:
         cmd += ['-map', aprev]
     cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
