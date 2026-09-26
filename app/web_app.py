@@ -1452,6 +1452,8 @@ def save_projects(data):
     _save_json_file(PROJECTS_FILE, data)
 
 AUTO = {'running': False, 'done': 0, 'total': 0, 'results': {}, 'recommended': [], 'blurry': []}
+EDIT = {'running': False, 'phase': '', 'done': 0, 'total': 0, 'error': '', 'output': ''}
+edit_job_lk = threading.Lock()
 auto_lk = threading.Lock()
 
 def _dhash(image, size=8):
@@ -2150,6 +2152,248 @@ def _daily_best_worker():
         except Exception as e:
             log.warning('daily best:' + str(e)[:60])
         time.sleep(60)
+
+# ---------------- auto-cut (auto edit montage) ----------------
+
+CUT_TMP_DIR = os.path.join(STATE_DIR, 'autocut_tmp')
+MUSIC_DIR_NAME = '音乐'
+CUT_FADE = 0.5
+
+def _video_core(name):
+    """Strip camera prefix and extension: VID_20260703_112717_233.mp4 -> 20260703_112717_233"""
+    base = os.path.basename(name)
+    core = base.rsplit('.', 1)[0]
+    if core[:4].upper() in ('VID_', 'IMG_', 'LRV_'):
+        core = core[4:]
+    return core
+
+def _find_lrv(rel):
+    core = _video_core(rel)
+    if not core:
+        return None
+    for cand in local_files():
+        if cand.lower().endswith('.lrv') and _video_core(cand) == core:
+            return cand
+    return None
+
+def _motion_profile(src, tmp_dir, tag):
+    """Per-second motion scores + scene-cut seconds for one video, via 1fps
+    downscaled frames (fast even for 4K sources)."""
+    frames_dir = os.path.join(tmp_dir, 'f' + tag)
+    os.makedirs(frames_dir, exist_ok=True)
+    run(['ffmpeg', '-y', '-i', src, '-vf', 'fps=1,scale=256:-2',
+         '-q:v', '6', os.path.join(frames_dir, 'f_%04d.jpg')], 600)
+    frames = sorted(f for f in os.listdir(frames_dir) if f.endswith('.jpg'))
+    scores, cuts = [], []
+    prev = None
+    for f in frames:
+        img = Image.open(os.path.join(frames_dir, f)).convert('L')
+        if prev is not None:
+            diff = ImageStat.Stat(ImageChops.difference(img, prev)).mean[0]
+            scores.append(diff)
+            if diff > 42:
+                cuts.append(len(scores))
+        prev = img
+    shutil.rmtree(frames_dir, ignore_errors=True)
+    return scores, cuts
+
+def _pick_highlights(scores, cuts, window=4, max_segments=2):
+    n = len(scores)
+    if n == 0:
+        return []
+    if n <= window + 1:
+        return [{'start': 0, 'dur': max(2.0, float(n))}]
+    smooth = []
+    for i in range(n):
+        seg = scores[max(0, i - 1):i + 2]
+        smooth.append(sum(seg) / len(seg))
+    windows = []
+    for i in range(0, n - window + 1):
+        seg_score = sum(smooth[i:i + window]) / window
+        if any(i + 1 <= c <= i + window - 1 for c in cuts):
+            continue
+        windows.append((seg_score, i))
+    windows.sort(reverse=True)
+    picked = []
+    for _, i in windows:
+        if all(i + window <= st or i >= st + du for st, du in picked):
+            picked.append((float(i), float(window)))
+            if len(picked) >= max_segments:
+                break
+    picked.sort()
+    return [{'start': st, 'dur': min(du, float(n - st))} for st, du in picked]
+
+def _video_highlight_segments(rel, tmp_dir, tag):
+    """Analyze one video (LRV proxy preferred) -> highlight segments."""
+    src = local_path(rel)
+    if not src:
+        return []
+    lrv_rel = _find_lrv(rel)
+    analysis_src = local_path(lrv_rel) or src
+    scores, cuts = _motion_profile(analysis_src, tmp_dir, '%d' % abs(hash(rel)) % 100000)
+    return [{'src': rel, 'start': seg['start'], 'dur': seg['dur']}
+            for seg in _pick_highlights(scores, cuts)]
+
+def _plan_montage(video_segs, photo_rels, target):
+    """Interleave video highlights and photos chronologically, trim to target."""
+    photos = list(photo_rels)[:6]
+    plan = []
+    used_photos = 0
+    remaining = float(target)
+    for seg in sorted(video_segs, key=lambda x: (x['start'], x['src'])):
+        dur = min(seg['dur'], 5.0, max(2.0, remaining))
+        if dur < 2.0:
+            break
+        plan.append({'kind': 'video', 'src': seg['src'],
+                     'start': seg['start'], 'dur': dur})
+        remaining -= dur
+        if used_photos < len(photos) and remaining > 3.0:
+            plan.append({'kind': 'photo', 'src': photos[used_photos], 'dur': 3.0})
+            used_photos += 1
+            remaining -= 3.0
+        if remaining <= 2.0:
+            break
+    while used_photos < len(photos) and sum(p['dur'] for p in plan) + 3.0 <= target + 1.0:
+        plan.append({'kind': 'photo', 'src': photos[used_photos], 'dur': 3.0})
+        used_photos += 1
+    return plan
+
+def _render_montage(plan, music_rel, out_path, progress_cb=None):
+    """Assemble the montage with one ffmpeg filter graph (xfade + acrossfade)."""
+    fade = CUT_FADE if len(plan) > 1 else 0
+    cmd = ['ffmpeg', '-y']
+    inputs = []
+    for idx, p in enumerate(plan):
+        if p['kind'] == 'video':
+            src = local_path(p['src'])
+            cmd += ['-ss', '%.2f' % p['start'], '-t', '%.2f' % p['dur'], '-i', src]
+        else:
+            cmd += ['-loop', '1', '-t', '%.2f' % p['dur'], '-i', local_path(p['src'])]
+        inputs.append(p)
+    if music_rel:
+        music_src = local_path(music_rel)
+        if music_src:
+            cmd += ['-i', music_src]
+    parts = []
+    for i, p in enumerate(plan):
+        if p['kind'] == 'video':
+            parts.append('[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,'
+                         'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d];'
+                         '[%d:a]aresample=44100,aformat=channel_layouts=stereo[a%d]'
+                         % (i, i, i, i))
+        else:
+            dur = p['dur']
+            parts.append("[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,"
+                         "crop=1920:1080,fps=30,"
+                         "zoompan=z='min(zoom+0.0009,1.12)':d=1:"
+                         "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080,"
+                         "format=yuv420p,setsar=1[v%d];"
+                         "aevalsrc=0:c=stereo:s=44100:d=%.2f[a%d]"
+                         % (i, i, dur, i))
+    graph = ';'.join(parts) + ';'
+    offsets = []
+    acc = 0.0
+    for p in plan[:-1]:
+        acc += p['dur'] - fade
+        offsets.append(acc)
+    vprev, aprev = '[v0]', '[a0]'
+    for i in range(1, len(plan)):
+        vout = '[vx%d]' % i
+        aout = '[ax%d]' % i
+        graph += '[%s][%s]xfade=transition=fade:duration=%.2f:offset=%.2f%s;' % (
+            vprev, '[v%d]' % i, fade, offsets[i - 1], vout)
+        graph += '[%s][%s]acrossfade=d=%.2f%s;' % (aprev, '[a%d]' % i, fade, aout)
+        vprev, aprev = vout, aout
+    graph += '[%s]format=yuv420p[vout]' % vprev
+    cmd += ['-filter_complex', graph, '-map', '[vout]']
+    if music_rel:
+        cmd += ['-map', '%d:a' % len(plan), '-t', '%.2f' % sum(p['dur'] for p in plan) - fade * (len(plan) - 1)]
+    else:
+        cmd += ['-map', aprev]
+    cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+            '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+            '-shortest', out_path]
+    result = run(cmd, 3600)
+    if result.returncode != 0 or not os.path.exists(out_path):
+        raise RuntimeError('ffmpeg montage failed: ' + (result.stderr or '')[-300:])
+
+def _autocut_worker(video_rels, photo_rels, target, music_rel):
+    tmp_dir = CUT_TMP_DIR
+    try:
+        os.makedirs(tmp_dir, exist_ok=True)
+        with edit_job_lk:
+            EDIT.update({'running': True, 'phase': 'analyze', 'done': 0,
+                         'total': len(video_rels), 'error': '', 'output': ''})
+        segs = []
+        for idx, rel in enumerate(video_rels):
+            try:
+                segs.extend(_video_highlight_segments(rel, tmp_dir, str(idx)))
+            except Exception as e:
+                log.warning('autocut analyze ' + rel + ':' + str(e)[:80])
+            with edit_job_lk:
+                EDIT['done'] = idx + 1
+        if not segs:
+            with edit_job_lk:
+                EDIT['running'] = False
+                EDIT['error'] = 'no_highlights'
+            return
+        plan = _plan_montage(segs, photo_rels, target)
+        if len(plan) < 1:
+            with edit_job_lk:
+                EDIT['running'] = False
+                EDIT['error'] = 'plan_empty'
+            return
+        with edit_job_lk:
+            EDIT['phase'] = 'build'
+        out_dir = safe_path(DLDIR, '自动剪辑')
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = safe_path(out_dir, '剪辑-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
+        _render_montage(plan, music_rel, out_path)
+        with edit_job_lk:
+            EDIT['running'] = False
+            EDIT['output'] = '自动剪辑/' + os.path.basename(out_path)
+        addlog('自动剪辑完成：' + os.path.basename(out_path) + '（' + str(len(plan)) + ' 段）')
+    except Exception as e:
+        log.warning('autocut:' + str(e)[:120])
+        with edit_job_lk:
+            EDIT['running'] = False
+            EDIT['error'] = str(e)[:200]
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+@app.route('/api/music/list')
+def api_music_list():
+    music_dir = safe_path(DLDIR, MUSIC_DIR_NAME)
+    items = []
+    if os.path.isdir(music_dir):
+        for f in sorted(os.listdir(music_dir)):
+            if f.lower().endswith(('.mp3', '.m4a', '.aac', '.wav')):
+                items.append(f)
+    return jsonify({'music': items})
+
+@app.route('/api/autocut/start', methods=['POST'])
+def api_autocut_start():
+    data = request.json or {}
+    videos = [str(x) for x in (data.get('videos') or []) if str(x)]
+    photos = [str(x) for x in (data.get('photos') or []) if str(x)]
+    target = int(data.get('duration') or 30)
+    target = max(15, min(60, target))
+    music = str(data.get('music') or '')
+    if music:
+        music = MUSIC_DIR_NAME + '/' + music
+    if not videos:
+        return jsonify({'ok': False, 'error': 'no_videos'}), 400
+    with edit_job_lk:
+        if EDIT['running']:
+            return jsonify({'ok': False, 'error': 'already_running'}), 409
+    threading.Thread(target=_autocut_worker,
+                     args=(videos, photos, target, music), daemon=True).start()
+    return jsonify({'ok': True, 'videos': len(videos), 'target': target})
+
+@app.route('/api/autocut/status')
+def api_autocut_status():
+    with edit_job_lk:
+        return jsonify(EDIT)
 
 @app.route('/api/download', methods=['POST'])
 def api_dl():
