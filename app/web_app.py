@@ -2295,11 +2295,13 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
             vparts.append('[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,'
                           'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d]' % (i, i))
         else:
-            vparts.append("[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,"
-                          "crop=1920:1080,fps=30,"
-                          "zoompan=z='min(zoom+0.0009,1.12)':d=1:"
-                          "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080,"
-                          "format=yuv420p,setsar=1[v%d]" % (i, i))
+            # zoompan is incompatible with xfade downstream; use a slow
+            # crop pan instead (output size stays constant, xfade-safe)
+            drift = 40 if i % 2 == 0 else -40
+            vparts.append("[%d:v]scale=2200:-2,crop=2200:1238,"
+                          "crop=1920:1080:x='(iw-ow)/2+%.0f*t':y='(ih-oh)/2',"
+                          "fps=30,format=yuv420p,setsar=1[v%d]"
+                          % (i, drift, i))
     graph = ';'.join(vparts)
     vprev = 'v0'
     if len(plan) > 1:
