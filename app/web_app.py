@@ -2272,8 +2272,8 @@ def _has_audio(src):
     return probe.returncode == 0 and bool(probe.stdout.strip())
 
 def _render_montage(plan, music_rel, out_path, progress_cb=None):
-    """Assemble the montage: video highlights + Ken Burns photos, xfade
-    transitions, optional music track replacing segment audio."""
+    """Assemble the montage: video highlights + Ken Burns photos joined by
+    xfade transitions; optional music track replaces segment audio."""
     fade = CUT_FADE if len(plan) > 1 else 0
     cmd = ['ffmpeg', '-y']
     for idx, p in enumerate(plan):
@@ -2288,63 +2288,59 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
             cmd += ['-i', music_src]
         else:
             music_rel = ''
+    # visual chain (always): every segment normalized, then xfade joins
     vparts = []
-    chain_labels = []
     for i, p in enumerate(plan):
         if p['kind'] == 'video':
-            src = local_path(p['src'])
-            has_audio = _has_audio(src)
             vparts.append('[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,'
                           'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d]' % (i, i))
-            if not music_rel:
-                if has_audio:
-                    vparts.append('[%d:a]aresample=44100,aformat=channel_layouts=stereo[a%d]'
-                                  % (i, i))
-                else:
-                    vparts.append('aevalsrc=0:c=stereo:s=44100:d=%.2f[a%d]'
-                                  % (p['dur'], i))
         else:
             vparts.append("[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,"
                           "crop=1920:1080,fps=30,"
                           "zoompan=z='min(zoom+0.0009,1.12)':d=1:"
                           "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080,"
                           "format=yuv420p,setsar=1[v%d]" % (i, i))
-            if not music_rel:
-                vparts.append('aevalsrc=0:c=stereo:s=44100:d=%.2f[a%d]'
-                              % (p['dur'], i))
-        chain_labels.append('v%d' % i)
     graph = ';'.join(vparts)
-    if not music_rel and len(plan) > 1:
-        fade_local = CUT_FADE
+    vprev = 'v0'
+    if len(plan) > 1:
         offsets = []
         acc = 0.0
         for p in plan[:-1]:
-            acc += p['dur'] - fade_local
+            acc += p['dur'] - fade
             offsets.append(acc)
-        vprev = 'v0'
-        aprev = 'a0'
         for i in range(1, len(plan)):
             vout = 'vx%d' % i
             graph += ';[{}][{}]xfade=transition=fade:duration={:.2f}:offset={:.2f}[{}]'.format(
-                vprev, 'v%d' % i, fade_local, offsets[i - 1], vout)
-            graph += ';[{}][{}]acrossfade=d={:.2f}[{}]'.format(
-                aprev, 'a%d' % i, fade_local, 'ax%d' % i)
-            vprev, aprev = vout, 'ax%d' % i
-        graph += ';[%s]format=yuv420p[vout]' % vprev
-        cmd += ['-filter_complex', graph, '-map', '[vout]', '-map', '[%s]' % aprev]
-    elif not music_rel:
-        graph += ';[%s]format=yuv420p[vout]' % chain_labels[0]
-        graph += (';aevalsrc=0:c=stereo:s=44100:d=%.2f[asig]' % plan[0]['dur']) if plan[0]['kind'] != 'video' else ''
-        cmd += ['-filter_complex', graph, '-map', '[vout]']
-        if plan and plan[0]['kind'] == 'video':
-            cmd += ['-map', '[a0]']
-        elif 'asig' in graph:
-            cmd += ['-map', '[asig]']
-    else:
-        graph += ';[%s]format=yuv420p[vout]' % chain_labels[0]
+                vprev, 'v%d' % i, fade, offsets[i - 1], vout)
+            vprev = vout
+    graph += ';[%s]format=yuv420p[vout]' % vprev
+    cmd += ['-filter_complex', graph, '-map', '[vout]']
+    # audio: music track if provided, otherwise mix of segment audio/silence
+    if music_rel:
         total = sum(p['dur'] for p in plan) - fade * (len(plan) - 1)
-        cmd += ['-filter_complex', graph, '-map', '[vout]',
-                '-map', '%d:a' % len(plan), '-t', '%.2f' % total]
+        cmd += ['-map', '%d:a' % len(plan), '-t', '%.2f' % total]
+    elif len(plan) == 1:
+        if plan[0]['kind'] == 'video' and _has_audio(local_path(plan[0]['src'])):
+            cmd += ['-map', '0:a']
+        else:
+            cmd += ['-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+                    '-shortest', '-map', '1:a']
+    else:
+        aparts = []
+        for i, p in enumerate(plan):
+            if p['kind'] == 'video' and _has_audio(local_path(p['src'])):
+                aparts.append('[%d:a]aresample=44100,aformat=channel_layouts=stereo,'
+                              'atrim=0:%.2f[a%d]' % (i, p['dur'], i))
+            else:
+                aparts.append('aevalsrc=0:c=stereo:s=44100:d=%.2f[a%d]'
+                              % (p['dur'], i))
+        graph += ';' + ';'.join(aparts)
+        aprev = 'a0'
+        for i in range(1, len(plan)):
+            graph += ';[{}][{}]acrossfade=d={:.2f}[{}]'.format(
+                aprev, 'a%d' % i, fade, 'ax%d' % i)
+            aprev = 'ax%d' % i
+        cmd += ['-map', '[%s]' % aprev]
     cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
             '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
             '-shortest', out_path]
