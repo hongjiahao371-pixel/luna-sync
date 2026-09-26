@@ -10,7 +10,7 @@ from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
 try:
-    from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageStat
 except Exception:
     Image = None
 
@@ -2194,6 +2194,10 @@ def _motion_profile(src, tmp_dir, tag):
             if diff > 42:
                 cuts.append(len(scores))
         prev = img
+    # a scene cut's diff is the shot change itself, not motion: neutralize it
+    for c in cuts:
+        if 0 < c - 1 < len(scores):
+            scores[c - 1] = 0.0
     shutil.rmtree(frames_dir, ignore_errors=True)
     return scores, cuts
 
@@ -2214,8 +2218,12 @@ def _pick_highlights(scores, cuts, window=4, max_segments=2):
             continue
         windows.append((seg_score, i))
     windows.sort(reverse=True)
+    best = windows[0][0] if windows else 0
+    floor = best * 0.25
     picked = []
-    for _, i in windows:
+    for seg_score, i in windows:
+        if seg_score < floor:
+            break
         if all(i + window <= st or i >= st + du for st, du in picked):
             picked.append((float(i), float(window)))
             if len(picked) >= max_segments:
@@ -2229,8 +2237,8 @@ def _video_highlight_segments(rel, tmp_dir, tag):
     if not src:
         return []
     lrv_rel = _find_lrv(rel)
-    analysis_src = local_path(lrv_rel) or src
-    scores, cuts = _motion_profile(analysis_src, tmp_dir, '%d' % abs(hash(rel)) % 100000)
+    analysis_src = (local_path(lrv_rel) if lrv_rel else None) or src
+    scores, cuts = _motion_profile(analysis_src, tmp_dir, str(abs(hash(rel)) % 100000))
     return [{'src': rel, 'start': seg['start'], 'dur': seg['dur']}
             for seg in _pick_highlights(scores, cuts)]
 
