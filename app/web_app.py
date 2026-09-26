@@ -2279,8 +2279,8 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
             cmd += ['-loop', '1', '-t', '%.2f' % p['dur'], '-i', local_path(p['src'])]
         inputs.append(p)
     if music_rel:
-        music_src = local_path(music_rel)
-        if music_src:
+        music_src = safe_path(DLDIR, music_rel)
+        if os.path.isfile(music_src):
             cmd += ['-i', music_src]
     parts = []
     for i, p in enumerate(plan):
