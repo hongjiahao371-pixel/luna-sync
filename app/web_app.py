@@ -2293,12 +2293,11 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
             src = local_path(p['src'])
             has_audio = _has_audio(src)
             parts.append('[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,'
-                         'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d];' % (i, i))
-            if has_audio:
-                parts.append('[%d:a]aresample=44100,aformat=channel_layouts=stereo[a%d];'
-                             % (i, i))
-            else:
-                parts.append('aevalsrc=0:c=stereo:s=44100:d=%.2f[a%d];' % (p['dur'], i))
+                         'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d];'
+                         '[%d:a]aresample=44100,aformat=channel_layouts=stereo[a%d]'
+                         % (i, i, i, i))
+            if not has_audio:
+                parts[-1] += ';aevalsrc=0:c=stereo:s=44100:d=%.2f[a%d]' % (p['dur'], i)
         else:
             dur = p['dur']
             parts.append("[%d:v]scale=1920:1080:force_original_aspect_ratio=increase,"
