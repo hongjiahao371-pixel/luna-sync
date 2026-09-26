@@ -233,6 +233,9 @@ td.muted{color:var(--muted);font-size:12.5px}
 .daily-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer}
 .toggle-btn{height:32px;background:rgba(255,255,255,.6);color:var(--text2);border:1px solid rgba(255,255,255,.9);box-shadow:0 2px 8px -2px rgba(31,44,67,.1);font-size:12.5px}
 .toggle-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.card.pick-sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(38,49,64,.3),0 10px 26px -14px rgba(31,44,67,.2)}
+.card.pick-sel .badge{background:var(--accent);color:#fff}
+.pick-count{font-size:12.5px;color:var(--accent);font-weight:600;display:none}
 /* ---------- toast & styled dialog ---------- */
 #toastBox{position:fixed;top:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .toast{background:#fff;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;
@@ -457,6 +460,8 @@ td.muted{color:var(--muted);font-size:12.5px}
         </div>
         <input id="lq" class="grow" type="text" placeholder="搜索本地文件名">
         <span class="stat" id="lstat">-</span>
+        <button id="bPickMode" class="tonal">选择模式</button>
+        <button id="bAddToProj" class="secondary" style="display:none">添加到项目</button>
         <button id="bCull" class="tonal">挑选照片</button>
         <button id="bExportPicks" class="secondary">导出入选</button>
         <button id="bDelRejects" class="danger">删除落选</button>
@@ -1004,7 +1009,8 @@ function render(){
     row.classList.toggle('selected',SEL.has(key));row.querySelector('input').onclick=function(e){e.stopPropagation()};row.querySelector('input').onchange=function(){this.checked?SEL.add(key):SEL.delete(key);row.classList.toggle('selected',this.checked);updateMetrics()};
     row.querySelector('.act-preview').onclick=function(e){e.stopPropagation();openPrev(it)};
     var del=row.querySelector('.act-delete');if(del)del.onclick=async function(e){e.stopPropagation();if(confirm(tr('deleteLocalConfirm'))){await fetch('/api/file/'+encodeURIComponent(key),{method:'DELETE'});SEL.delete(key);scan()}};
-    row.onclick=function(){openPrev(it)};
+    if(PICKMODE){row.onclick=function(e){toggleCardSel(key,row)}}
+    else row.onclick=function(){openPrev(it)};
     tb.appendChild(row);
   });
   updateMetrics();
@@ -1020,7 +1026,7 @@ function renderWall(list){
   var w=$('wall');w.innerHTML='';
   if(!list.length){w.innerHTML='<div class="wall-empty">'+(localFiles().length?tr('noMatchedFiles'):(tr('noLocalFiles')+'<br><small>'+tr('localHint')+'</small>'))+'</div>';return}
   list.forEach(function(it){
-    var c=document.createElement('div');c.className='card';
+    var c=document.createElement('div');c.className='card'+(PICKSEL.has(key)?' pick-sel':'');
     var hasThumb=isImg(it.kind)||isVid(it.kind);
     var key=keyOf(it);
     var img=hasThumb?('<img src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" decoding="async" alt="">'):('<div class="ph">'+(isVid(it.kind)?'▶':esc(it.kind))+'</div>');
@@ -1031,7 +1037,8 @@ function renderWall(list){
     c.innerHTML=img+badge+play+pk+del+'<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+fmt(it.bytes)+' · '+esc(fmtDate(it.date,it.time))+'</span></div>';
     var im=c.querySelector('img');if(im){revealImg(im);im.onerror=function(){var ph=document.createElement('div');ph.className='ph';ph.textContent=isVid(it.kind)?'▶':it.kind;im.replaceWith(ph)}}
     c.querySelector('.del').onclick=function(e){e.stopPropagation();delLocal(key)};
-    c.onclick=function(){openPrev(it)};
+    if(PICKMODE){c.onclick=function(e){toggleCardSel(key,c)}}
+    else c.onclick=function(){openPrev(it)};
     w.appendChild(c);
   });
 }
@@ -1275,6 +1282,20 @@ $('bLang').onclick=function(){LANG=LANG==='zh'?'en':'zh';localStorage.setItem('l
 $('bLogout').onclick=function(){fetch('/api/auth/logout',{method:'POST'}).catch(function(){}).then(function(){location.href='/login'})};
 var CUTMUSIC=[];
 var LAST_AS={recommended:[],blurry:[]};
+var PICKSEL=new Set(),PICKMODE=false;
+function togglePickMode(){
+  PICKMODE=!PICKMODE;
+  if(!PICKMODE)PICKSEL.clear();
+  var btn=$('bPickMode');btn.textContent=PICKMODE?'退出选择':'选择模式';
+  btn.classList.toggle('on',PICKMODE);
+  var add=$('bAddToProj');if(add)add.style.display=PICKMODE?'':'none';
+  renderLocal();
+}
+function toggleCardSel(key,card){
+  if(PICKSEL.has(key)){PICKSEL.delete(key);card.classList.remove('pick-sel')}
+  else{PICKSEL.add(key);card.classList.add('pick-sel')}
+}
+var PICKSEL={open:false,list:[],idx:0};
 var CULL={open:false,list:[],idx:0};
 function cullList(){return localFiles().filter(function(x){if(x.kind==='LRV')return false;if((x.name||'').toLowerCase().indexOf('.lrv')===x.name.length-4)return false;return true})}
 function openCull(){
@@ -1324,6 +1345,26 @@ $('bExportPicks').onclick=async function(){
     if(!d.ok)throw new Error('export');
     alert(tr('exportDone',{count:d.exported,folder:d.folder}));scan();
   }catch(e){alert(tr('pickFailed'))}
+};
+$('bAddToProj').onclick=async function(){
+  if(!PICKSEL.size)return uiToast('请先在网格中点选照片','warn');
+  var files=Array.from(PICKSEL);
+  var procs=Object.keys(PROJECTS).map(function(id){return {id:id,name:PROJECTS[id].name}});
+  var name=await uiPrompt('添加到项目','输入项目名称（已有项目会直接追加）：','');
+  if(name===null||!name.trim())return;
+  name=name.trim();
+  var match=procs.find(function(p){return p.name===name});
+  if(match){
+    try{await fetch('/api/projects/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:match.id,files:files})});}catch(e){}
+    uiToast('已添加 '+files.length+' 个文件到「'+name+'」','ok');
+  }else{
+    try{var d=await(await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,files:files})})).json();
+      if(!d.ok)throw new Error('create');
+      await loadProjects();refreshAlbumSel();
+      uiToast('已创建项目「'+name+'」（'+files.length+' 个文件）','ok');
+    }catch(e){uiToast('创建项目失败','err')}
+  }
+  PICKSEL.clear();renderLocal();
 };
 $('bDelRejects').onclick=async function(){
   var list=localFiles().filter(function(x){return pickState(x)==='reject'});
