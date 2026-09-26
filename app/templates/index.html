@@ -225,10 +225,32 @@ td.muted{color:var(--muted);font-size:12.5px}
 .as-card .as-score{position:absolute;top:6px;left:6px;background:rgba(38,49,64,.85);color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
 .as-card.rec::after{content:'推荐';position:absolute;top:6px;right:6px;background:#d09a3a;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
 .as-card.sel{border-color:#263140;box-shadow:0 0 0 2px rgba(38,49,64,.3)}
+.as-sum{flex:1;background:rgba(38,49,64,.05);border:1px solid rgba(38,49,64,.1);border-radius:10px;padding:10px 14px;text-align:center}
+.as-sum b{display:block;font-size:22px;color:var(--ink)}
+.as-sum.ok b{color:#1d8a5f}.as-sum.warn b{color:#b7791f}
+.as-sum span{font-size:11.5px;color:var(--muted)}
 .as-actions{display:flex;gap:8px;justify-content:flex-end}
 .daily-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer}
 .toggle-btn{height:32px;background:rgba(255,255,255,.6);color:var(--text2);border:1px solid rgba(255,255,255,.9);box-shadow:0 2px 8px -2px rgba(31,44,67,.1);font-size:12.5px}
 .toggle-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+/* ---------- toast & styled dialog ---------- */
+#toastBox{position:fixed;top:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:#fff;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;
+  box-shadow:0 10px 30px rgba(16,24,40,.18);padding:11px 16px;font-size:13px;color:var(--ink);
+  max-width:340px;opacity:0;transform:translateX(24px);transition:opacity .25s,transform .25s}
+.toast.show{opacity:1;transform:none}
+.toast.ok{border-left-color:#2f9e6e}.toast.warn{border-left-color:#d09a3a}.toast.err{border-left-color:var(--danger)}
+.dlg-backdrop{position:fixed;inset:0;z-index:150;background:rgba(16,24,40,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+.dlg{background:#fff;border-radius:12px;box-shadow:0 24px 70px rgba(16,24,40,.35);width:min(420px,92vw);
+  padding:22px;font:inherit;color:var(--ink)}
+.dlg h3{margin:0 0 8px;font-size:16px;font-weight:600}
+.dlg .dlg-msg{color:var(--text2);font-size:13px;line-height:1.6;white-space:pre-line}
+.dlg input[type=text]{width:100%;height:36px;margin-top:10px;padding:0 10px;border:1px solid #d3dde5;border-radius:8px;font:inherit}
+.dlg-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.dlg-actions button{height:36px;padding:0 16px;border-radius:8px;border:1px solid var(--line);
+  background:#fff;color:var(--text2);font:inherit;font-weight:500;cursor:pointer}
+.dlg-actions button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.dlg-actions button:hover{filter:brightness(.97)}
 .vdiv2{width:1px;height:22px;background:rgba(31,44,67,.12);flex:none}
 .daily-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);cursor:pointer}
 /* ---------- compare / trash / slideshow ---------- */
@@ -458,6 +480,18 @@ td.muted{color:var(--muted);font-size:12.5px}
     <div><small id="tot">本次完成 0</small><div class="bar"><i id="pt"></i></div></div>
   </div>
 </footer>
+<div id="toastBox"></div>
+<div id="dlgBox" class="dlg-backdrop" style="display:none">
+  <div class="dlg">
+    <h3 id="dlgH"></h3>
+    <div class="dlg-msg" id="dlgM"></div>
+    <input type="text" id="dlgI" style="display:none">
+    <div class="dlg-actions">
+      <button id="dlgCancel">取消</button>
+      <button id="dlgOk" class="primary">确定</button>
+    </div>
+  </div>
+</div>
 <div id="ov" class="overlay">
   <button id="ovc" class="close" aria-label="关闭预览" title="关闭预览"><svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   <div id="ovc2" class="viewer"></div>
@@ -491,18 +525,34 @@ td.muted{color:var(--muted);font-size:12.5px}
   </div>
 </div>
 <div id="asOv" class="overlay">
-  <div class="as-panel">
-    <h3 id="asTitle">自动选片</h3>
-    <div id="asProg"><div class="bar"><i id="asBar"></i></div><span id="asStat" class="cull-pos">0/0</span></div>
-    <div id="asResults" class="as-results"></div>
-    <div id="asBlurry" style="display:none">
-      <div style="font-size:12.5px;color:var(--danger);font-weight:600;margin-bottom:6px" id="asBlurryTitle"></div>
-      <div id="asBlurryList" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-      <button id="asBlurryApply" class="danger" style="margin-top:8px;height:32px;padding:0 12px;font-size:12.5px"></button>
+  <div class="as-panel" style="width:min(1080px,96vw)">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3 style="margin:0">自动选片</h3>
+      <span id="asStat" style="font-size:12.5px;color:var(--muted)">0/0</span>
     </div>
-    <div class="as-actions">
-      <button id="asApply" class="primary">应用推荐为入选</button>
-      <button id="asClose" class="ghost">关闭</button>
+    <div id="asProg">
+      <div class="bar" style="margin-top:0"><i id="asBar"></i></div>
+      <div id="asPhase" style="margin-top:8px;font-size:12.5px;color:var(--muted)">分析照片质量…</div>
+    </div>
+    <div id="asSummary" style="display:none">
+      <div style="display:flex;gap:10px;margin:4px 0 12px">
+        <div class="as-sum ok"><b id="asRecCount">0</b><span>推荐入选</span></div>
+        <div class="as-sum warn"><b id="asBlurCount">0</b><span>疑似模糊</span></div>
+        <div class="as-sum"><b id="asScanned">0</b><span>已分析</span></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">推荐照片（按评分排序）</div>
+      <div id="asResults" class="as-results" style="max-height:300px"></div>
+      <div id="asBlurry" style="display:none;margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:12.5px;color:var(--danger);font-weight:600" id="asBlurryTitle"></span>
+          <button id="asBlurryApply" style="height:30px;padding:0 12px;font-size:12px;color:var(--danger);background:#fff;border:1px solid rgba(196,68,60,.35);border-radius:6px;cursor:pointer">标记为落选</button>
+        </div>
+        <div id="asBlurryList" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div class="as-actions" style="margin-top:14px">
+        <button id="asApply" class="primary">应用推荐为入选</button>
+        <button id="asClose" class="ghost">关闭</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1377,6 +1427,44 @@ async function showExif(it){
     return bits.length?bits.join(' · '):tr('exifNA');
   }catch(e){return tr('exifNA')}
 }
+function uiToast(msg, type){
+  type = type || 'ok';
+  var box = document.getElementById('toastBox');
+  var t = document.createElement('div');
+  t.className = 'toast show ' + type;
+  t.textContent = msg;
+  box.appendChild(t);
+  setTimeout(function(){ t.classList.remove('show'); setTimeout(function(){ t.remove(); }, 300); }, 3200);
+}
+var _dlgResolve = null;
+function uiDialog(opts){
+  opts = opts || {};
+  return new Promise(function(resolve){
+    _dlgResolve = resolve;
+    $('dlgH').textContent = opts.title || '';
+    $('dlgM').textContent = opts.msg || '';
+    $('dlgM').style.display = opts.msg ? 'block' : 'none';
+    var inp = $('dlgI');
+    if (opts.input !== undefined){
+      inp.style.display = 'block'; inp.value = opts.input;
+      setTimeout(function(){ inp.focus(); inp.select(); }, 60);
+    } else { inp.style.display = 'none'; }
+    $('dlgOk').textContent = opts.okText || '确定';
+    $('dlgCancel').style.display = opts.cancel === false ? 'none' : '';
+    $('dlgBox').style.display = 'flex';
+  });
+}
+function dlgClose(val){
+  $('dlgBox').style.display = 'none';
+  var r = _dlgResolve; _dlgResolve = null;
+  if (r) r(val);
+}
+$('dlgOk').onclick = function(){ dlgClose($('dlgI').style.display === 'none' ? true : $('dlgI').value); };
+$('dlgCancel').onclick = function(){ dlgClose(null); };
+$('dlgI').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('dlgOk').click(); });
+function uiConfirm(title, msg){ return uiDialog({title: title, msg: msg}).then(function(v){ return v === true; }); }
+function uiPrompt(title, msg, value){ return uiDialog({title: title, msg: msg, input: value || ''}).then(function(v){ return v === null ? null : v; }); }
+function uiAlert(title, msg){ return uiDialog({title: title, msg: msg, cancel: false}); }
 var PROJECTS={},SCORES={},ALBUM={type:'all',date:'',id:''},ADDSEL=new Set(),AS_TIMER=null;
 function itemDateKey(it){
   var m=(it.name||'').match(/20\d{6}/);
@@ -1471,6 +1559,9 @@ $('bAutoSelect').onclick=async function(){
   var pollAs=async function(){
     try{var st=await(await fetch('/api/autoselect/status')).json();
       $('asStat').textContent=st.done+'/'+st.total;
+      var ph3=$('asPhase');if(ph3)ph3.textContent='分析照片质量…';
+      var ph2=$('asPhase');if(ph2)ph2.textContent='分析照片质量…';
+      $('asPhase').textContent=tr('asRunning')+'…';
       $('asBar').style.width=(st.total?Math.round(st.done/st.total*100):0)+'%';
       if(st.results&&Object.keys(st.results).length)SCORES=st.results;
       if(!st.running){
@@ -1486,6 +1577,21 @@ $('bAutoSelect').onclick=async function(){
 };
 function renderAsResults(recommended){
   stopAsTimer();
+  var sumEl=document.getElementById('asSummary');if(sumEl)sumEl.style.display='block';
+  var progEl=document.getElementById('asProg');if(progEl)progEl.style.display='none';
+  var rc3=document.getElementById('asRecCount');if(rc3)rc3.textContent=recommended.length;
+  var bc4=document.getElementById('asBlurCount');if(bc4)bc4.textContent=(LAST_AS.blurry||[]).length;
+  var sc3=document.getElementById('asScanned');if(sc3)sc3.textContent=Object.keys(SCORES).length;
+  var sumEl=document.getElementById('asSummary');if(sumEl)sumEl.style.display='block';
+  var progEl=document.getElementById('asProg');if(progEl)progEl.style.display='none';
+  var rc2=document.getElementById('asRecCount');if(rc2)rc2.textContent=recommended.length;
+  var bc3=document.getElementById('asBlurCount');if(bc3)bc3.textContent=(LAST_AS.blurry||[]).length;
+  var sc2=document.getElementById('asScanned');if(sc2)sc2.textContent=Object.keys(SCORES).length;
+  var sum=$('asSummary');if(sum)sum.style.display='block';
+  var prog=$('asProg');if(prog)prog.style.display='none';
+  $('asRecCount').textContent=recommended.length;
+  $('asBlurCount').textContent=(LAST_AS.blurry||[]).length;
+  $('asScanned').textContent=Object.keys(SCORES).length;
   var blurry=LAST_AS.blurry||[];
   var sec=document.getElementById('asBlurry');
   if(sec){
@@ -1496,7 +1602,7 @@ function renderAsResults(recommended){
       $('asBlurryApply').onclick=async function(){
         try{await fetch('/api/autoselect/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:blurry})});}catch(e){}
         LAST_AS.blurry=[];renderAsResults(LAST_AS.recommended||[]);
-        alert(tr('blurryDone',{count:blurry.length}));
+        uiToast(tr('blurryDone',{count:blurry.length}),'ok');
       };
     }else{sec.style.display='none'}
   }
@@ -1534,7 +1640,7 @@ function renderAsResults(recommended){
     if(!apply_paths.length)apply_paths=recommended;
     if(!apply_paths.length)return alert(tr('asNoRec'));
     try{await fetch('/api/autoselect/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:apply_paths})});}catch(e){}
-    await loadPicks();closeAs();renderLocal();alert(tr('asApplied',{count:apply_paths.length}));
+    await loadPicks();closeAs();renderLocal();uiToast(tr('asApplied',{count:apply_paths.length}),'ok');
   };
 }
 $('asClose').onclick=closeAs;
@@ -1544,9 +1650,9 @@ function loadExportOpt(){try{var v=JSON.parse(localStorage.getItem('lunaExportOp
 function saveExportOpt(){localStorage.setItem('lunaExportOpt',JSON.stringify(EXPORT_OPT))}
 function updateExportToggles(){var e=$('bEnhance');if(e)e.classList.toggle('on',EXPORT_OPT.enhance);var w=$('bWatermark');if(w)w.classList.toggle('on',!!EXPORT_OPT.watermark)}
 function dailyConf(){return {enabled:!!($('dailyBest')&&$('dailyBest').checked),time:($('dailyTime')&&$('dailyTime').value)||'03:00'}}
-var bm=$('bMiniExport');if(bm)bm.onclick=async function(){var keeps=localFiles().filter(function(x){return pickState(x)==='keep'});if(!keeps.length)return alert(tr('shareNoKeepers'));var folder=prompt(tr('miniPrompt'),'精选-朋友圈');if(!folder)return;try{var d=await(await fetch('/api/export/mini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:folder,size:2048,quality:85,zip:true,enhance:EXPORT_OPT.enhance,watermark:EXPORT_OPT.watermark})})).json();if(!d.ok)throw new Error('mini');alert(tr('miniDone',{count:d.exported,zip:d.zip}))}catch(e){alert(tr('pickFailed'))}};
-var bc2=$('bCollage');if(bc2)bc2.onclick=async function(){var keeps=localFiles().filter(function(x){return pickState(x)==='keep'}).map(pickKey);if(keeps.length<2)return alert(tr('shareNoKeepers'));var layout=prompt(tr('collageLayout'),'3x3');if(!layout)return;layout=layout.trim().toLowerCase();try{var d=await(await fetch('/api/collage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:keeps,layout:layout})})).json();if(!d.ok)return alert(tr('pickFailed'));alert(tr('collageDone',{file:d.file}));scan()}catch(e){alert(tr('pickFailed'))}};
-var bx=$('bXmp');if(bx)bx.onclick=async function(){var marks=localFiles().filter(function(x){return pickState(x)}).length;if(!marks)return alert(tr('shareNoKeepers'));try{var d=await(await fetch('/api/picks/xmp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:'xmp'})})).json();if(!d.ok)throw new Error('xmp');alert(tr('xmpDone',{count:d.written,folder:d.folder}))}catch(e){alert(tr('pickFailed'))}};
+var bm=$('bMiniExport');if(bm)bm.onclick=async function(){var keeps=localFiles().filter(function(x){return pickState(x)==='keep'});if(!keeps.length)return alert(tr('shareNoKeepers'));var folder=prompt(tr('miniPrompt'),'精选-朋友圈');if(!folder)return;try{var d=await(await fetch('/api/export/mini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:folder,size:2048,quality:85,zip:true,enhance:EXPORT_OPT.enhance,watermark:EXPORT_OPT.watermark})})).json();if(!d.ok)throw new Error('mini');uiToast(tr('miniDone',{count:d.exported,zip:d.zip}),'ok')}catch(e){alert(tr('pickFailed'))}};
+var bc2=$('bCollage');if(bc2)bc2.onclick=async function(){var keeps=localFiles().filter(function(x){return pickState(x)==='keep'}).map(pickKey);if(keeps.length<2)return alert(tr('shareNoKeepers'));var layout=prompt(tr('collageLayout'),'3x3');if(!layout)return;layout=layout.trim().toLowerCase();try{var d=await(await fetch('/api/collage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:keeps,layout:layout})})).json();if(!d.ok)return alert(tr('pickFailed'));uiToast(tr('collageDone',{file:d.file}),'ok');scan()}catch(e){alert(tr('pickFailed'))}};
+var bx=$('bXmp');if(bx)bx.onclick=async function(){var marks=localFiles().filter(function(x){return pickState(x)}).length;if(!marks)return alert(tr('shareNoKeepers'));try{var d=await(await fetch('/api/picks/xmp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:'xmp'})})).json();if(!d.ok)throw new Error('xmp');uiToast(tr('xmpDone',{count:d.written,folder:d.folder}),'ok')}catch(e){alert(tr('pickFailed'))}};
 var bs3=$('bStats');if(bs3)bs3.onclick=async function(){$('statsOv').classList.add('open');$('statsBody').textContent='…';try{var d=await(await fetch('/api/storage/stats')).json();var total=d.months.reduce(function(a,m){return a+m.count},0);var html='<div>素材总大小：'+humanBytes(d.total)+'（'+total+' 个文件）</div>';html+='<div style="margin:8px 0 4px;font-weight:600">按月：</div>';d.months.slice(0,12).forEach(function(m){html+='<div>'+m.month+' · '+humanBytes(m.bytes)+' · '+m.count+'</div>'});html+='<div style="margin:8px 0 4px;font-weight:600">缓存与回收站：</div>';Object.keys(d.caches).forEach(function(k){html+='<div>'+k+' · '+humanBytes(d.caches[k])+'</div>'});$('statsBody').innerHTML=html}catch(e){$('statsBody').textContent=tr('pickFailed')}};
 var stc=$('statsClose');if(stc)stc.onclick=function(){$('statsOv').classList.remove('open')};
 var scc=$('statsClearCache');if(scc)scc.onclick=function(){var f=$('bClearCache');if(f)f.onclick();$('statsOv').classList.remove('open')};
