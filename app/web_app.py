@@ -2311,10 +2311,13 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
                           'crop=1920:1080,fps=30,format=yuv420p,setsar=1[v%d]' % (i, i))
         else:
             # zoompan is incompatible with xfade downstream; use a slow
-            # crop pan instead (output size stays constant, xfade-safe)
+            # crop pan instead (output size stays constant, xfade-safe).
+            # cover-scale first: -2 style scaling leaves ultra-wide sources
+            # (2:1 equirect) shorter than the crop target
             drift = 40 if i % 2 == 0 else -40
-            vparts.append("[%d:v]scale=2200:-2,crop=2200:1238,"
-                          "crop=1920:1080:x='(iw-ow)/2+%.0f*t':y='(ih-oh)/2',"
+            vparts.append("[%d:v]scale=2200:1238:force_original_aspect_ratio=increase,"
+                          "crop=2200:1238,"
+                          "crop=1920:1080:x='(iw-ow)/2%+.0f*t':y='(ih-oh)/2',"
                           "fps=30,format=yuv420p,setsar=1[v%d]"
                           % (i, drift, i))
     graph = ';'.join(vparts)
@@ -2331,17 +2334,21 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
                 vprev, 'v%d' % i, fade, offsets[i - 1], vout)
             vprev = vout
     graph += ';[%s]format=yuv420p[vout]' % vprev
-    cmd += ['-filter_complex', graph, '-map', '[vout]']
-    # audio: music track if provided, otherwise mix of segment audio/silence
+    # audio: music track if provided, otherwise mix of segment audio/silence.
+    # the graph must be finished BEFORE it is referenced in cmd below —
+    # appending to the string after cmd captured it silently drops the chain
+    maps = ['-map', '[vout]']
+    out_opts = []
     if music_rel:
         total = sum(p['dur'] for p in plan) - fade * (len(plan) - 1)
-        cmd += ['-map', '%d:a' % len(plan), '-t', '%.2f' % total]
+        maps += ['-map', '%d:a' % len(plan)]
+        out_opts += ['-t', '%.2f' % total]
     elif len(plan) == 1:
         if plan[0]['kind'] == 'video' and _has_audio(local_path(plan[0]['src'])):
-            cmd += ['-map', '0:a']
+            maps += ['-map', '0:a']
         else:
-            cmd += ['-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
-                    '-shortest', '-map', '1:a']
+            cmd += ['-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo']
+            maps += ['-map', '1:a']
     else:
         aparts = []
         for i, p in enumerate(plan):
@@ -2357,13 +2364,14 @@ def _render_montage(plan, music_rel, out_path, progress_cb=None):
             graph += ';[{}][{}]acrossfade=d={:.2f}[{}]'.format(
                 aprev, 'a%d' % i, fade, 'ax%d' % i)
             aprev = 'ax%d' % i
-        cmd += ['-map', '[%s]' % aprev]
+        maps += ['-map', '[%s]' % aprev]
+    cmd += ['-filter_complex', graph] + maps
     cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
             '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
-            '-shortest', out_path]
+            '-shortest'] + out_opts + [out_path]
     result = run(cmd, 3600)
     if result.returncode != 0 or not os.path.exists(out_path):
-        raise RuntimeError('ffmpeg montage failed: ' + (result.stderr or '')[-300:])
+        raise RuntimeError('ffmpeg montage failed: ' + (result.stderr or '')[-800:])
 
 def _autocut_worker(video_rels, photo_rels, target, music_rel):
     tmp_dir = CUT_TMP_DIR
