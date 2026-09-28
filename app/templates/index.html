@@ -1291,6 +1291,7 @@ function togglePickMode(){
   var add=$('bAddToProj');if(add)add.style.display=PICKMODE?'':'none';
   renderLocal();
 }
+$('bPickMode').onclick=togglePickMode;
 function toggleCardSel(key,card){
   if(PICKSEL.has(key)){PICKSEL.delete(key);card.classList.remove('pick-sel')}
   else{PICKSEL.add(key);card.classList.add('pick-sel')}
