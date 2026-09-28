@@ -1,6 +1,6 @@
 services:
   luna-sync:
-    image: jvsheng/luna-sync:upk-v130-https-20260918
+    image: jvsheng/luna-sync:upk-v130-feb2026
     restart: unless-stopped
     environment:
       - LUNA_CONFIG=/app/config.json
@@ -35,7 +35,7 @@ services:
       - ./state:/state
 
   luna-sync-open:
-    image: jvsheng/luna-sync:upk-v130-https-20260918
+    image: jvsheng/luna-sync:upk-v130-feb2026
     restart: unless-stopped
     depends_on:
       - luna-sync
