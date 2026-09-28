@@ -1529,7 +1529,7 @@ def _autoselect_worker(paths):
         entries = []
         for idx, rel in enumerate(paths):
             src = local_path(rel)
-            if not src or not rel.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.insp')):
+            if not src or rel.upper().endswith('.DNG') or not rel.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.insp')):
                 continue
             try:
                 metrics = _analyze_image(src)
@@ -1547,12 +1547,23 @@ def _autoselect_worker(paths):
                 best_of_cluster[cid] = item
         recommended = sorted({item['path'] for item in best_of_cluster.values()
                               if item['score'] >= 60})
-        blurry = _find_blurry(entries)
         results = {}
         for item in entries:
             results[item['path']] = {k: item[k] for k in
                                      ('score', 'sharp', 'exposure', 'contrast',
                                       'saturation', 'cluster')}
+        # batch-normalize scores to 40-98 for better visual discrimination
+        all_scores = [r['score'] for r in results.values()]
+        if len(all_scores) > 1:
+            lo, hi = min(all_scores), max(all_scores)
+            if hi > lo:
+                for r in results.values():
+                    r['score'] = round(40 + (r['score'] - lo) / (hi - lo) * 58, 1)
+        blurry = _find_blurry(entries)
+        for item in entries:
+            if item['path'] in results and results[item['path']]['score'] < 55:
+                if item['path'] not in blurry:
+                    blurry.append(item['path'])
         with auto_lk:
             AUTO['results'] = dict(sorted(results.items(),
                                           key=lambda kv: -kv[1]['score']))
@@ -2865,6 +2876,11 @@ def dng_preview(name, output, width):
                 '-q:v', '3', temporary,
             ], 120)
             if result.returncode == 0 and os.path.exists(temporary) and os.path.getsize(temporary) > 0:
+                try:
+                    bright = _auto_levels(Image.open(temporary).convert('RGB'))
+                    bright.save(temporary, 'JPEG', quality=90)
+                except Exception:
+                    pass
                 os.replace(temporary, output)
                 return output
         finally:
