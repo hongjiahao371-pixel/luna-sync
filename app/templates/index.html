@@ -1295,7 +1295,6 @@ function toggleCardSel(key,card){
   if(PICKSEL.has(key)){PICKSEL.delete(key);card.classList.remove('pick-sel')}
   else{PICKSEL.add(key);card.classList.add('pick-sel')}
 }
-var PICKSEL={open:false,list:[],idx:0};
 var CULL={open:false,list:[],idx:0};
 function cullList(){return localFiles().filter(function(x){if(x.kind==='LRV')return false;if((x.name||'').toLowerCase().indexOf('.lrv')===x.name.length-4)return false;return true})}
 function openCull(){
