@@ -66,6 +66,7 @@ LIV_DIR = os.path.join(STATE_DIR, 'liv')
 WIFI_FILE = os.path.join(STATE_DIR, 'wifi.json')
 SETTINGS_FILE = os.path.join(STATE_DIR, 'settings.json')
 PICKS_FILE = os.path.join(STATE_DIR, 'picks.json')
+TAGS_FILE = os.path.join(STATE_DIR, 'tags.json')
 TRASH_DIR = os.path.join(DLDIR, '.trash')
 TRASH_KEEP_DAYS = 7
 PROJECTS_FILE = os.path.join(STATE_DIR, 'projects.json')
@@ -122,6 +123,7 @@ refresh_lk = threading.Lock()
 auto_sync_lk = threading.Lock()
 preview_lk = threading.Lock()
 picks_lk = threading.Lock()
+tags_lk = threading.Lock()
 alb_lk = threading.Lock()
 _scan_cache = {'ts': 0, 'data': None, 'rescan_ts': 0}
 SCAN_CACHE_TTL = 8
@@ -622,6 +624,8 @@ def local_items():
     loc = local_files()
     with lk:
         meta = {f.get('id', f['name']): dict(f) for f in ST['files']}
+    with tags_lk:
+        tag_map = load_tags()
     items = []
     for key, info in sorted(loc.items()):
         name = os.path.basename(key)
@@ -630,6 +634,7 @@ def local_items():
         item.setdefault('id', key)
         item['bytes'] = info['size']
         item['status'] = '完成(本地)'
+        item['tags'] = tag_map.get(key, [])
         items.append(item)
     return items
 
@@ -1044,7 +1049,7 @@ def api_privacy_withdraw():
         settings['privacy_version'] = ''
         settings['web_secret'] = new_secret
     rewrite_settings(_purge)
-    for path in (WIFI_FILE, PICKS_FILE, PROJECTS_FILE, SCORES_FILE):
+    for path in (WIFI_FILE, PICKS_FILE, PROJECTS_FILE, SCORES_FILE, TAGS_FILE):
         try:
             if os.path.exists(path):
                 os.remove(path)
@@ -1387,6 +1392,105 @@ def api_picks_set():
 def api_picks_clear():
     with picks_lk:
         save_picks({})
+    return jsonify({'ok': True})
+
+def load_tags():
+    try:
+        with open(TAGS_FILE) as tags_file:
+            data = json.load(tags_file)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def save_tags(data):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(TAGS_FILE, 'w') as tags_file:
+            json.dump(data, tags_file, ensure_ascii=False)
+        os.chmod(TAGS_FILE, 0o600)
+    except Exception as e:
+        log.warning('save_tags:' + str(e)[:60])
+
+def _clean_tag_name(raw):
+    """Normalize one user-supplied tag; None when invalid."""
+    name = str(raw or '').strip()
+    if not name or len(name) > 24:
+        return None
+    if any(ord(ch) < 32 for ch in name) or any(ch in name for ch in '/\\#"\''):
+        return None
+    return name
+
+def _tag_counts(tags):
+    counts = {}
+    for names in tags.values():
+        for n in names:
+            counts[n] = counts.get(n, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+@app.route('/api/tags')
+def api_tags_list():
+    with tags_lk:
+        counts = _tag_counts(load_tags())
+    return jsonify({'tags': [{'name': n, 'count': c} for n, c in counts]})
+
+@app.route('/api/tags/assign', methods=['POST'])
+def api_tags_assign():
+    data = request.json or {}
+    files = [str(x) for x in (data.get('files') or []) if str(x)]
+    adds = []
+    removes = []
+    for raw in (data.get('add') or []):
+        name = _clean_tag_name(raw)
+        if not name:
+            return jsonify({'ok': False, 'error': 'invalid_tag'}), 400
+        if name not in adds:
+            adds.append(name)
+    for raw in (data.get('remove') or []):
+        name = _clean_tag_name(raw)
+        if not name:
+            return jsonify({'ok': False, 'error': 'invalid_tag'}), 400
+        if name not in removes:
+            removes.append(name)
+    overlap = set(adds) & set(removes)
+    if overlap:
+        return jsonify({'ok': False, 'error': 'conflict', 'tags': sorted(overlap)}), 400
+    if not files or len(files) > 500:
+        return jsonify({'ok': False, 'error': 'files_required'}), 400
+    with tags_lk:
+        tags = load_tags()
+        loc = local_files()
+        for rel in files:
+            if rel not in loc:
+                continue
+            names = [n for n in tags.get(rel, []) if n not in removes]
+            for n in adds:
+                if n not in names:
+                    names.append(n)
+            if names:
+                tags[rel] = names
+            else:
+                tags.pop(rel, None)
+        save_tags(tags)
+    return jsonify({'ok': True})
+
+@app.route('/api/tags/delete', methods=['POST'])
+def api_tags_delete():
+    data = request.json or {}
+    name = _clean_tag_name(data.get('name'))
+    if not name:
+        return jsonify({'ok': False, 'error': 'invalid_tag'}), 400
+    with tags_lk:
+        tags = load_tags()
+        changed = False
+        for rel in [k for k, v in tags.items() if name in v]:
+            names = [n for n in tags[rel] if n != name]
+            if names:
+                tags[rel] = names
+            else:
+                tags.pop(rel)
+            changed = True
+        if changed:
+            save_tags(tags)
     return jsonify({'ok': True})
 
 @app.route('/api/picks/export', methods=['POST'])

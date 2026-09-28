@@ -165,6 +165,24 @@ td.muted{color:var(--muted);font-size:12.5px}
 .locbar .grow{flex:1;min-width:160px}
 .locbar .stat{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wall{flex:1;min-height:0;overflow:auto;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));grid-auto-rows:140px;gap:12px;align-content:start}
+.tagbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 18px 0}
+.tagbar .tagchip{height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--line,rgba(31,44,67,.14));background:rgba(255,255,255,.7);color:var(--ink,#1a2233);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.tagbar .tagchip .cnt{color:var(--faint);font-size:11px}
+.tagbar .tagchip.on{background:#2f6fd6;border-color:#2f6fd6;color:#fff}
+.tagbar .tagchip.on .cnt{color:rgba(255,255,255,.75)}
+.card .tagmarks{position:absolute;top:8px;right:26px;display:flex;gap:4px;max-width:70%;overflow:hidden}
+.card .tagmarks i{font-style:normal;height:18px;padding:0 7px;border-radius:999px;background:rgba(47,111,214,.88);color:#fff;font-size:10.5px;line-height:18px;white-space:nowrap}
+.tlnav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 18px;border-top:1px solid rgba(31,44,67,.08)}
+.tlnav button{height:26px;padding:0 10px;border-radius:8px;border:1px solid rgba(31,44,67,.12);background:rgba(255,255,255,.65);color:var(--ink,#1a2233);font-size:11.5px;cursor:pointer}
+.tlnav button:hover{border-color:#2f6fd6;color:#2f6fd6}
+.timeline{flex:1;min-height:0;overflow:auto;padding:14px 18px 20px}
+.timeline .tl-day{margin-bottom:18px}
+.timeline .tl-head{display:flex;align-items:baseline;gap:10px;margin:0 0 10px;position:sticky;top:-14px;background:inherit;padding:6px 0;z-index:2}
+.timeline .tl-head b{font-size:15px;color:var(--ink,#1a2233)}
+.timeline .tl-head span{font-size:11.5px;color:var(--faint)}
+.timeline .tl-head::before{content:'';width:9px;height:9px;border-radius:50%;background:#2f6fd6;box-shadow:0 0 0 3px rgba(47,111,214,.18);align-self:center}
+.timeline .tl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));grid-auto-rows:140px;gap:12px}
+.timeline .tl-line{border-left:2px solid rgba(47,111,214,.16);padding-left:14px}
 .card{position:relative;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9);box-shadow:0 10px 26px -14px rgba(31,44,67,.2),inset 0 1px 0 rgba(255,255,255,.9);height:140px;cursor:pointer}
 .card img,.card .ph{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .card img{opacity:0;transition:opacity .3s ease}
@@ -451,6 +469,7 @@ td.muted{color:var(--muted);font-size:12.5px}
         <div class="seg">
           <button id="lvGrid" class="icon-btn on" title="网格墙" data-tip="网格墙" aria-label="网格墙"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
           <button id="lvTable" class="icon-btn" title="表格" data-tip="表格" aria-label="表格"><svg viewBox="0 0 24 24"><path d="M9 6h12"/><path d="M9 12h12"/><path d="M9 18h12"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></button>
+          <button id="lvTimeline" class="icon-btn" title="时间轴" data-tip="时间轴" aria-label="时间轴"><svg viewBox="0 0 24 24"><path d="M12 3v3"/><path d="M12 18v3"/><circle cx="12" cy="12" r="3.2"/><path d="M5 7h2.5M5 12h2.5M5 17h2.5M16.5 7H19M16.5 12H19M16.5 17H19" fill="none"/></svg></button>
         </div>
         <div class="seg">
           <button id="pkAll" class="on">全部</button>
@@ -458,17 +477,23 @@ td.muted{color:var(--muted);font-size:12.5px}
           <button id="pkKeep">入选</button>
           <button id="pkReject">落选</button>
         </div>
+        <div class="seg" id="tagSeg" style="display:none"><button id="tagAllBtn" class="on">全部标签</button></div>
+        <button id="bTagMgr" class="tonal">标签</button>
         <input id="lq" class="grow" type="text" placeholder="搜索本地文件名">
         <span class="stat" id="lstat">-</span>
         <button id="bPickMode" class="tonal">选择模式</button>
         <button id="bAddToProj" class="secondary" style="display:none">添加到项目</button>
+        <button id="bTagAdd" class="secondary" style="display:none">打标签</button>
         <button id="bCull" class="tonal">挑选照片</button>
         <button id="bExportPicks" class="secondary">导出入选</button>
         <button id="bDelRejects" class="danger">删除落选</button>
         <button id="bSlideshow" class="secondary">放映</button>
         <button id="bClearCache" class="ghost" title="清空缩略图和转码预览缓存（不影响已下载文件）">清除缓存</button>
       </div>
+      <div id="tagBar" class="tagbar" style="display:none"></div>
       <div id="wall" class="wall"></div>
+      <div id="timelineWrap" class="timeline" style="display:none"></div>
+      <div id="tlNav" class="tlnav" style="display:none"></div>
       <div class="table-wrap" id="ltableWrap" style="display:none">
         <table class="file-table tight">
           <thead><tr><th class="w-prev">预览</th><th>文件名</th><th class="w-kind">类型</th><th class="w-date">拍摄日期</th><th class="w-size">大小</th><th class="w-act">操作</th></tr></thead>
@@ -669,6 +694,26 @@ td.muted{color:var(--muted);font-size:12.5px}
     </div>
   </div>
 </div>
+<div id="tagOv" class="overlay">
+  <div class="as-panel" style="width:min(520px,94vw)">
+    <h3 id="tagTitle">标签</h3>
+    <div id="tagScope" style="margin:2px 0 10px;color:var(--muted);font-size:12.5px"></div>
+    <div id="tagChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <input id="tagNew" type="text" style="flex:1;height:34px" placeholder="新标签名（如：越南 / 美食 / 合照）">
+      <button id="tagNewAdd" class="tonal">添加并选中</button>
+    </div>
+    <div id="tagHint" style="color:var(--muted);font-size:11.5px;margin-bottom:10px">输入中文、字母或数字，最多 24 个字符；可用「删除标签」从全部照片移除某标签</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="tagDelSel" style="flex:1;height:34px"></select>
+      <button id="tagDelBtn" class="danger">删除标签</button>
+    </div>
+    <div class="as-actions" style="margin-top:14px">
+      <button id="tagSave" class="primary">保存</button>
+      <button id="tagCancel" class="ghost">取消</button>
+    </div>
+  </div>
+</div>
 <div id="consent" class="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
   <section class="consent-dialog">
     <div class="consent-mark">L</div>
@@ -726,7 +771,7 @@ var TEXT={
     exportPrompt:'将入选文件导出到下载目录下的文件夹，文件夹名：',exportDone:'已导出 {count} 个文件到「{folder}」',
     delRejectsConfirm:'确定删除 {count} 个落选文件？此操作不可恢复。',rejectsDeleted:'已删除 {count} 个落选文件',
     cullKeep:'入选 (F)',cullReject:'落选 (X)',cullUnmark:'取消 (U)',cullPrev:'上一张 (←)',cullNext:'下一张 (→)',cullExit:'退出 (Esc)',
-    slideshow:'放映',trashBtn:'回收站',restore:'恢复',purgeItem:'彻底删除',purgeAll:'清空回收站',trashTitle:'回收站',trashEmpty:'回收站是空的',purged:'已彻底删除 {count} 项',restored:'已恢复 {count} 个文件',compareFirst:'先标记两张文件再对比（在挑选模式中给两张各按一次 F）',exifNA:'无拍摄参数',cutBtn:'自动剪辑',cutTitle:'自动剪辑',cutIntro:'',cutStart:'开始剪辑',cutCancel:'取消',cutClose:'关闭',cutPhaseAnalyze:'分析视频高光',cutPhaseBuild:'组装成片',cutDone:'成片已生成：',cutNoVideos:'当前相册没有视频可剪辑',cutMusicAuto:'自动（音乐文件夹中的第一个音频）',cutMusicNone:'无声',cutErr:'剪辑失败：',cutMusicHint:'配乐文件请放到素材目录的「音乐」文件夹（mp3/m4a/wav）',shareBtn:'精选分享',shareNoKeepers:'还没有入选文件可分享',shareCopied:'链接已复制',miniBtn:'朋友圈包',miniDone:'已导出 {count} 张朋友圈尺寸照片，打包为「{zip}」',collageBtn:'拼图',collageLayout:'选择拼图布局：输入 2x2 / 3x3 / strip',collageDone:'拼图已生成：{file}',xmpBtn:'XMP',xmpDone:'已导出 {count} 个 XMP 标记文件到「{folder}」',statsBtn:'统计',statsTotal:'素材总大小：{total}',statsMonths:'按月：',statsCaches:'缓存与回收站：',enhanceBtn:'画质优化',watermarkBtn:'水印',watermarkPrompt:'水印文字（保存后应用于导出）：',watermarkOn:'水印已开启：',watermarkOff:'水印已关闭',enhanceOn:'画质优化已开启，导出时自动应用',enhanceOff:'画质优化已关闭',blurryTitle:'疑似模糊/废片',blurryApply:'把模糊照标记为落选',blurryDone:'已将 {count} 张模糊照标记为落选',blurryNone:'本次没有检测到模糊照片',miniPrompt:'导出到下载目录下的文件夹，文件夹名：',albumAll:'全部',albumByDate:'按拍摄日期',albumProjects:'我的项目',saveProject:'存为项目',delProject:'删除项目',
+    slideshow:'放映',trashBtn:'回收站',restore:'恢复',purgeItem:'彻底删除',purgeAll:'清空回收站',trashTitle:'回收站',trashEmpty:'回收站是空的',purged:'已彻底删除 {count} 项',restored:'已恢复 {count} 个文件',compareFirst:'先标记两张文件再对比（在挑选模式中给两张各按一次 F）',exifNA:'无拍摄参数',cutBtn:'自动剪辑',cutTitle:'自动剪辑',cutIntro:'',cutStart:'开始剪辑',cutCancel:'取消',cutClose:'关闭',cutPhaseAnalyze:'分析视频高光',cutPhaseBuild:'组装成片',cutDone:'成片已生成：',cutNoVideos:'当前相册没有视频可剪辑',cutMusicAuto:'自动（音乐文件夹中的第一个音频）',cutMusicNone:'无声',cutErr:'剪辑失败：',cutMusicHint:'配乐文件请放到素材目录的「音乐」文件夹（mp3/m4a/wav）',shareBtn:'精选分享',shareNoKeepers:'还没有入选文件可分享',shareCopied:'链接已复制',miniBtn:'朋友圈包',miniDone:'已导出 {count} 张朋友圈尺寸照片，打包为「{zip}」',collageBtn:'拼图',collageLayout:'选择拼图布局：输入 2x2 / 3x3 / strip',collageDone:'拼图已生成：{file}',xmpBtn:'XMP',xmpDone:'已导出 {count} 个 XMP 标记文件到「{folder}」',statsBtn:'统计',statsTotal:'素材总大小：{total}',statsMonths:'按月：',statsCaches:'缓存与回收站：',enhanceBtn:'画质优化',watermarkBtn:'水印',watermarkPrompt:'水印文字（保存后应用于导出）：',watermarkOn:'水印已开启：',watermarkOff:'水印已关闭',enhanceOn:'画质优化已开启，导出时自动应用',enhanceOff:'画质优化已关闭',blurryTitle:'疑似模糊/废片',blurryApply:'把模糊照标记为落选',blurryDone:'已将 {count} 张模糊照标记为落选',blurryNone:'本次没有检测到模糊照片',miniPrompt:'导出到下载目录下的文件夹，文件夹名：',albumAll:'全部',albumByDate:'按拍摄日期',albumProjects:'我的项目',saveProject:'存为项目',delProject:'删除项目',tagAll:'全部',tagMgr:'标签',tagAddBtn:'打标签',tagFilterPh:'按标签筛选',tagScopeSel:'为选中的 {n} 个文件设置标签',tagScopeNone:'先在「选择模式」中勾选要打标签的文件',tagEmpty:'还没有标签，先在下面新建',tagInvalid:'标签名无效：请用中文、字母或数字，不超过 24 个字符，不含 / \\ # " \' 和空控制符',tagDelPh:'选择要删除的标签',tagDelConfirm:'从所有照片删除标签「{name}」？此操作不可撤销。',tagDeleted:'标签「{name}」已删除',tagSaved:'已更新 {n} 个文件的标签',timelineUndated:'未标日期',timelineWeek0:'周日',timelineWeek1:'周一',timelineWeek2:'周二',timelineWeek3:'周三',timelineWeek4:'周四',timelineWeek5:'周五',timelineWeek6:'周六',timelineKept:'入选 {n}',timelineView:'时间轴视图',
     addPhotos:'添加照片',autoSelect:'自动选片',projNamePrompt:'项目名称：',
     projectSaved:'已创建项目「{name}」（{count} 个文件）',projectDeleted:'项目已删除',
     autosNone:'当前相册没有可分析的照片',asRunning:'分析中',asApply:'应用推荐为入选',asClose:'关闭',
@@ -772,7 +817,7 @@ var TEXT={
     exportPrompt:'Export kept files into a folder inside the download directory. Folder name:',exportDone:'Exported {count} files to "{folder}"',
     delRejectsConfirm:'Delete {count} rejected files? This cannot be undone.',rejectsDeleted:'Deleted {count} rejected files',
     cullKeep:'Keep (F)',cullReject:'Reject (X)',cullUnmark:'Unmark (U)',cullPrev:'Prev (←)',cullNext:'Next (→)',cullExit:'Exit (Esc)',
-    slideshow:'Slideshow',trashBtn:'Trash',restore:'Restore',purgeItem:'Delete forever',purgeAll:'Empty trash',trashTitle:'Trash',trashEmpty:'Trash is empty',purged:'Permanently deleted {count} items',restored:'Restored {count} files',compareFirst:'Mark two files as keep (F) in cull mode to compare',exifNA:'No EXIF',cutBtn:'Auto cut',cutTitle:'Auto cut',cutIntro:'',cutStart:'Start',cutCancel:'Cancel',cutClose:'Close',cutPhaseAnalyze:'Analyzing video highlights',cutPhaseBuild:'Building montage',cutDone:'Montage created: ',cutNoVideos:'No videos in this album to cut',cutMusicAuto:'Auto (first audio in Music folder)',cutMusicNone:'Silent',cutErr:'Auto cut failed: ',cutMusicHint:'Put music files in the Music folder of the download directory (mp3/m4a/wav)',shareBtn:'Share page',shareNoKeepers:'No kept files to share yet',shareCopied:'Link copied',miniBtn:'WeChat pack',miniDone:'Exported {count} WeChat-sized photos, packed as "{zip}"',collageBtn:'Collage',collageLayout:'Pick a layout: 2x2 / 3x3 / strip',collageDone:'Collage created: {file}',xmpBtn:'XMP',xmpDone:'Exported {count} XMP sidecar files to "{folder}"',statsBtn:'Stats',statsTotal:'Total media: {total}',statsMonths:'By month:',statsCaches:'Caches & trash:',enhanceBtn:'Auto enhance',watermarkBtn:'Watermark',watermarkPrompt:'Watermark text (applied on export):',watermarkOn:'Watermark on: ',watermarkOff:'Watermark off',enhanceOn:'Auto enhance on, applied on export',enhanceOff:'Auto enhance off',blurryTitle:'Suspected blurry/throwaway',blurryApply:'Mark blurry photos as rejects',blurryDone:'Marked {count} blurry photos as rejects',blurryNone:'No blurry photos detected this round',miniPrompt:'Export into a folder inside the download directory. Folder name:',albumAll:'All',albumByDate:'By shoot date',albumProjects:'My projects',saveProject:'Save as project',delProject:'Delete project',
+    slideshow:'Slideshow',trashBtn:'Trash',restore:'Restore',purgeItem:'Delete forever',purgeAll:'Empty trash',trashTitle:'Trash',trashEmpty:'Trash is empty',purged:'Permanently deleted {count} items',restored:'Restored {count} files',compareFirst:'Mark two files as keep (F) in cull mode to compare',exifNA:'No EXIF',cutBtn:'Auto cut',cutTitle:'Auto cut',cutIntro:'',cutStart:'Start',cutCancel:'Cancel',cutClose:'Close',cutPhaseAnalyze:'Analyzing video highlights',cutPhaseBuild:'Building montage',cutDone:'Montage created: ',cutNoVideos:'No videos in this album to cut',cutMusicAuto:'Auto (first audio in Music folder)',cutMusicNone:'Silent',cutErr:'Auto cut failed: ',cutMusicHint:'Put music files in the Music folder of the download directory (mp3/m4a/wav)',shareBtn:'Share page',shareNoKeepers:'No kept files to share yet',shareCopied:'Link copied',miniBtn:'WeChat pack',miniDone:'Exported {count} WeChat-sized photos, packed as "{zip}"',collageBtn:'Collage',collageLayout:'Pick a layout: 2x2 / 3x3 / strip',collageDone:'Collage created: {file}',xmpBtn:'XMP',xmpDone:'Exported {count} XMP sidecar files to "{folder}"',statsBtn:'Stats',statsTotal:'Total media: {total}',statsMonths:'By month:',statsCaches:'Caches & trash:',enhanceBtn:'Auto enhance',watermarkBtn:'Watermark',watermarkPrompt:'Watermark text (applied on export):',watermarkOn:'Watermark on: ',watermarkOff:'Watermark off',enhanceOn:'Auto enhance on, applied on export',enhanceOff:'Auto enhance off',blurryTitle:'Suspected blurry/throwaway',blurryApply:'Mark blurry photos as rejects',blurryDone:'Marked {count} blurry photos as rejects',blurryNone:'No blurry photos detected this round',miniPrompt:'Export into a folder inside the download directory. Folder name:',albumAll:'All',albumByDate:'By shoot date',albumProjects:'My projects',saveProject:'Save as project',delProject:'Delete project',tagAll:'All',tagMgr:'Tags',tagAddBtn:'Tag',tagFilterPh:'Filter by tag',tagScopeSel:'Set tags for {n} selected files',tagScopeNone:'Select files in pick mode first',tagEmpty:'No tags yet — create one below',tagInvalid:'Invalid tag: use letters, digits or CJK, max 24 chars, no / \\ # " \' or control chars',tagDelPh:'Pick a tag to delete',tagDelConfirm:'Delete tag "{name}" from all photos? This cannot be undone.',tagDeleted:'Tag "{name}" deleted',tagSaved:'Updated tags on {n} files',timelineUndated:'Undated',timelineWeek0:'Sun',timelineWeek1:'Mon',timelineWeek2:'Tue',timelineWeek3:'Wed',timelineWeek4:'Thu',timelineWeek5:'Fri',timelineWeek6:'Sat',timelineKept:'{n} kept',timelineView:'Timeline view',
     addPhotos:'Add photos',autoSelect:'Auto select',projNamePrompt:'Project name:',
     projectSaved:'Project "{name}" created ({count} files)',projectDeleted:'Project deleted',
     autosNone:'No analyzable photos in this album',asRunning:'Analyzing',asApply:'Apply recommendations as keeps',asClose:'Close',
@@ -903,6 +948,9 @@ function applyLang(){
   $('consentTitle').textContent=tr('consentTitle');$('consentIntro').textContent=tr('consentIntro');$('consentWebPw').textContent=tr('consentWebPw');applyConsentWifiText();$('consentMedia').textContent=tr('consentMedia');$('consentLocal').textContent=tr('consentLocal');$('consentRetention').textContent=tr('consentRetention');$('privacyLink').textContent=tr('privacyPolicy');$('termsLink').textContent=tr('userAgreement');$('consentCheckText').textContent=tr('consentCheck');$('consentAgree').textContent=tr('consentAgree');$('consentDecline').textContent=tr('consentDecline');$('consentNote').textContent=tr('consentNote');
   $('legalTabPrivacy').textContent=tr('privacyPolicy');$('legalTabTerms').textContent=tr('userAgreement');$('legalOv').setAttribute('aria-label',tr('legalViewer'));$('legalFrame').setAttribute('title',tr('legalViewer'));
   $('bCull').textContent=tr('pickBtn');$('bExportPicks').textContent=tr('exportPicks');$('bDelRejects').textContent=tr('delRejects');
+  var btg=$('bTagMgr');if(btg)btg.textContent=tr('tagMgr');var bta=$('bTagAdd');if(bta)bta.textContent=tr('tagAddBtn');
+  var btl=$('lvTimeline');if(btl){btl.title=tr('timelineView');btl.setAttribute('data-tip',tr('timelineView'));btl.setAttribute('aria-label',tr('timelineView'))}
+  refreshTagControls();
   $('pkAll').textContent=tr('pickFilterAll');$('pkUn').textContent=tr('pickFilterUn');$('pkKeep').textContent=tr('pickFilterKeep');$('pkReject').textContent=tr('pickFilterReject');
   $('cKeep').textContent=tr('cullKeep');$('cReject').textContent=tr('cullReject');$('cUnmark').textContent=tr('cullUnmark');$('cPrev').textContent=tr('cullPrev');$('cNext').textContent=tr('cullNext');$('cExit').textContent=tr('cullExit');
   $('bSaveProject').textContent=tr('saveProject');$('bDelProject').textContent=tr('delProject');$('bAddPhotos').textContent=tr('addPhotos');$('bAutoSelect').textContent=tr('autoSelect');var tb2=$('bShare');if(tb2)tb2.textContent=tr('shareBtn');var tm2=$('bMiniExport');if(tm2)tm2.textContent=tr('miniBtn');var tc2=$('bCollage');if(tc2)tc2.textContent=tr('collageBtn');var tx2=$('bXmp');if(tx2)tx2.textContent=tr('xmpBtn');var ts2=$('bStats');if(ts2)ts2.textContent=tr('statsBtn');var te2=$('bEnhance');if(te2)te2.textContent=tr('enhanceBtn');var bc4=$('bAutoCut');if(bc4)bc4.textContent=tr('cutBtn');var ct4=$('cutTitle');if(ct4)ct4.textContent=tr('cutTitle');var cs4=$('cutStart');if(cs4)cs4.textContent=tr('cutStart');var cc4=$('cutCancel');if(cc4)cc4.textContent=tr('cutCancel');var cl4=$('cutClose');if(cl4)cl4.textContent=tr('cutClose');var cp4=$('cutPhase');if(cp4)cp4.textContent=tr('cutPhaseAnalyze');var tw2=$('bWatermark');if(tw2)tw2.textContent=tr('watermarkBtn');updateExportToggles();var aa2=$('asApply');if(aa2)aa2.textContent=tr('asApply');var ac2=$('asClose');if(ac2)ac2.textContent=tr('asClose');var ap2=$('addProjSave');if(ap2)ap2.textContent=tr('addSave');var px2=$('addProjCancel');if(px2)px2.textContent=tr('asClose');var pt2=$('addProjTitle');if(pt2)pt2.textContent=tr('addTitle');if(typeof refreshAlbumSel==='function')refreshAlbumSel();
@@ -917,6 +965,170 @@ var PICKS={},LPICK='all';
 function pickKey(it){return it.id||it.name}
 function pickState(it){var p=PICKS[pickKey(it)];return p&&p.mark?p.mark:''}
 function pickBadge(key){var m=PICKS[key]&&PICKS[key].mark;if(!m)return '';return m==='keep'?'<span class="badge pk-keep">✓ 入选</span>':'<span class="badge pk-reject">✕ 落选</span>'}
+/* ---- tags ---- */
+var TAGS={},TAGSEL=new Set(),TAG_OPEN=false;
+function tagList(){var c={};localFiles().forEach(function(x){(x.tags||[]).forEach(function(n){c[n]=(c[n]||0)+1})});return Object.keys(c).sort(function(a,b){return c[b]-c[a]||a.localeCompare(b)}).map(function(n){return {name:n,count:c[n]}})}
+async function loadTags(){try{var d=await(await fetch('/api/tags')).json();TAGS=d.tags||[]}catch(e){TAGS=[]}}
+function itemTags(it){return it.tags||[]}
+function tagFilterActive(){return TAGSEL.size>0}
+function itemMatchesTags(it){if(!tagFilterActive())return true;var t=itemTags(it);for(var n of TAGSEL){if(t.indexOf(n)<0)return false}return true}
+function tagMarksHTML(it){var t=itemTags(it);if(!t.length)return '';return '<span class="tagmarks">'+t.slice(0,2).map(function(n){return '<i>'+esc(n)+'</i>'}).join('')+(t.length>2?'<i>+'+(t.length-2)+'</i>':'')+'</span>'}
+function renderTagBar(){
+  var bar=$('tagBar');if(!bar)return;
+  var tags=tagList();
+  if(!tags.length&&!tagFilterActive()){bar.style.display='none';return}
+  bar.style.display='flex';
+  var html=tags.map(function(t){
+    var on=TAGSEL.has(t.name);
+    return '<button type="button" class="tagchip'+(on?' on':'')+'" data-tag="'+esc(t.name)+'">'+esc(t.name)+'<span class="cnt">'+t.count+'</span></button>';
+  }).join('');
+  if(tagFilterActive())html+='<button type="button" class="tagchip" data-tag="__clear__">✕ 清除筛选</button>';
+  bar.innerHTML=html;
+  bar.querySelectorAll('.tagchip').forEach(function(b){
+    b.onclick=function(){
+      var n=b.getAttribute('data-tag');
+      if(n==='__clear__'){TAGSEL.clear()}else if(TAGSEL.has(n)){TAGSEL.delete(n)}else{TAGSEL.add(n)}
+      renderTagBar();renderLocal();
+    };
+  });
+}
+function refreshTagControls(){
+  var seg=$('tagSeg'),mgr=$('bTagMgr');if(!seg)return;
+  var tags=tagList();
+  var need=tags.length>0;
+  seg.style.display=need?'':'none';
+  if(mgr)mgr.style.display='';
+  var html='<button type="button" data-tag="__all__" class="'+(!tagFilterActive()?'on':'')+'">'+tr('tagAll')+'</button>';
+  tags.forEach(function(t){html+='<button type="button" data-tag="'+esc(t.name)+'" class="'+(TAGSEL.has(t.name)?'on':'')+'">'+esc(t.name)+'</button>'});
+  seg.innerHTML=html;
+  seg.querySelectorAll('button').forEach(function(b){
+    b.onclick=function(){
+      var n=b.getAttribute('data-tag');
+      if(n==='__all__'){TAGSEL.clear()}else if(TAGSEL.has(n)){TAGSEL.delete(n)}else{TAGSEL.add(n)}
+      refreshTagControls();renderTagBar();renderLocal();
+    };
+  });
+}
+/* tag manager dialog */
+var TAG_EDIT=new Set(),TAG_EDIT_FILES=[];
+function openTagMgr(){
+  if(PICKMODE&&PICKSEL.size){TAG_EDIT_FILES=[...PICKSEL]}
+  else{TAG_EDIT_FILES=[]}
+  TAG_EDIT=new Set();
+  if(TAG_EDIT_FILES.length===1){var it=localFiles().find(function(x){return pickKey(x)===TAG_EDIT_FILES[0]});if(it)itemTags(it).forEach(function(n){TAG_EDIT.add(n)})}
+  $('tagScope').textContent=TAG_EDIT_FILES.length?tr('tagScopeSel',{n:TAG_EDIT_FILES.length}):tr('tagScopeNone');
+  if(!TAG_EDIT_FILES.length){uiAlert(tr('tagTitle'),tr('tagScopeNone'));return}
+  renderTagChips();fillTagDelSel();
+  $('tagNew').value='';
+  $('tagOv').classList.add('open');
+}
+function renderTagChips(){
+  var all=tagList(),extra={};
+  TAG_EDIT.forEach(function(n){if(!all.find(function(t){return t.name===n}))extra[n]=0});
+  var html='';
+  all.forEach(function(t){html+=tagChipHTML(t.name,t.count)});
+  Object.keys(extra).forEach(function(n){html+=tagChipHTML(n,0)});
+  if(!all.length&&!TAG_EDIT.size)html='<span style="color:var(--muted);font-size:12px">'+tr('tagEmpty')+'</span>';
+  var box=$('tagChips');box.innerHTML=html;
+  box.querySelectorAll('.tagchip').forEach(function(b){
+    b.onclick=function(){var n=b.getAttribute('data-tag');if(TAG_EDIT.has(n)){TAG_EDIT.delete(n);b.classList.remove('on')}else{TAG_EDIT.add(n);b.classList.add('on')}};
+  });
+}
+function tagChipHTML(name,count){
+  var on=TAG_EDIT.has(name);
+  return '<button type="button" class="tagchip'+(on?' on':'')+'" data-tag="'+esc(name)+'">'+esc(name)+(count?'<span class="cnt">'+count+'</span>':'')+'</button>';
+}
+function fillTagDelSel(){
+  var sel=$('tagDelSel'),tags=tagList();
+  sel.innerHTML='<option value="">'+tr('tagDelPh')+'</option>'+tags.map(function(t){return '<option value="'+esc(t.name)+'">'+esc(t.name)+'（'+t.count+'）</option>'}).join('');
+}
+$('tagNewAdd').onclick=function(){
+  var name=$('tagNew').value.trim();
+  if(!name)return;
+  if(name.length>24||/[\/\\#"']/.test(name)){uiAlert(tr('tagTitle'),tr('tagInvalid'));return}
+  TAG_EDIT.add(name);$('tagNew').value='';renderTagChips();fillTagDelSel();
+};
+$('tagDelBtn').onclick=async function(){
+  var name=$('tagDelSel').value;
+  if(!name)return;
+  if(!await uiConfirm(tr('tagTitle'),tr('tagDelConfirm',{name:name})))return;
+  try{await(await fetch('/api/tags/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name})})).json();
+    TAG_EDIT.delete(name);TAGSEL.delete(name);
+    await loadTags();refreshTagControls();renderTagBar();renderTagChips();fillTagDelSel();renderLocal();
+    uiToast(tr('tagDeleted').replace('{name}',name),'ok');
+  }catch(e){uiToast(tr('pickFailed'),'err')}
+};
+$('tagSave').onclick=async function(){
+  if(!TAG_EDIT_FILES.length)return;
+  var cur=new Set();
+  if(TAG_EDIT_FILES.length===1){var it=localFiles().find(function(x){return pickKey(x)===TAG_EDIT_FILES[0]});if(it)itemTags(it).forEach(function(n){cur.add(n)})}
+  var adds=[...TAG_EDIT].filter(function(n){return !cur.has(n)});
+  var removes=[...cur].filter(function(n){return !TAG_EDIT.has(n)});
+  try{
+    var d=await(await fetch('/api/tags/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:TAG_EDIT_FILES,add:adds,remove:removes})})).json();
+    if(!d.ok){uiToast(tr('pickFailed')+(d.error||''),'err');return}
+    $('tagOv').classList.remove('open');
+    await loadTags();
+    localFiles().forEach(function(x){if(TAG_EDIT_FILES.indexOf(pickKey(x))>=0){x.tags=[...TAG_EDIT]}});
+    refreshTagControls();renderTagBar();renderLocal();
+    uiToast(tr('tagSaved').replace('{n}',TAG_EDIT_FILES.length),'ok');
+  }catch(e){uiToast(tr('pickFailed'),'err')}
+};
+$('tagCancel').onclick=function(){$('tagOv').classList.remove('open')};
+$('bTagMgr').onclick=openTagMgr;
+$('bTagAdd').onclick=openTagMgr;
+/* ---- timeline view ---- */
+function setViewMode(m){
+  LMODE=m;
+  ['lvGrid','lvTable','lvTimeline'].forEach(function(id){var b=$(id);if(b)b.classList.toggle('on',id==='lv'+m.charAt(0).toUpperCase()+m.slice(1))});
+  renderLocal();
+}
+function renderTimeline(list){
+  var wrap=$('timelineWrap'),nav=$('tlNav');
+  $('wall').style.display='none';$('ltableWrap').style.display='none';
+  wrap.style.display='block';nav.style.display='flex';
+  var days={};
+  list.forEach(function(x){var k=itemDateKey(x)||tr('timelineUndated');(days[k]=days[k]||[]).push(x)});
+  var keys=Object.keys(days).sort().reverse();
+  if(!keys.length){wrap.innerHTML='<div class="wall-empty">'+tr('noMatchedFiles')+'</div>';nav.innerHTML='';return}
+  var html='<div class="tl-line">';
+  keys.forEach(function(k){
+    var items=days[k];
+    var keep=items.filter(function(x){return pickState(x)==='keep'}).length;
+    var label=k===tr('timelineUndated')?k:(k+' · '+tr('timelineWeek'+new Date(k+'T12:00:00').getDay()));
+    html+='<div class="tl-day" id="tld-'+k+'"><div class="tl-head"><b>'+esc(label)+'</b><span>'+items.length+' · '+tr('timelineKept',{n:keep})+'</span></div><div class="tl-grid">';
+    items.forEach(function(it){html+=timelineCardHTML(it)});
+    html+='</div></div>';
+  });
+  html+='</div>';
+  wrap.innerHTML=html;
+  bindWallCards(wrap);
+  nav.innerHTML=keys.map(function(k){return '<button type="button" data-day="'+esc(k)+'">'+esc(k)+'</button>'}).join('');
+  nav.querySelectorAll('button').forEach(function(b){
+    b.onclick=function(){var el=$('tld-'+b.getAttribute('data-day'));if(el)el.scrollIntoView({behavior:'smooth',block:'start'})};
+  });
+}
+function timelineCardHTML(it){
+  var key=keyOf(it);
+  var hasThumb=isImg(it.kind)||isVid(it.kind);
+  var img=hasThumb?('<img src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" decoding="async" alt="">'):('<div class="ph">'+(isVid(it.kind)?'▶':esc(it.kind))+'</div>');
+  var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):tr('photos')))+'</span>';
+  var play=(isVid(it.kind)||it.kind==='LIV')?'<div class="play"><i>▶</i></div>':'';
+  var pk=pickBadge(key);
+  var tm=tagMarksHTML(it);
+  var tstr=String(it.time||'');
+  var meta='<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+(tstr?tstr+' · ':'')+fmt(it.bytes)+'</span></div>';
+  return '<div class="card'+(PICKSEL.has(key)?' pick-sel':'')+'" data-key="'+esc(key)+'">'+img+badge+play+pk+tm+meta+'</div>';
+}
+function bindWallCards(scope){
+  scope.querySelectorAll('.card').forEach(function(c){
+    var key=c.getAttribute('data-key');
+    var it=localFiles().find(function(x){return keyOf(x)===key});
+    if(!it)return;
+    if(PICKMODE){c.onclick=function(e){e.stopPropagation();toggleCardSel(key,c)}}
+    else c.onclick=function(){openPrev(it)};
+  });
+}
 function pickTag(key){var m=PICKS[key]&&PICKS[key].mark;if(!m)return '';return m==='keep'?' <span class="tag pk-keep">✓ 入选</span>':' <span class="tag pk-reject">✕ 落选</span>'}
 async function loadPicks(){try{var d=await(await fetch('/api/picks')).json();PICKS=d.picks||{}}catch(e){PICKS={}}}
 async function setPick(it,mark){
@@ -927,7 +1139,7 @@ async function setPick(it,mark){
     renderLocal();updateMetrics();
   }catch(e){alert(tr('pickFailed'))}
 }
-function localVisible(){var q=$('lq').value.trim().toLowerCase();return localFiles().filter(function(x){if(LFIL==='img'&&!isImg(x.kind))return false;if(LFIL==='vid'&&!isVid(x.kind))return false;if(LPICK==='keep'&&pickState(x)!=='keep')return false;if(LPICK==='reject'&&pickState(x)!=='reject')return false;if(LPICK==='un'&&pickState(x))return false;if(!inAlbum(x))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
+function localVisible(){var q=$('lq').value.trim().toLowerCase();return localFiles().filter(function(x){if(LFIL==='img'&&!isImg(x.kind))return false;if(LFIL==='vid'&&!isVid(x.kind))return false;if(LPICK==='keep'&&pickState(x)!=='keep')return false;if(LPICK==='reject'&&pickState(x)!=='reject')return false;if(LPICK==='un'&&pickState(x))return false;if(!inAlbum(x))return false;if(!itemMatchesTags(x))return false;if(q&&x.name.toLowerCase().indexOf(q)<0)return false;return true})}
 var SORT={key:'date',dir:'desc'};
 var SORT_DEFAULTS={name:'asc',storage:'asc',kind:'asc',date:'desc',size:'desc'};
 var MONTHS={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
@@ -1019,10 +1231,11 @@ function render(){
 function renderLocal(){
   if(TAB!=='local')return;
   var list=localVisible();
-  if(LMODE==='grid'){renderWall(list)}else{renderLocalTable(list)}
+  if(LMODE==='grid'){renderWall(list)}else if(LMODE==='timeline'){renderTimeline(list)}else{renderLocalTable(list)}
 }
 function renderWall(list){
   $('wall').style.display='grid';$('ltableWrap').style.display='none';
+  var tl=$('timelineWrap'),tn=$('tlNav');if(tl)tl.style.display='none';if(tn)tn.style.display='none';
   var w=$('wall');w.innerHTML='';
   if(!list.length){w.innerHTML='<div class="wall-empty">'+(localFiles().length?tr('noMatchedFiles'):(tr('noLocalFiles')+'<br><small>'+tr('localHint')+'</small>'))+'</div>';return}
   list.forEach(function(it){
@@ -1034,7 +1247,8 @@ function renderWall(list){
     var play=(isVid(it.kind)||it.kind==='LIV')?'<div class="play"><i>▶</i></div>':'';
     var deleteTip=esc(tr('deleteLocal'));var del='<button type="button" class="icon-btn danger-icon del" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button>';
     var pk=pickBadge(key);
-    c.innerHTML=img+badge+play+pk+del+'<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+fmt(it.bytes)+' · '+esc(fmtDate(it.date,it.time))+'</span></div>';
+    var tm=tagMarksHTML(it);
+    c.innerHTML=img+badge+play+pk+tm+del+'<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+fmt(it.bytes)+' · '+esc(fmtDate(it.date,it.time))+'</span></div>';
     var im=c.querySelector('img');if(im){revealImg(im);im.onerror=function(){var ph=document.createElement('div');ph.className='ph';ph.textContent=isVid(it.kind)?'▶':it.kind;im.replaceWith(ph)}}
     c.querySelector('.del').onclick=function(e){e.stopPropagation();delLocal(key)};
     if(PICKMODE){c.onclick=function(e){toggleCardSel(key,c)}}
@@ -1044,6 +1258,7 @@ function renderWall(list){
 }
 function renderLocalTable(list){
   $('wall').style.display='none';$('ltableWrap').style.display='block';
+  var tl2=$('timelineWrap'),tn2=$('tlNav');if(tl2)tl2.style.display='none';if(tn2)tn2.style.display='none';
   var tb=$('ltbody');tb.innerHTML='';$('lempty').style.display=list.length?'none':'grid';
   list.forEach(function(it){
     var row=document.createElement('tr');
@@ -1066,7 +1281,8 @@ async function scan(){
   try{
     var rs=await Promise.all([fetch('/api/files'),fetch('/api/local-files')]);
     var d=await rs[0].json(), l=await rs[1].json();
-    FILES=d.items;LOCAL=l.items||[];await loadPicks();
+    FILES=d.items;LOCAL=l.items||[];await loadPicks();await loadTags();
+    refreshTagControls();renderTagBar();
     refreshAlbumSel();
     setPill($('cameraPill'),d.connected?tr('cameraOnline'):tr('cameraOffline'),d.connected?'ok':'bad');render()
   }
@@ -1248,8 +1464,9 @@ $('bScan').onclick=scan;$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;
 $('tabCam').onclick=function(){switchTab('cam')};$('tabLocal').onclick=function(){switchTab('local')};
 function setLF(v){LFIL=v;['lfAll','lfImg','lfVid'].forEach(function(id){$(id).classList.toggle('on',id===('lf'+{all:'All',img:'Img',vid:'Vid'}[v]))});renderLocal()}
 $('lfAll').onclick=function(){setLF('all')};$('lfImg').onclick=function(){setLF('img')};$('lfVid').onclick=function(){setLF('vid')};
-$('lvGrid').onclick=function(){LMODE='grid';$('lvGrid').classList.add('on');$('lvTable').classList.remove('on');renderLocal()};
-$('lvTable').onclick=function(){LMODE='table';$('lvTable').classList.add('on');$('lvGrid').classList.remove('on');renderLocal()};
+$('lvGrid').onclick=function(){setViewMode('grid')};
+$('lvTable').onclick=function(){setViewMode('table')};
+$('lvTimeline').onclick=function(){setViewMode('timeline')};
 $('lq').oninput=function(){renderLocal()};
 $('bClearCache').onclick=async function(){
   if(!confirm(tr('clearCacheConfirm')))return;
@@ -1289,6 +1506,7 @@ function togglePickMode(){
   var btn=$('bPickMode');btn.textContent=PICKMODE?'退出选择':'选择模式';
   btn.classList.toggle('on',PICKMODE);
   var add=$('bAddToProj');if(add)add.style.display=PICKMODE?'':'none';
+  var tg=$('bTagAdd');if(tg)tg.style.display=PICKMODE?'':'none';
   renderLocal();
 }
 $('bPickMode').onclick=togglePickMode;
