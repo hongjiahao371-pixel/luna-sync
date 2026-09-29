@@ -440,6 +440,7 @@ td.muted{color:var(--muted);font-size:12.5px}
       <div class="albumbar">
         <span class="alabel">相册</span>
         <select id="albumSel"></select>
+        <button id="bNewProj" class="tonal">新建项目</button>
         <button id="bSaveProject" class="tonal">存为项目</button>
         <button id="bDelProject" class="danger">删除项目</button>
         <button id="bAddPhotos" class="secondary">添加照片</button>
@@ -714,6 +715,21 @@ td.muted{color:var(--muted);font-size:12.5px}
     </div>
   </div>
 </div>
+<div id="projOv" class="overlay">
+  <div class="as-panel" style="width:min(520px,94vw)">
+    <h3 id="projDlgTitle">添加到项目</h3>
+    <div id="projScope" style="margin:2px 0 10px;color:var(--muted);font-size:12.5px"></div>
+    <div id="projChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+      <input id="projNew" type="text" style="flex:1;height:34px" placeholder="新建项目名称（如：越南之旅）">
+    </div>
+    <div id="projHint" style="color:var(--muted);font-size:11.5px">点击已有项目名可把选中的照片追加进去；或在上方输入名称创建新项目</div>
+    <div class="as-actions" style="margin-top:14px">
+      <button id="projSave" class="primary">保存</button>
+      <button id="projCancel" class="ghost">取消</button>
+    </div>
+  </div>
+</div>
 <div id="consent" class="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
   <section class="consent-dialog">
     <div class="consent-mark">L</div>
@@ -771,7 +787,7 @@ var TEXT={
     exportPrompt:'将入选文件导出到下载目录下的文件夹，文件夹名：',exportDone:'已导出 {count} 个文件到「{folder}」',
     delRejectsConfirm:'确定删除 {count} 个落选文件？此操作不可恢复。',rejectsDeleted:'已删除 {count} 个落选文件',
     cullKeep:'入选 (F)',cullReject:'落选 (X)',cullUnmark:'取消 (U)',cullPrev:'上一张 (←)',cullNext:'下一张 (→)',cullExit:'退出 (Esc)',
-    slideshow:'放映',trashBtn:'回收站',restore:'恢复',purgeItem:'彻底删除',purgeAll:'清空回收站',trashTitle:'回收站',trashEmpty:'回收站是空的',purged:'已彻底删除 {count} 项',restored:'已恢复 {count} 个文件',compareFirst:'先标记两张文件再对比（在挑选模式中给两张各按一次 F）',exifNA:'无拍摄参数',cutBtn:'自动剪辑',cutTitle:'自动剪辑',cutIntro:'',cutStart:'开始剪辑',cutCancel:'取消',cutClose:'关闭',cutPhaseAnalyze:'分析视频高光',cutPhaseBuild:'组装成片',cutDone:'成片已生成：',cutNoVideos:'当前相册没有视频可剪辑',cutMusicAuto:'自动（音乐文件夹中的第一个音频）',cutMusicNone:'无声',cutErr:'剪辑失败：',cutMusicHint:'配乐文件请放到素材目录的「音乐」文件夹（mp3/m4a/wav）',shareBtn:'精选分享',shareNoKeepers:'还没有入选文件可分享',shareCopied:'链接已复制',miniBtn:'朋友圈包',miniDone:'已导出 {count} 张朋友圈尺寸照片，打包为「{zip}」',collageBtn:'拼图',collageLayout:'选择拼图布局：输入 2x2 / 3x3 / strip',collageDone:'拼图已生成：{file}',xmpBtn:'XMP',xmpDone:'已导出 {count} 个 XMP 标记文件到「{folder}」',statsBtn:'统计',statsTotal:'素材总大小：{total}',statsMonths:'按月：',statsCaches:'缓存与回收站：',enhanceBtn:'画质优化',watermarkBtn:'水印',watermarkPrompt:'水印文字（保存后应用于导出）：',watermarkOn:'水印已开启：',watermarkOff:'水印已关闭',enhanceOn:'画质优化已开启，导出时自动应用',enhanceOff:'画质优化已关闭',blurryTitle:'疑似模糊/废片',blurryApply:'把模糊照标记为落选',blurryDone:'已将 {count} 张模糊照标记为落选',blurryNone:'本次没有检测到模糊照片',miniPrompt:'导出到下载目录下的文件夹，文件夹名：',albumAll:'全部',albumByDate:'按拍摄日期',albumProjects:'我的项目',saveProject:'存为项目',delProject:'删除项目',tagAll:'全部',tagMgr:'标签',tagAddBtn:'打标签',tagFilterPh:'按标签筛选',tagScopeSel:'为选中的 {n} 个文件设置标签',tagScopeNone:'先在「选择模式」中勾选要打标签的文件',tagEmpty:'还没有标签，先在下面新建',tagInvalid:'标签名无效：请用中文、字母或数字，不超过 24 个字符，不含 / \\ # " \' 和空控制符',tagDelPh:'选择要删除的标签',tagDelConfirm:'从所有照片删除标签「{name}」？此操作不可撤销。',tagDeleted:'标签「{name}」已删除',tagSaved:'已更新 {n} 个文件的标签',timelineUndated:'未标日期',timelineWeek0:'周日',timelineWeek1:'周一',timelineWeek2:'周二',timelineWeek3:'周三',timelineWeek4:'周四',timelineWeek5:'周五',timelineWeek6:'周六',timelineKept:'入选 {n}',timelineView:'时间轴视图',
+    slideshow:'放映',trashBtn:'回收站',restore:'恢复',purgeItem:'彻底删除',purgeAll:'清空回收站',trashTitle:'回收站',trashEmpty:'回收站是空的',purged:'已彻底删除 {count} 项',restored:'已恢复 {count} 个文件',compareFirst:'先标记两张文件再对比（在挑选模式中给两张各按一次 F）',exifNA:'无拍摄参数',cutBtn:'自动剪辑',cutTitle:'自动剪辑',cutIntro:'',cutStart:'开始剪辑',cutCancel:'取消',cutClose:'关闭',cutPhaseAnalyze:'分析视频高光',cutPhaseBuild:'组装成片',cutDone:'成片已生成：',cutNoVideos:'当前相册没有视频可剪辑',cutMusicAuto:'自动（音乐文件夹中的第一个音频）',cutMusicNone:'无声',cutErr:'剪辑失败：',cutMusicHint:'配乐文件请放到素材目录的「音乐」文件夹（mp3/m4a/wav）',shareBtn:'精选分享',shareNoKeepers:'还没有入选文件可分享',shareCopied:'链接已复制',miniBtn:'朋友圈包',miniDone:'已导出 {count} 张朋友圈尺寸照片，打包为「{zip}」',collageBtn:'拼图',collageLayout:'选择拼图布局：输入 2x2 / 3x3 / strip',collageDone:'拼图已生成：{file}',xmpBtn:'XMP',xmpDone:'已导出 {count} 个 XMP 标记文件到「{folder}」',statsBtn:'统计',statsTotal:'素材总大小：{total}',statsMonths:'按月：',statsCaches:'缓存与回收站：',enhanceBtn:'画质优化',watermarkBtn:'水印',watermarkPrompt:'水印文字（保存后应用于导出）：',watermarkOn:'水印已开启：',watermarkOff:'水印已关闭',enhanceOn:'画质优化已开启，导出时自动应用',enhanceOff:'画质优化已关闭',blurryTitle:'疑似模糊/废片',blurryApply:'把模糊照标记为落选',blurryDone:'已将 {count} 张模糊照标记为落选',blurryNone:'本次没有检测到模糊照片',miniPrompt:'导出到下载目录下的文件夹，文件夹名：',albumAll:'全部',albumByDate:'按拍摄日期',albumProjects:'我的项目',saveProject:'存为项目',delProject:'删除项目',tagAll:'全部',tagMgr:'标签',tagAddBtn:'打标签',tagFilterPh:'按标签筛选',tagScopeSel:'为选中的 {n} 个文件设置标签',tagScopeNone:'先在「选择模式」中勾选要打标签的文件',tagEmpty:'还没有标签，先在下面新建',tagInvalid:'标签名无效：请用中文、字母或数字，不超过 24 个字符，不含 / \\ # " \' 和空控制符',tagDelPh:'选择要删除的标签',tagDelConfirm:'从所有照片删除标签「{name}」？此操作不可撤销。',tagDeleted:'标签「{name}」已删除',tagSaved:'已更新 {n} 个文件的标签',timelineUndated:'未标日期',timelineWeek0:'周日',timelineWeek1:'周一',timelineWeek2:'周二',timelineWeek3:'周三',timelineWeek4:'周四',timelineWeek5:'周五',timelineWeek6:'周六',timelineKept:'入选 {n}',timelineView:'时间轴视图',projAddTitle:'添加到项目',projNewTitle:'新建项目',projScopeSel:'为选中的 {n} 个文件选择项目或新建',projScopeEmpty:'输入名称创建一个空项目，之后可在选择模式中往里添加照片',projEmpty:'还没有项目，在下面输入名称新建',projPickOne:'请点击一个已有项目或输入新项目名称',projAdded:'已添加 {n} 个文件到「{name}」',projCreated:'已创建项目「{name}」（{n} 个文件）',
     addPhotos:'添加照片',autoSelect:'自动选片',projNamePrompt:'项目名称：',
     projectSaved:'已创建项目「{name}」（{count} 个文件）',projectDeleted:'项目已删除',
     autosNone:'当前相册没有可分析的照片',asRunning:'分析中',asApply:'应用推荐为入选',asClose:'关闭',
@@ -817,7 +833,7 @@ var TEXT={
     exportPrompt:'Export kept files into a folder inside the download directory. Folder name:',exportDone:'Exported {count} files to "{folder}"',
     delRejectsConfirm:'Delete {count} rejected files? This cannot be undone.',rejectsDeleted:'Deleted {count} rejected files',
     cullKeep:'Keep (F)',cullReject:'Reject (X)',cullUnmark:'Unmark (U)',cullPrev:'Prev (←)',cullNext:'Next (→)',cullExit:'Exit (Esc)',
-    slideshow:'Slideshow',trashBtn:'Trash',restore:'Restore',purgeItem:'Delete forever',purgeAll:'Empty trash',trashTitle:'Trash',trashEmpty:'Trash is empty',purged:'Permanently deleted {count} items',restored:'Restored {count} files',compareFirst:'Mark two files as keep (F) in cull mode to compare',exifNA:'No EXIF',cutBtn:'Auto cut',cutTitle:'Auto cut',cutIntro:'',cutStart:'Start',cutCancel:'Cancel',cutClose:'Close',cutPhaseAnalyze:'Analyzing video highlights',cutPhaseBuild:'Building montage',cutDone:'Montage created: ',cutNoVideos:'No videos in this album to cut',cutMusicAuto:'Auto (first audio in Music folder)',cutMusicNone:'Silent',cutErr:'Auto cut failed: ',cutMusicHint:'Put music files in the Music folder of the download directory (mp3/m4a/wav)',shareBtn:'Share page',shareNoKeepers:'No kept files to share yet',shareCopied:'Link copied',miniBtn:'WeChat pack',miniDone:'Exported {count} WeChat-sized photos, packed as "{zip}"',collageBtn:'Collage',collageLayout:'Pick a layout: 2x2 / 3x3 / strip',collageDone:'Collage created: {file}',xmpBtn:'XMP',xmpDone:'Exported {count} XMP sidecar files to "{folder}"',statsBtn:'Stats',statsTotal:'Total media: {total}',statsMonths:'By month:',statsCaches:'Caches & trash:',enhanceBtn:'Auto enhance',watermarkBtn:'Watermark',watermarkPrompt:'Watermark text (applied on export):',watermarkOn:'Watermark on: ',watermarkOff:'Watermark off',enhanceOn:'Auto enhance on, applied on export',enhanceOff:'Auto enhance off',blurryTitle:'Suspected blurry/throwaway',blurryApply:'Mark blurry photos as rejects',blurryDone:'Marked {count} blurry photos as rejects',blurryNone:'No blurry photos detected this round',miniPrompt:'Export into a folder inside the download directory. Folder name:',albumAll:'All',albumByDate:'By shoot date',albumProjects:'My projects',saveProject:'Save as project',delProject:'Delete project',tagAll:'All',tagMgr:'Tags',tagAddBtn:'Tag',tagFilterPh:'Filter by tag',tagScopeSel:'Set tags for {n} selected files',tagScopeNone:'Select files in pick mode first',tagEmpty:'No tags yet — create one below',tagInvalid:'Invalid tag: use letters, digits or CJK, max 24 chars, no / \\ # " \' or control chars',tagDelPh:'Pick a tag to delete',tagDelConfirm:'Delete tag "{name}" from all photos? This cannot be undone.',tagDeleted:'Tag "{name}" deleted',tagSaved:'Updated tags on {n} files',timelineUndated:'Undated',timelineWeek0:'Sun',timelineWeek1:'Mon',timelineWeek2:'Tue',timelineWeek3:'Wed',timelineWeek4:'Thu',timelineWeek5:'Fri',timelineWeek6:'Sat',timelineKept:'{n} kept',timelineView:'Timeline view',
+    slideshow:'Slideshow',trashBtn:'Trash',restore:'Restore',purgeItem:'Delete forever',purgeAll:'Empty trash',trashTitle:'Trash',trashEmpty:'Trash is empty',purged:'Permanently deleted {count} items',restored:'Restored {count} files',compareFirst:'Mark two files as keep (F) in cull mode to compare',exifNA:'No EXIF',cutBtn:'Auto cut',cutTitle:'Auto cut',cutIntro:'',cutStart:'Start',cutCancel:'Cancel',cutClose:'Close',cutPhaseAnalyze:'Analyzing video highlights',cutPhaseBuild:'Building montage',cutDone:'Montage created: ',cutNoVideos:'No videos in this album to cut',cutMusicAuto:'Auto (first audio in Music folder)',cutMusicNone:'Silent',cutErr:'Auto cut failed: ',cutMusicHint:'Put music files in the Music folder of the download directory (mp3/m4a/wav)',shareBtn:'Share page',shareNoKeepers:'No kept files to share yet',shareCopied:'Link copied',miniBtn:'WeChat pack',miniDone:'Exported {count} WeChat-sized photos, packed as "{zip}"',collageBtn:'Collage',collageLayout:'Pick a layout: 2x2 / 3x3 / strip',collageDone:'Collage created: {file}',xmpBtn:'XMP',xmpDone:'Exported {count} XMP sidecar files to "{folder}"',statsBtn:'Stats',statsTotal:'Total media: {total}',statsMonths:'By month:',statsCaches:'Caches & trash:',enhanceBtn:'Auto enhance',watermarkBtn:'Watermark',watermarkPrompt:'Watermark text (applied on export):',watermarkOn:'Watermark on: ',watermarkOff:'Watermark off',enhanceOn:'Auto enhance on, applied on export',enhanceOff:'Auto enhance off',blurryTitle:'Suspected blurry/throwaway',blurryApply:'Mark blurry photos as rejects',blurryDone:'Marked {count} blurry photos as rejects',blurryNone:'No blurry photos detected this round',miniPrompt:'Export into a folder inside the download directory. Folder name:',albumAll:'All',albumByDate:'By shoot date',albumProjects:'My projects',saveProject:'Save as project',delProject:'Delete project',tagAll:'All',tagMgr:'Tags',tagAddBtn:'Tag',tagFilterPh:'Filter by tag',tagScopeSel:'Set tags for {n} selected files',tagScopeNone:'Select files in pick mode first',tagEmpty:'No tags yet — create one below',tagInvalid:'Invalid tag: use letters, digits or CJK, max 24 chars, no / \\ # " \' or control chars',tagDelPh:'Pick a tag to delete',tagDelConfirm:'Delete tag "{name}" from all photos? This cannot be undone.',tagDeleted:'Tag "{name}" deleted',tagSaved:'Updated tags on {n} files',timelineUndated:'Undated',timelineWeek0:'Sun',timelineWeek1:'Mon',timelineWeek2:'Tue',timelineWeek3:'Wed',timelineWeek4:'Thu',timelineWeek5:'Fri',timelineWeek6:'Sat',timelineKept:'{n} kept',timelineView:'Timeline view',projAddTitle:'Add to project',projNewTitle:'New project',projScopeSel:'Pick a project for the {n} selected files, or create one',projScopeEmpty:'Enter a name to create an empty project; add photos later via pick mode',projEmpty:'No projects yet — create one below',projPickOne:'Click an existing project or enter a new name',projAdded:'Added {n} files to "{name}"',projCreated:'Created project "{name}" ({n} files)',
     addPhotos:'Add photos',autoSelect:'Auto select',projNamePrompt:'Project name:',
     projectSaved:'Project "{name}" created ({count} files)',projectDeleted:'Project deleted',
     autosNone:'No analyzable photos in this album',asRunning:'Analyzing',asApply:'Apply recommendations as keeps',asClose:'Close',
@@ -1125,6 +1141,8 @@ function bindWallCards(scope){
     var key=c.getAttribute('data-key');
     var it=localFiles().find(function(x){return keyOf(x)===key});
     if(!it)return;
+    var im=c.querySelector('img');
+    if(im){revealImg(im);im.onerror=function(){var ph=document.createElement('div');ph.className='ph';ph.textContent=isVid(it.kind)?'▶':it.kind;im.replaceWith(ph)}}
     if(PICKMODE){c.onclick=function(e){e.stopPropagation();toggleCardSel(key,c)}}
     else c.onclick=function(){openPrev(it)};
   });
@@ -1239,9 +1257,9 @@ function renderWall(list){
   var w=$('wall');w.innerHTML='';
   if(!list.length){w.innerHTML='<div class="wall-empty">'+(localFiles().length?tr('noMatchedFiles'):(tr('noLocalFiles')+'<br><small>'+tr('localHint')+'</small>'))+'</div>';return}
   list.forEach(function(it){
+    var key=keyOf(it);
     var c=document.createElement('div');c.className='card'+(PICKSEL.has(key)?' pick-sel':'');
     var hasThumb=isImg(it.kind)||isVid(it.kind);
-    var key=keyOf(it);
     var img=hasThumb?('<img src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" decoding="async" alt="">'):('<div class="ph">'+(isVid(it.kind)?'▶':esc(it.kind))+'</div>');
     var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):tr('photos')))+'</span>';
     var play=(isVid(it.kind)||it.kind==='LIV')?'<div class="play"><i>▶</i></div>':'';
@@ -1566,24 +1584,57 @@ $('bExportPicks').onclick=async function(){
 };
 $('bAddToProj').onclick=async function(){
   if(!PICKSEL.size)return uiToast('请先在网格中点选照片','warn');
-  var files=Array.from(PICKSEL);
-  var procs=Object.keys(PROJECTS).map(function(id){return {id:id,name:PROJECTS[id].name}});
-  var name=await uiPrompt('添加到项目','输入项目名称（已有项目会直接追加）：','');
-  if(name===null||!name.trim())return;
-  name=name.trim();
-  var match=procs.find(function(p){return p.name===name});
-  if(match){
-    try{await fetch('/api/projects/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:match.id,files:files})});}catch(e){}
-    uiToast('已添加 '+files.length+' 个文件到「'+name+'」','ok');
-  }else{
-    try{var d=await(await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,files:files})})).json();
+  openProjDlg(Array.from(PICKSEL));
+};
+/* project dialog: pick existing (append) or create new */
+var PROJ_EDIT=null,PROJ_FILES=[];
+function openProjDlg(files){
+  PROJ_FILES=files||[];PROJ_EDIT=null;
+  $('projDlgTitle').textContent=PROJ_FILES.length?tr('projAddTitle'):tr('projNewTitle');
+  $('projScope').textContent=PROJ_FILES.length?tr('projScopeSel',{n:PROJ_FILES.length}):tr('projScopeEmpty');
+  renderProjChips();
+  $('projNew').value='';
+  $('projOv').classList.add('open');
+}
+function renderProjChips(){
+  var ids=Object.keys(PROJECTS);
+  var html=ids.map(function(id){
+    var on=PROJ_EDIT===id;
+    return '<button type="button" class="tagchip'+(on?' on':'')+'" data-pid="'+esc(id)+'">'+esc(PROJECTS[id].name)+'<span class="cnt">'+(PROJECTS[id].files||[]).length+'</span></button>';
+  }).join('');
+  if(!ids.length)html='<span style="color:var(--muted);font-size:12px">'+tr('projEmpty')+'</span>';
+  var box=$('projChips');box.innerHTML=html;
+  box.querySelectorAll('.tagchip').forEach(function(b){
+    b.onclick=function(){
+      var id=b.getAttribute('data-pid');
+      if(PROJ_EDIT===id){PROJ_EDIT=null;b.classList.remove('on')}
+      else{PROJ_EDIT=id;$('projNew').value='';renderProjChips()}
+    };
+  });
+}
+$('projNew').oninput=function(){if(this.value.trim()&&PROJ_EDIT!==null){PROJ_EDIT=null;renderProjChips()}};
+$('projSave').onclick=async function(){
+  var name=$('projNew').value.trim();
+  try{
+    if(PROJ_EDIT){
+      await fetch('/api/projects/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:PROJ_EDIT,files:PROJ_FILES})});
+      await loadProjects();refreshAlbumSel();
+      $('projOv').classList.remove('open');
+      uiToast(tr('projAdded').replace('{name}',PROJECTS[PROJ_EDIT]?PROJECTS[PROJ_EDIT].name:'').replace('{n}',PROJ_FILES.length),'ok');
+    }else if(name){
+      var d=await(await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,files:PROJ_FILES})})).json();
       if(!d.ok)throw new Error('create');
       await loadProjects();refreshAlbumSel();
-      uiToast('已创建项目「'+name+'」（'+files.length+' 个文件）','ok');
-    }catch(e){uiToast('创建项目失败','err')}
-  }
-  PICKSEL.clear();renderLocal();
+      $('projOv').classList.remove('open');
+      uiToast(tr('projCreated').replace('{name}',name).replace('{n}',PROJ_FILES.length),'ok');
+    }else{
+      return uiToast(tr('projPickOne'),'warn');
+    }
+    PICKSEL.clear();renderLocal();
+  }catch(e){uiToast(tr('pickFailed'),'err')}
 };
+$('projCancel').onclick=function(){$('projOv').classList.remove('open')};
+$('bNewProj').onclick=function(){openProjDlg([])};
 $('bDelRejects').onclick=async function(){
   var list=localFiles().filter(function(x){return pickState(x)==='reject'});
   if(!list.length)return alert(tr('noRejects'));
