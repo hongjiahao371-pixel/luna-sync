@@ -109,6 +109,85 @@ class EnhanceWatermarkBlurryTests(unittest.TestCase):
         self.assertIn('blur', flagged, 'heavy blur must be flagged (sharp=%s score=%s)' % (s_blur['sharp'], s_blur['score']))
         self.assertNotIn('sharp', flagged, 'sharp photo must not be flagged')
 
+    # --- pipeline features: presets, warmth, vignette, denoise, HDR, straighten ---
+
+    def gradient(self):
+        img = Image.new('RGB', (240, 160))
+        for y in range(160):
+            for x in range(240):
+                img.putpixel((x, y), (x * 255 // 240, y * 255 // 160, 128))
+        return img
+
+    def test_standard_matches_legacy_behavior(self):
+        out = self.web_app._enhance(self.gradient(), {'preset': 'standard'})
+        self.assertEqual(out.size, self.gradient().size)
+
+    def test_warmth_shifts_channels(self):
+        from PIL import ImageStat
+        base = self.gradient()
+        warm = self.web_app._temperature(base, 40)
+        cool = self.web_app._temperature(base, -40)
+        wst, cst = ImageStat.Stat(warm), ImageStat.Stat(cool)
+        self.assertGreater(wst.mean[0], cst.mean[0], 'warm must raise red')
+        self.assertLess(wst.mean[2], cst.mean[2], 'warm must lower blue')
+
+    def test_vignette_fix_brightens_corners(self):
+        from PIL import ImageStat
+        img = Image.new('RGB', (200, 200), (90, 90, 90))
+        out = self.web_app._vignette_fix(img)
+        st = ImageStat.Stat(out)
+        self.assertGreater(min(st.mean), 90, 'vignette fix must lift overall levels')
+
+    def test_denoise_reduces_noise(self):
+        import random
+        random.seed(3)
+        img = Image.new('RGB', (120, 120), (100, 100, 100))
+        noisy = img.copy()
+        px = noisy.load()
+        for _ in range(4000):
+            x, y = random.randrange(120), random.randrange(120)
+            n = random.randint(-60, 60)
+            px[x, y] = (max(0, min(255, 100 + n)),) * 3
+        out = self.web_app._denoise(noisy, 2)
+        from PIL import ImageStat
+        self.assertLess(ImageStat.Stat(out).stddev[0], ImageStat.Stat(noisy).stddev[0])
+
+    def test_hdr_lifts_shadows(self):
+        from PIL import ImageStat
+        dark = Image.new('RGB', (120, 120), (40, 40, 40))
+        out = self.web_app._hdr_feel(dark)
+        self.assertGreater(ImageStat.Stat(out).mean[0], 40)
+
+    def test_straighten_rotates_known_skew(self):
+        import math
+        # build a synthetic horizon: dark top, bright bottom with a 3-degree tilt
+        w, h = 400, 300
+        img = Image.new('RGB', (w, h))
+        px = img.load()
+        skew = 3.0
+        for y in range(h):
+            boundary = h // 2 + int(math.tan(math.radians(skew)) * (w / 2))
+            for x in range(w):
+                px[x, y] = (20, 20, 20) if y < boundary - x * math.tan(math.radians(skew)) else (220, 220, 220)
+        detected = self.web_app._detect_skew(img)
+        self.assertIsNotNone(detected)
+        self.assertAlmostEqual(abs(detected), skew, delta=1.5, msg='detect %s vs 3.0' % detected)
+        fixed = self.web_app._straighten(img, detected)
+        self.assertLessEqual(fixed.size[0], w)
+
+    def test_presets_change_output(self):
+        from PIL import ImageStat
+        base = self.gradient()
+        vivid = self.web_app._enhance(base, {'preset': 'vivid'})
+        soft = self.web_app._enhance(base, {'preset': 'soft'})
+        mono = self.web_app._enhance(base, {'preset': 'mono'})
+        vs, ss = ImageStat.Stat(vivid), ImageStat.Stat(soft)
+        self.assertGreater(sum(vs.stddev), sum(ss.stddev), 'vivid must be punchier than soft')
+        # mono: all channels near-identical
+        mst = ImageStat.Stat(mono)
+        self.assertAlmostEqual(mst.mean[0], mst.mean[1], delta=12)
+        self.assertAlmostEqual(mst.mean[1], mst.mean[2], delta=12)
+
 
 if __name__ == '__main__':
     unittest.main()

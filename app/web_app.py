@@ -1,4 +1,4 @@
-import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress, struct
+import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress, struct, math
 import hashlib, hmac, re, secrets, ssl, datetime, shutil, zipfile, base64
 import luna_client
 import urllib.request, urllib.error
@@ -10,7 +10,7 @@ from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
 try:
-    from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageStat
+    from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageStat
 except Exception:
     Image = None
 
@@ -1500,7 +1500,11 @@ def api_picks_export():
     folder = str(data.get('folder') or '').strip()
     if not folder or len(folder) > 80 or any(ch in folder for ch in '/\\') or folder in ('.', '..'):
         return jsonify({'ok': False, 'error': 'invalid_folder'}), 400
-    enhance = bool_value(data.get('enhance'))
+    enhance = data.get('enhance')
+    if isinstance(enhance, dict):
+        pass  # opts dict forwarded as-is
+    else:
+        enhance = bool_value(enhance)
     watermark_text = data.get('watermark') if isinstance(data.get('watermark'), dict) else str(data.get('watermark') or '').strip()
     with picks_lk:
         picks = load_picks()
@@ -1905,10 +1909,201 @@ def _gray_world(img):
         channels.append(ch.point(lambda i, g=gain: min(255, int(i * g))))
     return Image.merge('RGB', channels)
 
-def _enhance(img):
-    """One-tap quality fix: white balance, auto levels, mild sharpening."""
+def _detect_skew(img):
+    """Estimate horizon skew in degrees by locating the dominant dark->bright
+    transition per column on a downscaled grayscale copy and least-squares
+    fitting a line through those transition rows. Returns degrees in [-8, 8]
+    (positive = horizon rises to the right) or None when no coherent horizon
+    is found (too few columns with a single dominant transition)."""
+    small = img.convert('L').resize((200, max(2, int(200 * img.height / img.width))))
+    w, h = small.size
+    px = small.load()
+
+    # global dark/bright threshold: midpoint of the 10th/90th percentiles
+    hist = [0] * 256
+    for y in range(h):
+        for x in range(w):
+            hist[px[x, y]] += 1
+    total = sum(hist) or 1
+    def pct(p):
+        acc = 0
+        for i, c in enumerate(hist):
+            acc += c
+            if acc >= total * p:
+                return i
+        return 255
+    lo_v, hi_v = pct(0.1), pct(0.9)
+    if hi_v - lo_v < 60:
+        return None  # too flat to have a horizon
+    mid = (lo_v + hi_v) // 2
+    dark_to_bright = hi_v > lo_v
+
+    ys = []
+    for x in range(w):
+        edge_y = None
+        if dark_to_bright:
+            run = 0
+            for y in range(h):
+                run = run + 1 if px[x, y] > mid else 0
+                if run >= 2:
+                    edge_y = y - 1
+                    break
+        else:
+            run = 0
+            for y in range(h):
+                run = run + 1 if px[x, y] < mid else 0
+                if run >= 2:
+                    edge_y = y - 1
+                    break
+        if edge_y is not None:
+            ys.append((x, edge_y))
+    if len(ys) < w * 0.5:
+        return None
+    # least squares fit y = a*x + b
+    n = len(ys)
+    sx = sum(p[0] for p in ys)
+    sy = sum(p[1] for p in ys)
+    sxx = sum(p[0] * p[0] for p in ys)
+    sxy = sum(p[0] * p[1] for p in ys)
+    denom = n * sxx - sx * sx
+    if not denom:
+        return None
+    a = (n * sxy - sx * sy) / denom
+    # consistency: at least 60% of transition columns must sit near the line,
+    # otherwise the scene's transitions are scattered (no real horizon)
+    b = (sy - a * sx) / n
+    near = sum(1 for p in ys if abs(p[1] - (a * p[0] + b)) < h * 0.06)
+    if near < len(ys) * 0.6:
+        return None
+    skew = math.degrees(math.atan(a))
+    if abs(skew) > 8:
+        return None
+    return skew
+
+
+def _straighten(img, skew):
+    """Rotate by -skew and crop away the widened borders."""
+    if not skew or abs(skew) < 0.15:
+        return img
+    rotated = img.rotate(skew, resample=Image.BICUBIC, expand=False,
+                         fillcolor=img.getpixel((2, 2)))
+    w, h = rotated.size
+    rad = math.radians(abs(skew))
+    crop_x = int(h * math.sin(rad))
+    crop_y = int(w * math.sin(rad))
+    left, top = 0, 0
+    right, bottom = w, h
+    if crop_x * 2 < w * 0.25:
+        left, right = crop_x, w - crop_x
+    if crop_y * 2 < h * 0.25:
+        top, bottom = crop_y, h - crop_y
+    return rotated.crop((left, top, right, bottom))
+
+
+def _denoise(img, strength=1):
+    """Edge-preserving-ish denoise: median then mild sharpen to restore
+    detail. strength 1 light / 2 strong (stronger adds a pre-blur pass)."""
+    if strength >= 2:
+        img = img.filter(ImageFilter.MedianFilter(5))
+    else:
+        img = img.filter(ImageFilter.MedianFilter(3))
+    return img.filter(ImageFilter.UnsharpMask(radius=2, percent=40, threshold=3))
+
+
+def _hdr_feel(img):
+    """Pseudo-HDR: local lift toward a target level. A coarse 7x7 grid holds
+    per-tile blend factors (how much to pull dark regions up toward the
+    target mean); the factor field is bilinearly resized to full size so
+    there are no tile seams, then composited over the base image."""
+    w, h = img.size
+    gw, gh = 7, 7
+    target = 118
+    small = img.convert('L').resize((gw, gh))
+    spx = small.load()
+    mask = Image.new('L', (gw, gh))
+    mpx = mask.load()
+    for gy in range(gh):
+        for gx in range(gw):
+            mean = spx[gx, gy]
+            if mean >= target:
+                f = 0
+            else:
+                f = min(180, int((target - mean) * 2))
+            mpx[gx, gy] = f
+    fmask = mask.resize((w, h), Image.BILINEAR)
+    flat = Image.new('RGB', (w, h), (target, target, target))
+    return Image.composite(flat, img.convert('RGB'), fmask)
+
+
+def _vignette_fix(img, strength=0.35):
+    """Radial gain compensation for lens vignette via a spatial white blend:
+    corners get lifted toward white by strength*d^2, center untouched."""
+    w, h = img.size
+    cx, cy = w / 2.0, h / 2.0
+    maxd = math.hypot(cx, cy) or 1.0
+    small_w = max(2, w // 4)
+    small_h = max(2, h // 4)
+    mask = Image.new('L', (small_w, small_h))
+    mpx = mask.load()
+    for y in range(small_h):
+        dy = y * h / small_h - cy
+        for x in range(small_w):
+            dx = x * w / small_w - cx
+            d = math.hypot(dx, dy) / maxd
+            mpx[x, y] = min(255, int(255 * strength * d * d))
+    mask = mask.resize((w, h), Image.BILINEAR)
+    white = Image.new('RGB', (w, h), (255, 255, 255))
+    return Image.composite(white, img.convert('RGB'), mask)
+
+
+def _temperature(img, warmth):
+    """warmth in [-50..50]: negative cooler, positive warmer."""
+    if not warmth:
+        return img
+    r_gain = 1.0 + warmth / 200.0
+    b_gain = 1.0 - warmth / 200.0
+    r, g, b = img.split()
+    r = r.point(lambda i: min(255, int(i * r_gain)))
+    b = b.point(lambda i: min(255, int(i * b_gain)))
+    return Image.merge('RGB', (r, g, b))
+
+
+_PRESETS = {
+    'standard': {},
+    'vivid':    {'saturation': 1.25, 'contrast': 1.12},
+    'soft':     {'saturation': 0.92, 'contrast': 0.9, 'levels_clip': 0.008},
+    'mono':     {'mono': True, 'contrast': 1.1},
+}
+
+
+def _enhance(img, opts=None):
+    """One-tap quality fix pipeline. opts keys (all optional):
+    preset(standard|vivid|soft|mono), warmth(-50..50), vignette(bool),
+    denoise(0|1|2), hdr(bool), straighten(bool), levels_clip(float).
+    Legacy _enhance(img) keeps working as standard."""
+    opts = opts or {}
+    preset = _PRESETS.get(str(opts.get('preset') or 'standard'), {})
+    levels_clip = float(opts.get('levels_clip', preset.get('levels_clip', 0.005)))
+    skew = _detect_skew(img) if opts.get('straighten') else None
+    if skew:
+        img = _straighten(img, skew)
+    if opts.get('denoise'):
+        img = _denoise(img, int(opts.get('denoise') or 1))
     img = _gray_world(img)
-    img = _auto_levels(img)
+    img = _auto_levels(img, clip=levels_clip)
+    if opts.get('hdr'):
+        img = _hdr_feel(img)
+    if opts.get('vignette'):
+        img = _vignette_fix(img)
+    img = _temperature(img, int(opts.get('warmth') or 0))
+    saturation = float(opts.get('saturation', preset.get('saturation', 1.0)))
+    if abs(saturation - 1.0) > 0.01:
+        img = ImageEnhance.Color(img).enhance(saturation)
+    contrast = float(opts.get('contrast', preset.get('contrast', 1.0)))
+    if abs(contrast - 1.0) > 0.01:
+        img = ImageEnhance.Contrast(img).enhance(contrast)
+    if preset.get('mono') or opts.get('mono'):
+        img = img.convert('L').convert('RGB')
     return img.filter(ImageFilter.UnsharpMask(radius=2, percent=60, threshold=3))
 
 def _watermark_font(size):
@@ -2001,7 +2196,13 @@ def _parse_wm_opts(watermark_text):
 
 def _process_for_export(src, dst, enhance, watermark_text):
     wm_text, wm_opts = _parse_wm_opts(watermark_text)
-    if enhance or wm_text:
+    if isinstance(enhance, dict):
+        enhance_opts = enhance
+        enhance_on = bool(enhance_opts) or bool_value(enhance.get('enabled', True))
+    else:
+        enhance_opts = {}
+        enhance_on = bool(enhance)
+    if enhance_on or wm_text:
         img = None
         if src.lower().endswith('.dng'):
             dec = _decode_bayer_dng(src, 3000)
@@ -2011,8 +2212,8 @@ def _process_for_export(src, dst, enhance, watermark_text):
             img = Image.open(src)
         if img.mode != 'RGB':
             img = img.convert('RGB')
-        if enhance:
-            img = _enhance(img)
+        if enhance_on:
+            img = _enhance(img, enhance_opts if isinstance(enhance_opts, dict) else {})
         if wm_text:
             img = _watermark(img, wm_text, wm_opts)
         img.save(dst, 'JPEG', quality=92)
@@ -2126,7 +2327,9 @@ def api_picks_export_download():
     paths = [str(x) for x in (data.get('paths') or []) if str(x)][:500]
     if not paths:
         return jsonify({'ok': False, 'error': 'paths_required'}), 400
-    enhance = bool_value(data.get('enhance'))
+    enhance = data.get('enhance')
+    if not isinstance(enhance, dict):
+        enhance = bool_value(enhance)
     wm = data.get('watermark') if isinstance(data.get('watermark'), dict) else str(data.get('watermark') or '')
     buf = io.BytesIO()
     count = 0
@@ -2148,7 +2351,7 @@ def api_picks_export_download():
                     if img.mode != 'RGB':
                         img = img.convert('RGB')
                     if enhance:
-                        img = _enhance(img)
+                        img = _enhance(img, enhance if isinstance(enhance, dict) else {})
                     if wm:
                         wm_text, wm_opts = _parse_wm_opts(wm)
                         img = _watermark(img, wm_text, wm_opts)
