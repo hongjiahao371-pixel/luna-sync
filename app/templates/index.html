@@ -777,6 +777,46 @@ td.muted{color:var(--muted);font-size:12.5px}
     </div>
   </div>
 </div>
+<div id="wmOv" class="overlay">
+  <div class="as-panel" style="width:min(480px,94vw)">
+    <h3 id="wmTitle">水印设置</h3>
+    <label style="display:block;font-size:12px;color:var(--muted);margin:8px 0 4px">水印文字</label>
+    <input id="wmText" type="text" style="width:100%;height:34px" placeholder="如：Luna Sync / @你的名字">
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <div style="flex:1">
+        <label style="display:block;font-size:12px;color:var(--muted);margin:0 0 4px">位置</label>
+        <select id="wmPos" style="width:100%;height:34px">
+          <option value="br">右下</option>
+          <option value="bl">左下</option>
+          <option value="tr">右上</option>
+          <option value="tl">左上</option>
+          <option value="center">居中</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label style="display:block;font-size:12px;color:var(--muted);margin:0 0 4px">不透明度 <span id="wmOpacityVal">80</span>%</label>
+        <input id="wmOpacity" type="range" min="20" max="100" value="80" style="width:100%">
+      </div>
+      <div style="flex:1">
+        <label style="display:block;font-size:12px;color:var(--muted);margin:0 0 4px">大小（粗细档）</label>
+        <select id="wmSize" style="width:100%;height:34px">
+          <option value="2">小</option>
+          <option value="3" selected>中</option>
+          <option value="4">大</option>
+          <option value="5">特大</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:12px;align-items:center">
+      <label style="font-size:12.5px;color:var(--ink)"><input type="checkbox" id="wmShadow" checked> 描边阴影（浅色背景也清晰）</label>
+      <label style="font-size:12.5px;color:var(--ink)"><input type="checkbox" id="wmTile"> 平铺全图（防盗图）</label>
+    </div>
+    <div class="as-actions" style="margin-top:14px">
+      <button id="wmSave" class="primary">启用并保存</button>
+      <button id="wmCancel" class="ghost">取消</button>
+    </div>
+  </div>
+</div>
 <div id="consent" class="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
   <section class="consent-dialog">
     <div class="consent-mark">L</div>
@@ -1636,13 +1676,19 @@ $('cullMedia').addEventListener('touchend',function(e){
 $('pkAll').onclick=function(){setPK('all')};$('pkUn').onclick=function(){setPK('un')};
 $('pkKeep').onclick=function(){setPK('keep')};$('pkReject').onclick=function(){setPK('reject')};
 $('bExportPicks').onclick=async function(){
-  var n=localFiles().filter(function(x){return pickState(x)==='keep'}).length;
-  if(!n)return alert(tr('noKeepers'));
-  var folder=prompt(tr('exportPrompt'),'精选');if(!folder)return;
-  try{var d=await(await fetch('/api/picks/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:folder,enhance:EXPORT_OPT.enhance,watermark:EXPORT_OPT.watermark})})).json();
-    if(!d.ok)throw new Error('export');
-    alert(tr('exportDone',{count:d.exported,folder:d.folder}));scan();
-  }catch(e){alert(tr('pickFailed'))}
+  var keeps=localFiles().filter(function(x){return pickState(x)==='keep'}).map(pickKey);
+  if(!keeps.length)return alert(tr('noKeepers'));
+  try{
+    var r=await fetch('/api/picks/export/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:keeps,enhance:EXPORT_OPT.enhance,watermark:wmPayload()})});
+    if(!r.ok){var e=await r.json().catch(function(){return{}});return uiToast(tr('pickFailed')+(e.error||''),'err')}
+    var bl=await r.blob();
+    var cd=r.headers.get('Content-Disposition')||'';
+    var mt=cd.match(/filename="?([^";]+)"?/);var fname=mt?mt[1]:'export.zip';
+    var a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download=fname;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(a.href)},4000);
+    uiToast(tr('exportZipped',{n:keeps.length}),'ok');
+  }catch(e){uiToast(tr('pickFailed'),'err')}
 };
 $('bAddToProj').onclick=async function(){
   if(!PICKSEL.size)return uiToast('请先在网格中点选照片','warn');
@@ -1906,6 +1952,14 @@ function slideShow(){
 }
 function slideMove(d){if(!SLIDE.open||!SLIDE.list.length)return;SLIDE.idx=(SLIDE.idx+d+SLIDE.list.length)%SLIDE.list.length;slideShow()}
 $('bSlideshow').onclick=openSlideshow;
+document.addEventListener('keydown',function(e){
+  if(!SLIDE.open)return;
+  var tag=((e.target&&e.target.tagName)||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select')return;
+  if(e.key==='ArrowLeft')slideMove(-1);
+  else if(e.key==='ArrowRight')slideMove(1);
+  else if(e.key==='Escape'){SLIDE.open=false;$('slideOv').classList.remove('open');$('slideMedia').innerHTML=''}
+});
 $('slidePrev').onclick=function(){slideMove(-1)};$('slideNext').onclick=function(){slideMove(1)};
 $('slideExit').onclick=function(){SLIDE.open=false;$('slideOv').classList.remove('open');$('slideMedia').innerHTML=''};
 $('slideOv').onclick=function(e){if(e.target===$('slideOv')){$('slideExit').onclick()}};
@@ -2218,12 +2272,14 @@ $('asClose').onclick=closeAs;
 function humanBytes(b){if(b===null||b===undefined)return'-';var u=['B','KB','MB','GB','TB'];var i=0;while(b>=1024&&i<4){b/=1024;i++}return b.toFixed(b<10&&i>0?1:0)+' '+u[i]}
 var EXPORT_OPT={enhance:false,watermark:''};
 function loadExportOpt(){try{var v=JSON.parse(localStorage.getItem('lunaExportOpt')||'{}');EXPORT_OPT.enhance=!!v.enhance;EXPORT_OPT.watermark=v.watermark||''}catch(e){}}
+if(typeof loadWmOpt==='function')loadWmOpt();
 function saveExportOpt(){localStorage.setItem('lunaExportOpt',JSON.stringify(EXPORT_OPT))}
+function wmPayload(){return EXPORT_OPT.watermark?{text:EXPORT_OPT.watermark,opts:WM}:''}
 function updateExportToggles(){var e=$('bEnhance');if(e)e.classList.toggle('on',EXPORT_OPT.enhance);var w=$('bWatermark');if(w)w.classList.toggle('on',!!EXPORT_OPT.watermark)}
 function dailyConf(){return {enabled:!!($('dailyBest')&&$('dailyBest').checked),time:($('dailyTime')&&$('dailyTime').value)||'03:00'}}
-var bm=$('bMiniExport');if(bm)bm.onclick=async function(){var keeps=localFiles().filter(function(x){return pickState(x)==='keep'});if(!keeps.length)return alert(tr('shareNoKeepers'));var folder=prompt(tr('miniPrompt'),'精选-朋友圈');if(!folder)return;try{var d=await(await fetch('/api/export/mini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:folder,size:2048,quality:85,zip:true,enhance:EXPORT_OPT.enhance,watermark:EXPORT_OPT.watermark})})).json();if(!d.ok)throw new Error('mini');uiToast(tr('miniDone',{count:d.exported,zip:d.zip}),'ok')}catch(e){alert(tr('pickFailed'))}};
+var bm=$('bMiniExport');if(bm)bm.onclick=async function(){var keeps=localFiles().filter(function(x){return pickState(x)==='keep'});if(!keeps.length)return alert(tr('shareNoKeepers'));var folder=prompt(tr('miniPrompt'),'精选-朋友圈');if(!folder)return;try{var d=await(await fetch('/api/export/mini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:folder,size:2048,quality:85,zip:true,enhance:EXPORT_OPT.enhance,watermark:wmPayload()})})).json();if(!d.ok)throw new Error('mini');uiToast(tr('miniDone',{count:d.exported,zip:d.zip}),'ok')}catch(e){alert(tr('pickFailed'))}};
 var bc2=$('bCollage');if(bc2)bc2.onclick=async function(){var keeps=localFiles().filter(function(x){return pickState(x)==='keep'}).map(pickKey);if(keeps.length<2)return alert(tr('shareNoKeepers'));var layout=prompt(tr('collageLayout'),'3x3');if(!layout)return;layout=layout.trim().toLowerCase();try{var d=await(await fetch('/api/collage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:keeps,layout:layout})})).json();if(!d.ok)return alert(tr('pickFailed'));uiToast(tr('collageDone',{file:d.file}),'ok');scan()}catch(e){alert(tr('pickFailed'))}};
-var bx=$('bXmp');if(bx)bx.onclick=async function(){var marks=localFiles().filter(function(x){return pickState(x)}).length;if(!marks)return alert(tr('shareNoKeepers'));try{var d=await(await fetch('/api/picks/xmp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder:'xmp'})})).json();if(!d.ok)throw new Error('xmp');uiToast(tr('xmpDone',{count:d.written,folder:d.folder}),'ok')}catch(e){alert(tr('pickFailed'))}};
+/* old folder-based XMP handler removed — download handler below is authoritative */
 var bs3=$('bStats');if(bs3)bs3.onclick=async function(){$('statsOv').classList.add('open');$('statsBody').textContent='…';try{var d=await(await fetch('/api/storage/stats')).json();var total=d.months.reduce(function(a,m){return a+m.count},0);var html='<div>素材总大小：'+humanBytes(d.total)+'（'+total+' 个文件）</div>';html+='<div style="margin:8px 0 4px;font-weight:600">按月：</div>';d.months.slice(0,12).forEach(function(m){html+='<div>'+m.month+' · '+humanBytes(m.bytes)+' · '+m.count+'</div>'});html+='<div style="margin:8px 0 4px;font-weight:600">缓存与回收站：</div>';Object.keys(d.caches).forEach(function(k){html+='<div>'+k+' · '+humanBytes(d.caches[k])+'</div>'});$('statsBody').innerHTML=html}catch(e){$('statsBody').textContent=tr('pickFailed')}};
 var stc=$('statsClose');if(stc)stc.onclick=function(){$('statsOv').classList.remove('open')};
 var scc=$('statsClearCache');if(scc)scc.onclick=function(){var f=$('bClearCache');if(f)f.onclick();$('statsOv').classList.remove('open')};
@@ -2237,7 +2293,31 @@ var scp=$('shareCopy');if(scp)scp.onclick=function(){$('shareUrl').select();if(n
 var sd2=$('shareDone');if(sd2)sd2.onclick=function(){$('shareOv').classList.remove('open')};
 loadDailyConf();
 var te3=$('bEnhance');if(te3)te3.onclick=function(){EXPORT_OPT.enhance=!EXPORT_OPT.enhance;saveExportOpt();updateExportToggles();alert(tr(EXPORT_OPT.enhance?'enhanceOn':'enhanceOff'))};
-var tw3=$('bWatermark');if(tw3)tw3.onclick=function(){if(EXPORT_OPT.watermark){EXPORT_OPT.watermark='';saveExportOpt();updateExportToggles();alert(tr('watermarkOff'));return}var text=prompt(tr('watermarkPrompt'),'Luna Sync');if(text===null)return;EXPORT_OPT.watermark=text.trim();saveExportOpt();updateExportToggles();alert(tr('watermarkOn')+(EXPORT_OPT.watermark||' '));};
+var tw3=$('bWatermark');if(tw3)tw3.onclick=function(){
+  if(EXPORT_OPT.watermark){EXPORT_OPT.watermark='';saveExportOpt();updateExportToggles();uiToast(tr('watermarkOff'),'ok');return}
+  openWmDlg();
+};
+var WM={pos:'br',opacity:80,size:3,shadow:true,tile:false};
+function loadWmOpt(){try{var v=JSON.parse(localStorage.getItem('lunaWmOpt')||'{}');Object.assign(WM,v||{})}catch(e){}}
+function saveWmOpt(){try{localStorage.setItem('lunaWmOpt',JSON.stringify(WM))}catch(e){}}
+function openWmDlg(){
+  $('wmText').value=EXPORT_OPT.watermark||'Luna Sync';
+  $('wmPos').value=WM.pos;$('wmOpacity').value=WM.opacity;$('wmSize').value=WM.size;
+  $('wmShadow').checked=!!WM.shadow;$('wmTile').checked=!!WM.tile;
+  $('wmOv').classList.add('open');
+}
+$('wmOpacity').oninput=function(){$('wmOpacityVal').textContent=this.value};
+$('wmCancel').onclick=function(){$('wmOv').classList.remove('open')};
+$('wmSave').onclick=async function(){
+  var text=$('wmText').value.trim();
+  if(!text)return uiToast(tr('watermarkPrompt'),'warn');
+  EXPORT_OPT.watermark=text;
+  WM.pos=$('wmPos').value;WM.opacity=parseInt($('wmOpacity').value,10)||80;
+  WM.size=parseInt($('wmSize').value,10)||3;WM.shadow=$('wmShadow').checked;WM.tile=$('wmTile').checked;
+  saveExportOpt();saveWmOpt();updateExportToggles();
+  $('wmOv').classList.remove('open');
+  uiToast(tr('watermarkOn')+(text||' '),'ok');
+};
 loadExportOpt();updateExportToggles();loadMusicList();
 async function loadMusicList(){try{var d=await(await fetch('/api/music/list')).json();CUTMUSIC=d.music||[]}catch(e){CUTMUSIC=[]}var sel=$('cutMusic');if(sel){sel.innerHTML='<option value="">'+tr('cutMusicAuto')+'</option><option value="__none__">'+tr('cutMusicNone')+'</option>';CUTMUSIC.forEach(function(m){var o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o)})}}var bc3=$('bAutoCut');if(bc3)bc3.onclick=async function(){var vids=localVisible().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'}).map(pickKey);var phs=localFiles().filter(function(x){return inAlbum(x)&&isImg(x.kind)&&x.kind!=='DNG'}).map(pickKey);if(!vids.length&&!phs.length)return alert(tr('cutNoVideos'));if(typeof loadMusicList==='function')loadMusicList();$('cutStep1').style.display='block';$('cutStep2').style.display='none';$('cutIntro').textContent=(vids.length?'视频 '+vids.length+' 段 · ':'')+'照片 '+phs.length+' 张 · 成片保存到「自动剪辑」文件夹';$('cutOv').classList.add('open')};
 var cc2=$('cutCancel');if(cc2)cc2.onclick=function(){$('cutOv').classList.remove('open')};

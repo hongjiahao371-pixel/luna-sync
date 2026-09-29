@@ -1,4 +1,4 @@
-import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress
+import os, sys, json, time, threading, socket, subprocess, logging, io, mimetypes, ipaddress, struct
 import hashlib, hmac, re, secrets, ssl, datetime, shutil, zipfile, base64
 import luna_client
 import urllib.request, urllib.error
@@ -1501,7 +1501,7 @@ def api_picks_export():
     if not folder or len(folder) > 80 or any(ch in folder for ch in '/\\') or folder in ('.', '..'):
         return jsonify({'ok': False, 'error': 'invalid_folder'}), 400
     enhance = bool_value(data.get('enhance'))
-    watermark_text = str(data.get('watermark') or '').strip()
+    watermark_text = data.get('watermark') if isinstance(data.get('watermark'), dict) else str(data.get('watermark') or '').strip()
     with picks_lk:
         picks = load_picks()
     keepers = [rel for rel, meta in picks.items()
@@ -1931,27 +1931,90 @@ def _watermark_font(size):
     except TypeError:
         return ImageFont.load_default()
 
-def _watermark(img, text):
-    font = _watermark_font(max(18, img.width // 36))
-    draw = ImageDraw.Draw(img)
+def _watermark(img, text, opts=None):
+    """Text watermark with position/opacity/size/shadow/tile options.
+    opts keys: pos(br|bl|tr|tl|center), opacity(20-100), size(2-5),
+    shadow(bool), tile(bool). Defaults match the legacy look."""
+    opts = opts or {}
+    pos_name = str(opts.get('pos') or 'br')
+    opacity = max(15, min(100, int(opts.get('opacity') or 80)))
+    size_k = max(2, min(5, int(opts.get('size') or 3)))
+    shadow = opts.get('shadow', True)
+    tile = bool(opts.get('tile'))
+
+    scale_factor = {2: 64, 3: 36, 4: 24, 5: 16}[size_k]
+    font = _watermark_font(max(18, img.width // scale_factor))
+    stroke_w = max(1, img.width // 900) if shadow else 0
+
+    # render text into its own RGBA layer, then composite with opacity
+    layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
     bbox = draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
     margin = max(12, img.width // 40)
-    pos = (img.width - tw - margin, img.height - th - margin - bbox[1])
-    draw.text(pos, text, fill=(255, 255, 255), font=font,
-              stroke_width=max(1, img.width // 800), stroke_fill=(0, 0, 0))
-    return img
+    alpha = int(255 * opacity / 100)
+    color = (255, 255, 255, alpha)
+    stroke_fill = (0, 0, 0, alpha) if shadow else None
+
+    def draw_one(x, y):
+        draw.text((x - bbox[0], y - bbox[1]), text, fill=color, font=font,
+                  stroke_width=stroke_w, stroke_fill=stroke_fill)
+
+    if tile:
+        step_x = tw + max(60, img.width // 6)
+        step_y = th + max(60, img.height // 6)
+        tilt = opts.get('tilt', 24)
+        big = Image.new('RGBA', (img.width * 2, img.height * 2), (0, 0, 0, 0))
+        big_draw = ImageDraw.Draw(big)
+        row = 0
+        y = -th
+        while y < big.height:
+            x = -(step_x if row % 2 else 0)
+            while x < big.width:
+                big_draw.text((x - bbox[0], y - bbox[1]), text, fill=color,
+                              font=font, stroke_width=stroke_w, stroke_fill=stroke_fill)
+                x += step_x
+            y += step_y
+            row += 1
+        big = big.rotate(tilt, resample=Image.BICUBIC, expand=False)
+        cx, cy = big.width // 2 - img.width // 2, big.height // 2 - img.height // 2
+        layer = big.crop((cx, cy, cx + img.width, cy + img.height))
+    else:
+        if pos_name == 'center':
+            pos = ((img.width - tw) // 2, (img.height - th) // 2)
+        else:
+            px = img.width - tw - margin if 'r' in pos_name else margin
+            py = img.height - th - margin if 'b' in pos_name else margin
+            pos = (px, py)
+        draw_one(pos[0], pos[1])
+
+    img = img.convert('RGBA')
+    img = Image.alpha_composite(img, layer)
+    return img.convert('RGB')
+
+def _parse_wm_opts(watermark_text):
+    """Accepts 'text' or {'text':..,'opts':{...}}; returns (text, opts)."""
+    if isinstance(watermark_text, dict):
+        return str(watermark_text.get('text') or ''), (watermark_text.get('opts') or {})
+    return str(watermark_text or ''), {}
+
 
 def _process_for_export(src, dst, enhance, watermark_text):
-    if enhance or watermark_text:
-        img = Image.open(src)
+    wm_text, wm_opts = _parse_wm_opts(watermark_text)
+    if enhance or wm_text:
+        img = None
+        if src.lower().endswith('.dng'):
+            dec = _decode_bayer_dng(src, 3000)
+            if dec is not None:
+                img = dec
+        if img is None:
+            img = Image.open(src)
         if img.mode != 'RGB':
             img = img.convert('RGB')
         if enhance:
             img = _enhance(img)
-        if watermark_text:
-            img = _watermark(img, watermark_text)
+        if wm_text:
+            img = _watermark(img, wm_text, wm_opts)
         img.save(dst, 'JPEG', quality=92)
         return 'processed'
     shutil.copy2(src, dst)
@@ -2055,6 +2118,56 @@ def api_picks_xmp():
         written += 1
     addlog('导出 XMP 标记 ' + str(written) + ' 个')
     return jsonify({'ok': True, 'written': written, 'folder': folder})
+
+@app.route('/api/picks/export/download', methods=['POST'])
+def api_picks_export_download():
+    """Kept photos as a browser-download zip; honors enhance/watermark."""
+    data = request.json or {}
+    paths = [str(x) for x in (data.get('paths') or []) if str(x)][:500]
+    if not paths:
+        return jsonify({'ok': False, 'error': 'paths_required'}), 400
+    enhance = bool_value(data.get('enhance'))
+    wm = data.get('watermark') if isinstance(data.get('watermark'), dict) else str(data.get('watermark') or '')
+    buf = io.BytesIO()
+    count = 0
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as z:
+        for rel in paths:
+            src_path = local_path(rel)
+            if not src_path:
+                continue
+            base = os.path.basename(src_path)
+            if enhance or wm:
+                try:
+                    img = None
+                    if base.lower().endswith('.dng'):
+                        dec = _decode_bayer_dng(src_path, 3000)
+                        if dec is not None:
+                            img = dec
+                    if img is None:
+                        img = Image.open(src_path)
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    if enhance:
+                        img = _enhance(img)
+                    if wm:
+                        wm_text, wm_opts = _parse_wm_opts(wm)
+                        img = _watermark(img, wm_text, wm_opts)
+                    out = io.BytesIO()
+                    out_name = base if base.lower().endswith(('.jpg', '.jpeg')) else base + '.jpg'
+                    img.save(out, 'JPEG', quality=92)
+                    z.writestr(out_name, out.getvalue())
+                    count += 1
+                    continue
+                except Exception as e:
+                    log.warning('export-dl ' + rel + ':' + str(e)[:60])
+            z.write(src_path, base)
+            count += 1
+    if not count:
+        return jsonify({'ok': False, 'error': 'no_files'}), 400
+    buf.seek(0)
+    addlog('浏览器下载导出 ' + str(count) + ' 个')
+    return send_file(buf, mimetype='application/zip', as_attachment=True,
+                     download_name='luna-export-%s.zip' % time.strftime('%Y%m%d-%H%M%S'))
 
 @app.route('/api/picks/xmp/download', methods=['POST'])
 def api_picks_xmp_download():
@@ -3097,6 +3210,90 @@ def liv_parts(name):
             return None
 
 
+def _tiff_tag_map(data):
+    ifd_off = struct.unpack('<I', data[4:8])[0]
+    n = struct.unpack('<H', data[ifd_off:ifd_off + 2])[0]
+    tags = {}
+    p = ifd_off + 2
+    for _ in range(n):
+        tag, typ, cnt = struct.unpack('<HHI', data[p:p + 8])
+        size = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1,
+                8: 2, 9: 4, 10: 8, 11: 4, 12: 8}.get(typ, 1) * cnt
+        if size <= 4:
+            raw = data[p + 8:p + 12]
+        else:
+            off = struct.unpack('<I', data[p + 8:p + 12])[0]
+            raw = data[off:off + size]
+        tags[tag] = raw
+        p += 12
+    return tags
+
+
+def _decode_bayer_dng(path, target_w):
+    """Decode an uncompressed 16-bit Bayer DNG (Insta360 RAW) with pure PIL:
+    half-size RGGB demosaic, per-channel 99.5-percentile normalize, gamma.
+    ffmpeg's dng path crushes the linear 16-bit data to near-black, so this
+    replaces it for previews. Returns None for unsupported layouts (caller
+    falls back to ffmpeg)."""
+    try:
+        with open(path, 'rb') as f:
+            data = f.read()
+        if data[:2] != b'II' or data[2:4] != b'*\x00':
+            return None
+        tags = _tiff_tag_map(data)
+        if 256 not in tags or 257 not in tags or 273 not in tags:
+            return None
+        width = struct.unpack('<I', tags[256][:4])[0]
+        height = struct.unpack('<I', tags[257][:4])[0]
+        bits = struct.unpack('<H', tags[258][:2])[0]
+        compression = struct.unpack('<H', tags[259][:2])[0] if 259 in tags else 1
+        strip_off = struct.unpack('<I', tags[273][:4])[0]
+        if compression != 1 or bits != 16 or width < 2 or height < 2:
+            return None
+        w2, h2 = width // 2, height // 2
+        rowbytes = width * 2
+        end = min(len(data), strip_off + rowbytes * height)
+        body = data[strip_off:end]
+        mv = memoryview(body)
+
+        def planes_for(rp, cp):
+            lo_parts, hi_parts = [], []
+            for y in range(rp, h2 * 2, 2):
+                base = y * rowbytes + cp * 2
+                lo_parts.append(bytes(mv[base:base + w2 * 4:4]))
+                hi_parts.append(bytes(mv[base + 1:base + w2 * 4:4]))
+            return (Image.frombytes('L', (w2, h2), b''.join(lo_parts)),
+                    Image.frombytes('L', (w2, h2), b''.join(hi_parts)))
+
+        v10s = []
+        for rp in (0, 1):
+            for cp in (0, 1):
+                lo, hi = planes_for(rp, cp)
+                a = hi.point(lambda i: min(255, i << 2))
+                b = lo.point(lambda i: i >> 6)
+                v10s.append(ImageChops.add(a, b))
+        outs = []
+        for v10 in v10s:
+            hist = v10.histogram()
+            total = sum(hist) or 1
+            acc, hi = 0, 255
+            for i, c in enumerate(hist):
+                acc += c
+                if acc >= total * 0.995:
+                    hi = max(1, i)
+                    break
+            scale = 255.0 / hi
+            lut = [min(255, int((i * scale / 255.0) ** 0.4545 * 255)) for i in range(256)]
+            outs.append(v10.point(lut))
+        r, g1, g2, b = outs
+        g = Image.blend(g1, g2, 0.5)
+        out = Image.merge('RGB', (r, g, b))
+        return out.resize((target_w, max(1, int(target_w * h2 / w2))), Image.LANCZOS)
+    except Exception as e:
+        log.warning('bayer decode:' + str(e)[:60])
+        return None
+
+
 def dng_preview(name, output, width):
     with preview_lk:
         if os.path.exists(output) and os.path.getsize(output) > 0:
@@ -3117,6 +3314,11 @@ def dng_preview(name, output, width):
         try:
             if os.path.exists(temporary):
                 os.remove(temporary)
+            decoded = _decode_bayer_dng(source, width)
+            if decoded is not None:
+                decoded.save(temporary, 'JPEG', quality=90)
+                os.replace(temporary, output)
+                return output
             result = run([
                 'ffmpeg', '-v', 'error', '-y', '-i', source, '-frames:v', '1',
                 '-vf', 'scale=%d:-2:force_original_aspect_ratio=decrease' % width,
