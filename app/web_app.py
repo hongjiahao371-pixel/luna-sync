@@ -2056,6 +2056,43 @@ def api_picks_xmp():
     addlog('导出 XMP 标记 ' + str(written) + ' 个')
     return jsonify({'ok': True, 'written': written, 'folder': folder})
 
+@app.route('/api/picks/xmp/download', methods=['POST'])
+def api_picks_xmp_download():
+    """XMP sidecars as a browser download (zip), not a server-side folder."""
+    with picks_lk:
+        picks = load_picks()
+    buf = io.BytesIO()
+    written = 0
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for rel, meta in sorted(picks.items()):
+            if not isinstance(meta, dict) or meta.get('mark') not in ('keep', 'reject'):
+                continue
+            src_path = local_path(rel)
+            if not src_path:
+                continue
+            rating = 5 if meta['mark'] == 'keep' else 1
+            label = 'Keep' if meta['mark'] == 'keep' else 'Reject'
+            base = os.path.basename(src_path)
+            xmp = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                   '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
+                   ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
+                   '  <rdf:Description rdf:about=""\n'
+                   '    xmlns:xmp="http://ns.adobe.com/xap/1.0/"\n'
+                   '    xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"\n'
+                   '    xmp:Rating="%d"\n'
+                   '    xmp:Label="%s"\n'
+                   '    photoshop:Headline="Luna Sync pick"/>\n'
+                   ' </rdf:RDF>\n'
+                   '</x:xmpmeta>\n') % (rating, label)
+            z.writestr(base + '.xmp', xmp)
+            written += 1
+    if not written:
+        return jsonify({'ok': False, 'error': 'no_marks'}), 400
+    buf.seek(0)
+    addlog('下载 XMP 标记 ' + str(written) + ' 个')
+    return send_file(buf, mimetype='application/zip', as_attachment=True,
+                     download_name='xmp-marks-%s.zip' % time.strftime('%Y%m%d-%H%M%S'))
+
 @app.route('/api/collage', methods=['POST'])
 def api_collage():
     """Compose kept photos into a grid or strip image, fully local."""
@@ -2202,7 +2239,22 @@ def share_img(token, idx):
     p = local_path(paths[idx])
     if not p:
         abort(404)
-    return send_file(p, mimetype=mimetypes.guess_type(p)[0] or 'application/octet-stream')
+    return send_file(p, mimetype=mimetypes.guess_type(p)[0] or 'application/octet-stream',
+                     conditional=True)
+
+@app.route('/share/<token>/thumb/<int:idx>')
+def share_thumb(token, idx):
+    """Small cached preview for the share grid — the grid must not pull
+    multi-megabyte originals through the gateway."""
+    share, ok = _share_check(token, request.args.get('code', ''))
+    if not share or not ok:
+        abort(403 if share else 404)
+    paths = share.get('paths', [])
+    if idx < 0 or idx >= len(paths):
+        abort(404)
+    if not local_path(paths[idx]):
+        abort(404)
+    return thumb(paths[idx])
 
 @app.route('/api/storage/stats')
 def api_storage_stats():
@@ -2446,7 +2498,7 @@ def _video_highlight_segments(rel, tmp_dir, tag):
 
 def _plan_montage(video_segs, photo_rels, target):
     """Interleave video highlights and photos chronologically, trim to target."""
-    photos = list(photo_rels)[:6]
+    photos = list(photo_rels)[:12]
     plan = []
     used_photos = 0
     remaining = float(target)
@@ -2566,7 +2618,7 @@ def _autocut_worker(video_rels, photo_rels, target, music_rel):
         os.makedirs(tmp_dir, exist_ok=True)
         with edit_job_lk:
             EDIT.update({'running': True, 'phase': 'analyze', 'done': 0,
-                         'total': len(video_rels), 'error': '', 'output': ''})
+                         'total': max(1, len(video_rels)), 'error': '', 'output': ''})
         segs = []
         for idx, rel in enumerate(video_rels):
             try:
@@ -2575,7 +2627,7 @@ def _autocut_worker(video_rels, photo_rels, target, music_rel):
                 log.warning('autocut analyze ' + rel + ':' + str(e)[:80])
             with edit_job_lk:
                 EDIT['done'] = idx + 1
-        if not segs:
+        if not segs and video_rels:
             with edit_job_lk:
                 EDIT['running'] = False
                 EDIT['error'] = 'no_highlights'
@@ -2624,8 +2676,8 @@ def api_autocut_start():
     music = str(data.get('music') or '')
     if music:
         music = MUSIC_DIR_NAME + '/' + music
-    if not videos:
-        return jsonify({'ok': False, 'error': 'no_videos'}), 400
+    if not videos and not photos:
+        return jsonify({'ok': False, 'error': 'no_media'}), 400
     with edit_job_lk:
         if EDIT['running']:
             return jsonify({'ok': False, 'error': 'already_running'}), 409

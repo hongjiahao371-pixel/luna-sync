@@ -66,10 +66,22 @@ body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f7f9fa,#eef1f4
   var qs=CODE?('?code='+encodeURIComponent(CODE)):'';
   function src(i){return '/share/'+TOKEN+'/img/'+i+qs}
   var grid=document.getElementById('grid');
+  function tsrc(i){return '/share/'+TOKEN+'/thumb/'+i+qs}
   for(var i=0;i<COUNT;i++){
     (function(i){
       var c=document.createElement('div');c.className='card';
-      c.innerHTML='<img loading="lazy" src="'+src(i)+'" alt=""><div class="name">照片 '+(i+1)+'</div>';
+      var im=document.createElement('img');
+      im.loading='lazy';im.decoding='async';im.alt='';
+      var retried=false;
+      im.onerror=function(){
+        // transient gateway stalls: one silent retry, then show placeholder
+        if(!retried){retried=true;setTimeout(function(){im.src=tsrc(i)+'&r=1'},800)}
+        else{im.style.display='none'}
+      };
+      im.src=tsrc(i);
+      c.appendChild(im);
+      var nm=document.createElement('div');nm.className='name';nm.textContent='照片 '+(i+1);
+      c.appendChild(nm);
       c.onclick=function(){openAt(i)};
       grid.appendChild(c);
     })(i);
