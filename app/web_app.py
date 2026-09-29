@@ -1542,9 +1542,12 @@ def _load_json_file(path):
 def _save_json_file(path, data):
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
-        with open(path, 'w') as f:
+        # atomic replace: a concurrent reader must never see a truncated file
+        tmp = path + '.tmp'
+        with open(tmp, 'w') as f:
             json.dump(data, f, ensure_ascii=False)
-        os.chmod(path, 0o600)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
     except Exception as e:
         log.warning('save ' + os.path.basename(path) + ':' + str(e)[:60])
 
@@ -1724,16 +1727,91 @@ def api_projects_create():
     data = request.json or {}
     name = str(data.get('name') or '').strip()
     files = [str(x) for x in (data.get('files') or []) if str(x)]
+    parent = str(data.get('parent') or '')
     if not name or len(name) > 60:
         return jsonify({'ok': False, 'error': 'invalid_name'}), 400
     with alb_lk:
         projects = load_projects()
+        if parent and parent not in projects:
+            return jsonify({'ok': False, 'error': 'invalid_parent'}), 400
         pid = 'p%d' % int(time.time() * 1000)
+        # two projects created in the same millisecond must not collide
+        while pid in projects:
+            pid = 'p%d_%s' % (int(time.time() * 1000), secrets.token_hex(2))
         projects[pid] = {'name': name, 'files': sorted(set(files)),
-                         'created': int(time.time())}
+                         'created': int(time.time()), 'parent': parent}
         save_projects(projects)
     addlog('新建项目「' + name + '」（' + str(len(files)) + ' 个文件）')
     return jsonify({'ok': True, 'id': pid, 'name': name})
+
+@app.route('/api/projects/cover', methods=['POST'])
+def api_projects_cover():
+    data = request.json or {}
+    pid = str(data.get('id') or '')
+    cover = str(data.get('file') or '')
+    if not pid:
+        return jsonify({'ok': False, 'error': 'invalid_args'}), 400
+    with alb_lk:
+        projects = load_projects()
+        if pid not in projects:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if cover:
+            projects[pid]['cover'] = cover
+        else:
+            projects[pid].pop('cover', None)
+        save_projects(projects)
+    return jsonify({'ok': True, 'cover': cover})
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    import math
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = p2 - p1
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 6371.0 * 2 * math.asin(math.sqrt(a))
+
+@app.route('/api/projects/auto-gps', methods=['POST'])
+def api_projects_auto_gps():
+    """Add every local photo whose EXIF GPS falls within radius_km of the
+    given center into the project; remembers the rule for re-runs."""
+    data = request.json or {}
+    pid = str(data.get('id') or '')
+    try:
+        lat = float(data.get('lat'))
+        lng = float(data.get('lng'))
+        radius = float(data.get('radius_km') or 50)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid_coords'}), 400
+    if not -90 <= lat <= 90 or not -180 <= lng <= 180 or not 0.1 <= radius <= 1000:
+        return jsonify({'ok': False, 'error': 'invalid_coords'}), 400
+    with alb_lk:
+        projects = load_projects()
+        if pid not in projects:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        members = set(projects[pid]['files'])
+        added = 0
+        loc = local_files()
+        scanned = 0
+        for rel, info in sorted(loc.items()):
+            name = os.path.basename(rel)
+            if not name.lower().endswith(('.jpg', '.jpeg')):
+                continue
+            scanned += 1
+            if scanned > 4000:
+                break
+            if rel in members:
+                continue
+            gps = _read_gps(info['path'])
+            if not gps:
+                continue
+            if _haversine_km(lat, lng, gps['lat'], gps['lon']) <= radius:
+                members.add(rel)
+                added += 1
+        projects[pid]['files'] = sorted(members)
+        projects[pid]['gps_rule'] = {'lat': lat, 'lng': lng, 'radius_km': radius}
+        save_projects(projects)
+    addlog('项目按位置归入：加入 %d 个文件' % added)
+    return jsonify({'ok': True, 'added': added, 'total': len(projects[pid]['files'])})
 
 @app.route('/api/projects/delete', methods=['POST'])
 def api_projects_delete():
@@ -1743,6 +1821,11 @@ def api_projects_delete():
         removed = projects.pop(pid, None)
         if removed is None:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        children = [k for k, v in projects.items() if str(v.get('parent') or '') == pid]
+        if children:
+            projects[pid] = removed
+            return jsonify({'ok': False, 'error': 'has_children',
+                            'children': len(children)}), 400
         save_projects(projects)
     return jsonify({'ok': True})
 
