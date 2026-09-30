@@ -1656,8 +1656,6 @@ def _autoselect_worker(paths):
             cid = item['cluster']
             if cid not in best_of_cluster or item['score'] > best_of_cluster[cid]['score']:
                 best_of_cluster[cid] = item
-        recommended = sorted({item['path'] for item in best_of_cluster.values()
-                              if item['score'] >= 60})
         results = {}
         for item in entries:
             results[item['path']] = {k: item[k] for k in
@@ -1670,6 +1668,14 @@ def _autoselect_worker(paths):
             if hi > lo:
                 for r in results.values():
                     r['score'] = round(40 + (r['score'] - lo) / (hi - lo) * 58, 1)
+        # recommendation bar: batch-adaptive (mean + 0.5σ of normalized scores,
+        # floored at 60) so a uniformly decent batch still surfaces only the
+        # strongest shots instead of rubber-stamping ~90% of it
+        mean_s = sum(all_scores) / max(1, len(all_scores))
+        std_s = (sum((s - mean_s) ** 2 for s in all_scores) / max(1, len(all_scores))) ** 0.5
+        bar = max(60.0, mean_s + 0.5 * std_s)
+        recommended = sorted({item['path'] for item in best_of_cluster.values()
+                              if results[item['path']]['score'] >= bar})
         blurry = _find_blurry(entries)
         for item in entries:
             if item['path'] in results and results[item['path']]['score'] < 55:
@@ -2011,10 +2017,11 @@ def _denoise(img, strength=1):
 
 
 def _hdr_feel(img):
-    """Pseudo-HDR: local lift toward a target level. A coarse 7x7 grid holds
-    per-tile blend factors (how much to pull dark regions up toward the
-    target mean); the factor field is bilinearly resized to full size so
-    there are no tile seams, then composited over the base image."""
+    """Pseudo-HDR shadow lift. A coarse 7x7 grid measures local luminance and
+    derives a multiplicative gain (clamped 1.0-1.8, only dark tiles get
+    lifted); the gain field is bilinearly resized to full size and applied as
+    out = img + img*(gain-1) — true blacks stay black, midtone shadows lift,
+    no seams, highlights untouched."""
     w, h = img.size
     gw, gh = 7, 7
     target = 118
@@ -2025,14 +2032,12 @@ def _hdr_feel(img):
     for gy in range(gh):
         for gx in range(gw):
             mean = spx[gx, gy]
-            if mean >= target:
-                f = 0
-            else:
-                f = min(180, int((target - mean) * 2))
-            mpx[gx, gy] = f
-    fmask = mask.resize((w, h), Image.BILINEAR)
-    flat = Image.new('RGB', (w, h), (target, target, target))
-    return Image.composite(flat, img.convert('RGB'), fmask)
+            gain = 1.0 if mean >= target else min(1.8, target / max(8.0, mean))
+            mpx[gx, gy] = min(255, int((gain - 1.0) * 255))
+    gmask = mask.resize((w, h), Image.BILINEAR)
+    base = img.convert('RGB')
+    boosted = ImageChops.multiply(base, Image.merge('RGB', (gmask, gmask, gmask)))
+    return ImageChops.add(base, boosted)
 
 
 def _vignette_fix(img, strength=0.35):
