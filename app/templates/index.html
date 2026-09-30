@@ -1874,18 +1874,25 @@ function renderMap(list){
   $('wall').style.display='none';$('ltableWrap').style.display='none';
   var tl=$('timelineWrap'),tn=$('tlNav');if(tl)tl.style.display='none';if(tn)tn.style.display='none';
   var wrap=$('mapWrap');wrap.style.display='block';
-  var imgs=list.filter(function(x){return isImg(x.kind)&&x.kind!=='DNG'}).map(pickKey).slice(0,800);
+  var imgs=list.filter(function(x){return isImg(x.kind)&&x.kind!=='DNG'}).map(pickKey);
+  if(imgs.length<10){
+    // 当前相册照片太少时扫全库：地图是全库导航工具，不该被相册过滤清空
+    imgs=localFiles().filter(function(x){return isImg(x.kind)&&x.kind!=='DNG'}).map(pickKey);
+  }
+  imgs=imgs.slice(0,800);
   var host=$('mapEl');
   if(window.__leafFail||typeof L==='undefined'){
     host.innerHTML='<div class="map-empty">'+tr('mapNoLib')+'</div>';return;
   }
-  host.innerHTML='';
+  // Leaflet freezes if initialized inside display:none, so init on first
+  // visible entry only; later entries just refresh size and re-add markers.
   if(!MAP){
     MAP=L.map(host,{zoomControl:true}).setView([25,110],4);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-      maxZoom:18,subdomains:'abcd',
-      attribution:'&copy; OpenStreetMap &copy; CARTO'
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19,
+      attribution:'&copy; OpenStreetMap contributors'
     }).addTo(MAP);
+    MAP_MARKERS=[];
   }
   setTimeout(function(){MAP.invalidateSize()},60);
   if(MAP_MARKERS){MAP_MARKERS.forEach(function(m){MAP.removeLayer(m)});}
@@ -1894,12 +1901,17 @@ function renderMap(list){
   var empty=$('mapWrap').querySelector('.map-empty');if(empty)empty.remove();
   if(!n){host.innerHTML='<div class="map-empty">'+tr('mapEmpty')+'</div>';return}
   var tip=tr('mapScanning');
-  host.innerHTML='<div class="map-empty" id="mapScan">'+tip+'</div>';
+  var scan=document.createElement('div');scan.className='map-empty';scan.id='mapScan';scan.textContent=tip;
+  host.appendChild(scan);
   fetch('/api/gps/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:imgs})})
     .then(function(r){return r.json()}).then(function(d){
-    var scan=$('mapScan');if(scan)scan.remove();
+    var sc=$('mapScan');if(sc)sc.remove();
     var gps=d.gps||{},keys=Object.keys(gps);
-    if(!keys.length){host.innerHTML='<div class="map-empty">'+tr('mapEmpty')+'</div>';return}
+    if(!keys.length){
+      // 提示条不覆盖已建好的 map（覆盖会触发 Leaflet 冻结问题）
+      var note=document.createElement('div');note.className='map-empty';note.textContent=tr('mapEmpty');
+      host.appendChild(note);return;
+    }
     var pts=[];
     keys.forEach(function(k){
       var g=gps[k],it=localFiles().find(function(x){return pickKey(x)===k});
@@ -1912,8 +1924,9 @@ function renderMap(list){
     if(pts.length===1)MAP.setView(pts[0],13);
     else MAP.fitBounds(L.latLngBounds(pts).pad(0.15));
   }).catch(function(){
-    var scan=$('mapScan');if(scan)scan.remove();
-    host.innerHTML='<div class="map-empty">'+tr('mapNoLib')+'</div>';
+    var sc=$('mapScan');if(sc)sc.remove();
+    var note=document.createElement('div');note.className='map-empty';note.textContent=tr('mapNoLib');
+    host.appendChild(note);
   });
 }
 /* ---- project banner (gives the cover a visible home) ---- */

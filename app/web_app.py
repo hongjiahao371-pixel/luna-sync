@@ -2613,21 +2613,42 @@ def api_storage_stats():
     return jsonify({'total': total, 'months': months_list, 'caches': caches})
 
 def _read_gps(path):
-    """Best-effort GPS extraction; returns {} when unavailable."""
+    """Best-effort GPS extraction; returns {} when unavailable.
+    Handles both Image.Exif (get_ifd) and plain-dict _getexif return shapes;
+    rationals arrive as tuples OR IFDRational depending on Pillow internals."""
     try:
         img = Image.open(path)
         raw = getattr(img, '_getexif', lambda: None)() or {}
         gps = raw.get_ifd(34853) if hasattr(raw, 'get_ifd') else raw.get(34853)
         if not gps:
             return {}
-        def to_deg(val, ref):
-            if not isinstance(val, tuple) or len(val) != 3:
+
+        def as_float(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
                 return None
-            deg = val[0] / max(1, val[1]) + val[1] / 60 + val[2] / 3600
-            return -deg if ref in ('S', 'W') else deg
-        lat = to_deg(gps.get(2), str(gps.get(1, 'N')))
-        lon = to_deg(gps.get(4), str(gps.get(3, 'E')))
+
+        def to_deg(val, ref):
+            # degrees/minutes/seconds; entries may be tuples, lists or IFDRational
+            try:
+                items = list(val) if isinstance(val, (tuple, list)) else None
+                if items is None or len(items) != 3:
+                    return None
+                deg = as_float(items[0]) or 0.0
+                deg += (as_float(items[1]) or 0.0) / 60.0
+                deg += (as_float(items[2]) or 0.0) / 3600.0
+                if deg == 0:
+                    return None
+                return -deg if str(ref).strip().upper() in ('S', 'W') else deg
+            except Exception:
+                return None
+
+        lat = to_deg(gps.get(2), gps.get(1, 'N'))
+        lon = to_deg(gps.get(4), gps.get(3, 'E'))
         if lat is None or lon is None:
+            return {}
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             return {}
         return {'lat': round(lat, 6), 'lon': round(lon, 6)}
     except Exception:
