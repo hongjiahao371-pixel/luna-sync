@@ -194,6 +194,14 @@ td.muted{color:var(--muted);font-size:12.5px}
 .albumbar button,.locbar button{height:32px;padding:0 12px;border-radius:8px}
 .albumbar select,.locbar select{height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:0 8px;cursor:pointer}
 .albumbar .primary,.locbar .primary{background:#263140}
+.dropdown{position:relative;display:inline-block}
+.dropdown-menu{position:absolute;top:calc(100% + 6px);right:0;min-width:172px;background:#fff;border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 16px 40px rgba(16,24,40,.18);padding:6px;z-index:180;display:none}
+.dropdown-menu .menu-item{display:block;width:100%;text-align:left;background:transparent;color:var(--ink);
+  border:none;box-shadow:none;height:34px;padding:0 12px;border-radius:7px;font-weight:400}
+.dropdown-menu .menu-item:hover{background:rgba(38,49,64,.07);color:var(--ink)}
+.dropdown-menu .danger-text{color:var(--danger)}
+.dropdown-menu .menu-sep{height:1px;background:var(--line);margin:5px 4px}
 .projbanner{display:flex;gap:14px;align-items:center;background:linear-gradient(90deg,rgba(47,111,214,.1),rgba(47,111,214,.03));border:1px solid rgba(47,111,214,.25);border-radius:12px;padding:10px 14px;margin:12px 18px 0}
 .projbanner img{width:72px;height:48px;object-fit:cover;border-radius:8px;background:#eef1f4;display:block}
 .projbanner .pb-name{font-size:15px;font-weight:600;color:var(--ink)}
@@ -465,28 +473,31 @@ td.muted{color:var(--muted);font-size:12.5px}
       <div class="albumbar">
         <span class="alabel">相册</span>
         <select id="albumSel"></select>
-        <button id="bNewProj" class="tonal">新建项目</button>
-        <button id="bNewSub" class="tonal" style="display:none">新建子项目</button>
-        <button id="bGpsAuto" class="tonal" style="display:none">按位置归入</button>
-        <button id="bSaveProject" class="tonal">存为项目</button>
-        <button id="bDelProject" class="danger">删除项目</button>
-        <button id="bAddPhotos" class="secondary">添加照片</button>
         <button id="bAutoSelect" class="primary">自动选片</button>
         <button id="bAutoCut" class="primary">自动剪辑</button>
         <span class="vdiv2"></span>
         <label class="daily-toggle"><input type="checkbox" id="dailyBest"> 每日精选</label>
         <input id="dailyTime" type="time" value="03:00" style="width:104px;height:32px" title="每日精选执行时间">
-        <span class="vdiv2"></span>
-        <button id="bShare" class="secondary">精选分享</button>
-        <button id="bMiniExport" class="secondary">朋友圈包</button>
-        <button id="bCollage" class="secondary">拼图</button>
-        <button id="bXmp" class="ghost">XMP</button>
-        <button id="bStats" class="ghost">统计</button>
-        <label class="daily-toggle"><input type="checkbox" id="dailyBest"> 每日精选</label>
-        <input id="dailyTime" type="time" value="03:00" style="width:104px;height:32px" title="每日精选执行时间">
-        <span class="vdiv2"></span>
-        <button id="bEnhance" class="toggle-btn">画质优化</button>
-        <button id="bWatermark" class="toggle-btn">水印</button>
+        <div class="dropdown">
+          <button id="bTools" class="tonal">工具 ▾</button>
+          <div class="dropdown-menu" id="toolsMenu" style="display:none">
+            <button id="bNewProj" class="menu-item">新建项目</button>
+            <button id="bNewSub" class="menu-item" style="display:none">新建子项目</button>
+            <button id="bGpsAuto" class="menu-item" style="display:none">按位置归入</button>
+            <button id="bSaveProject" class="menu-item">存为项目</button>
+            <button id="bDelProject" class="menu-item danger-text">删除项目</button>
+            <button id="bAddPhotos" class="menu-item">添加照片</button>
+            <div class="menu-sep"></div>
+            <button id="bEnhance" class="menu-item">画质优化</button>
+            <button id="bWatermark" class="menu-item">水印</button>
+            <div class="menu-sep"></div>
+            <button id="bShare" class="menu-item">精选分享</button>
+            <button id="bMiniExport" class="menu-item">朋友圈包</button>
+            <button id="bCollage" class="menu-item">拼图</button>
+            <button id="bXmp" class="menu-item">导出 XMP</button>
+            <button id="bStats" class="menu-item">统计</button>
+          </div>
+        </div>
       </div>
       <div class="locbar">
         <div class="seg">
@@ -515,10 +526,15 @@ td.muted{color:var(--muted);font-size:12.5px}
         <button id="bAddToProj" class="secondary" style="display:none">添加到项目</button>
         <button id="bTagAdd" class="secondary" style="display:none">打标签</button>
         <button id="bCull" class="tonal">挑选照片</button>
-        <button id="bExportPicks" class="secondary">导出入选</button>
-        <button id="bDelRejects" class="danger">删除落选</button>
-        <button id="bSlideshow" class="secondary">放映</button>
-        <button id="bClearCache" class="ghost" title="清空缩略图和转码预览缓存（不影响已下载文件）">清除缓存</button>
+        <button id="bExportPicks" class="primary">导出入选</button>
+        <button id="bSlideshow" class="tonal" title="放映入选照片">放映</button>
+        <div class="dropdown">
+          <button id="bMore" class="ghost">更多 ▾</button>
+          <div class="dropdown-menu" id="moreMenu" style="display:none">
+            <button id="bDelRejects" class="menu-item danger-text">删除落选</button>
+            <button id="bClearCache" class="menu-item">清除缓存</button>
+          </div>
+        </div>
       </div>
       <div id="projBanner" class="projbanner" style="display:none"></div>
       <div id="tagBar" class="tagbar" style="display:none"></div>
@@ -1100,6 +1116,16 @@ var PICKS={},LPICK='all';
 function pickKey(it){return it.id||it.name}
 function pickState(it){var p=PICKS[pickKey(it)];return p&&p.mark?p.mark:''}
 function pickBadge(key){var m=PICKS[key]&&PICKS[key].mark;if(!m)return '';return m==='keep'?'<span class="badge pk-keep">✓ 入选</span>':'<span class="badge pk-reject">✕ 落选</span>'}
+/* ---- toolbar dropdown menus ---- */
+function closeMenus(){var m1=$('toolsMenu'),m2=$('moreMenu');if(m1)m1.style.display='none';if(m2)m2.style.display='none';}
+(function(){
+  var bt=$('bTools'),tm=$('toolsMenu'),bm=$('bMore'),mm=$('moreMenu');
+  if(bt)bt.onclick=function(e){e.stopPropagation();var open=tm.style.display==='block';closeMenus();tm.style.display=open?'none':'block'};
+  if(bm)bm.onclick=function(e){e.stopPropagation();var open=mm.style.display==='block';closeMenus();mm.style.display=open?'none':'block'};
+  document.addEventListener('click',function(e){
+    if(!e.target.closest || !e.target.closest('.dropdown')) closeMenus();
+  });
+})();
 /* ---- tags ---- */
 var TAGS={},TAGSEL=new Set(),TAG_OPEN=false;
 function tagList(){var c={};localFiles().forEach(function(x){(x.tags||[]).forEach(function(n){c[n]=(c[n]||0)+1})});return Object.keys(c).sort(function(a,b){return c[b]-c[a]||a.localeCompare(b)}).map(function(n){return {name:n,count:c[n]}})}
