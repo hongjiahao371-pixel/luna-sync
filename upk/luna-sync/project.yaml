@@ -9,7 +9,7 @@ tag_types:
   - backup
   - media
 depend_fw_version: 1.0.0
-depend_docker_version: 20.10.0
+depend_docker_version: 1.20.0
 allow_add_access_path: true
 open_type: tab
 port: 8767
