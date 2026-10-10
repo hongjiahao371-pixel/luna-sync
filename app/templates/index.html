@@ -1125,6 +1125,9 @@ function closeMenus(){var m1=$('toolsMenu'),m2=$('moreMenu');if(m1)m1.style.disp
   document.addEventListener('click',function(e){
     if(!e.target.closest || !e.target.closest('.dropdown')) closeMenus();
   });
+  // 选中任何菜单项后立即收起菜单（否则打开的弹窗/面板会挡住外部点击，菜单悬留）
+  if(tm)tm.addEventListener('click',closeMenus);
+  if(mm)mm.addEventListener('click',closeMenus);
 })();
 /* ---- tags ---- */
 var TAGS={},TAGSEL=new Set(),TAG_OPEN=false;
