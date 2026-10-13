@@ -78,10 +78,54 @@ for d in (DLDIR, THUMB_DIR, ENC_DIR, PREVIEW_SRC_DIR, LIV_DIR, TRASH_DIR):
 
 CAMERA_AUTH_FILE = os.path.join(STATE_DIR, 'camera_auth.json')
 
+SECRET_ENC_PREFIX = 'enc:v1:'
+
+WIFI_KEY_FILE = os.path.join(STATE_DIR, 'wifi.key')
+def _secret_key():
+    """Per-install 256-bit key kept in a 0600 file in the state directory."""
+    try:
+        if os.path.exists(WIFI_KEY_FILE):
+            with open(WIFI_KEY_FILE) as key_file:
+                key = bytes.fromhex(key_file.read().strip())
+            if len(key) == 32:
+                return key
+        key = secrets.token_bytes(32)
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(WIFI_KEY_FILE, 'w') as key_file:
+            key_file.write(key.hex())
+        os.chmod(WIFI_KEY_FILE, 0o600)
+        return key
+    except Exception as e:
+        log.warning('secret_key:' + str(e)[:50])
+        return None
+
+def _secret_keystream(key, nonce, length):
+    stream = bytearray()
+    counter = 0
+    while len(stream) < length:
+        block = hmac.new(key, nonce + counter.to_bytes(4, 'big'), hashlib.sha256).digest()
+        stream.extend(block)
+        counter += 1
+    return bytes(stream[:length])
+
+def encrypt_secret(plaintext):
+    """Encrypt a credential for at-rest storage (HMAC-SHA256 CTR + MAC tag)."""
+    data = str(plaintext or '').encode('utf-8')
+    key = _secret_key()
+    if not data or key is None:
+        return ''
+    nonce = secrets.token_bytes(12)
+    mask = _secret_keystream(key, nonce, len(data))
+    cipher = bytes(a ^ b for a, b in zip(data, mask))
+    tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()
+    return SECRET_ENC_PREFIX + base64.b64encode(nonce + tag + cipher).decode('ascii')
+
+
 def load_camera_auth():
     """Per-device camera handshake data: env override > state config > vendor
-    default. The first run persists a per-install copy so each deployment owns
-    its own auth data instead of relying solely on a compiled-in constant."""
+    default. The first run persists a per-install copy (encrypted at rest) so
+    each deployment owns its own auth data instead of relying solely on a
+    compiled-in constant."""
     payloads = None
     env = (os.environ.get('LUNA_CAMERA_AUTH') or '').strip()
     if env:
@@ -91,7 +135,7 @@ def load_camera_auth():
             if os.path.exists(CAMERA_AUTH_FILE):
                 with open(CAMERA_AUTH_FILE) as auth_file:
                     data = json.load(auth_file)
-                payloads = [str(h) for h in data.get('payloads', []) if h]
+                payloads = [decrypt_secret(str(h)) for h in data.get('payloads', []) if h]
         except Exception as e:
             log.warning('load_camera_auth:' + str(e)[:50])
             payloads = None
@@ -109,11 +153,28 @@ def load_camera_auth():
             os.makedirs(STATE_DIR, exist_ok=True)
             if not os.path.exists(CAMERA_AUTH_FILE):
                 with open(CAMERA_AUTH_FILE, 'w') as auth_file:
-                    json.dump({'payloads': [p.hex() for p in parsed]}, auth_file)
+                    json.dump({'payloads': [encrypt_secret(p.hex()) for p in parsed]}, auth_file)
                 os.chmod(CAMERA_AUTH_FILE, 0o600)
         except Exception as e:
             log.warning('save_camera_auth:' + str(e)[:50])
     return parsed
+
+def _camera_bind_ip():
+    """Source IP of the camera Wi-Fi interface, when it is up on this host.
+    Binding the camera socket to it keeps the plaintext vendor channel
+    reachable only from the isolated camera network. Reads the runtime IFACE
+    that refresh_wifi_backend maintains; returns None when unknown."""
+    try:
+        iface = IFACE
+        if not iface:
+            return None
+        out = run(['ip', '-4', '-o', 'addr', 'show', 'dev', iface], 10)
+        m = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)', out.stdout or '')
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return None
 
 CAMERA_CLIENT = LunaClient(HOST, auth_payloads=load_camera_auth())
 
@@ -374,48 +435,6 @@ def cam_on():
     except OSError:
         return False
 
-WIFI_KEY_FILE = os.path.join(STATE_DIR, 'wifi.key')
-SECRET_ENC_PREFIX = 'enc:v1:'
-
-def _secret_key():
-    """Per-install 256-bit key kept in a 0600 file in the state directory."""
-    try:
-        if os.path.exists(WIFI_KEY_FILE):
-            with open(WIFI_KEY_FILE) as key_file:
-                key = bytes.fromhex(key_file.read().strip())
-            if len(key) == 32:
-                return key
-        key = secrets.token_bytes(32)
-        os.makedirs(STATE_DIR, exist_ok=True)
-        with open(WIFI_KEY_FILE, 'w') as key_file:
-            key_file.write(key.hex())
-        os.chmod(WIFI_KEY_FILE, 0o600)
-        return key
-    except Exception as e:
-        log.warning('secret_key:' + str(e)[:50])
-        return None
-
-def _secret_keystream(key, nonce, length):
-    stream = bytearray()
-    counter = 0
-    while len(stream) < length:
-        block = hmac.new(key, nonce + counter.to_bytes(4, 'big'), hashlib.sha256).digest()
-        stream.extend(block)
-        counter += 1
-    return bytes(stream[:length])
-
-def encrypt_secret(plaintext):
-    """Encrypt a credential for at-rest storage (HMAC-SHA256 CTR + MAC tag)."""
-    data = str(plaintext or '').encode('utf-8')
-    key = _secret_key()
-    if not data or key is None:
-        return ''
-    nonce = secrets.token_bytes(12)
-    mask = _secret_keystream(key, nonce, len(data))
-    cipher = bytes(a ^ b for a, b in zip(data, mask))
-    tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()
-    return SECRET_ENC_PREFIX + base64.b64encode(nonce + tag + cipher).decode('ascii')
-
 def decrypt_secret(token):
     """Inverse of encrypt_secret; legacy plaintext values are returned as-is."""
     token = str(token or '')
@@ -595,11 +614,26 @@ def keeper():
             log.warning('keeper:' + str(e)[:50])
         time.sleep(12)
 
+CAMERA_IDLE_CLOSE_SECS = max(60, int(CFG.get('camera_idle_close_secs', 600)))
+_camera_last_activity = time.time()
+
 def camera_keepalive_worker():
+    """Keep the camera session warm while sync is active, and CLOSE it after
+    an idle period: the vendor channel is plaintext, so its exposure window
+    should be limited to active transfers instead of 24/7."""
+    global _camera_last_activity
     while True:
         try:
             if privacy_accepted() and wifi_on_target() and cam_on():
-                CAMERA_CLIENT.keepalive()
+                busy = ST['queue'] or AUTO['running'] or EDIT['running']
+                if busy:
+                    _camera_last_activity = time.time()
+                    CAMERA_CLIENT.keepalive()
+                elif CAMERA_CLIENT.auth is not None:
+                    if time.time() - _camera_last_activity > CAMERA_IDLE_CLOSE_SECS:
+                        CAMERA_CLIENT.close()
+                        addlog('相机连接空闲超时，已断开（下次同步自动重连）')
+                        _camera_last_activity = time.time()
         except Exception as e:
             log.warning('camera_keepalive:' + str(e)[:60])
         time.sleep(3)

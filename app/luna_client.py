@@ -219,13 +219,17 @@ def remember_size(url, size):
         _size_cache[url] = (time.monotonic(), size)
 
 class LunaAuthSession:
-    def __init__(self, host=DEFAULT_HOST, port=6666, timeout=3.0, payloads=None):
+    def __init__(self, host=DEFAULT_HOST, port=6666, timeout=3.0, payloads=None, bind_ip=None):
         self.host = host
         self.port = port
         self.timeout = timeout
         # per-device auth data: injected by the caller (state config), never
         # assumed from a single compiled-in constant when a device overrides it
         self.payloads = list(payloads) if payloads else list(AUTH_PAYLOADS)
+        # bind the camera socket to the camera Wi-Fi interface when known: the
+        # plaintext vendor channel is then reachable only from that isolated
+        # network, not from any other interface on this machine
+        self.bind_ip = bind_ip or None
         self._sock = None
         self._buffer = b''
         self._sequence = 0x2c
@@ -242,7 +246,11 @@ class LunaAuthSession:
                     time.sleep(delay)
                 sock = None
                 try:
-                    sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(self.timeout)
+                    if self.bind_ip:
+                        sock.bind((self.bind_ip, 0))
+                    sock.connect((self.host, self.port))
                     sock.settimeout(self.timeout)
                     self._send_auth(sock)
                     self._sock = sock
@@ -370,9 +378,10 @@ class LunaAuthSession:
         return list(dict.fromkeys(paths))
 
 class LunaClient:
-    def __init__(self, host=DEFAULT_HOST, auth_payloads=None):
+    def __init__(self, host=DEFAULT_HOST, auth_payloads=None, bind_ip=None):
         self.host = host
         self.auth_payloads = list(auth_payloads) if auth_payloads else None
+        self.bind_ip = bind_ip or None
         self.roots = [
             dict(root, url="http://" + host + root['path'])
             for root in STORAGE_ROOTS
@@ -382,7 +391,7 @@ class LunaClient:
         self._lk = threading.RLock()
 
     def _new_session(self):
-        return LunaAuthSession(self.host, payloads=self.auth_payloads)
+        return LunaAuthSession(self.host, payloads=self.auth_payloads, bind_ip=self.bind_ip)
 
     def connect(self):
         with self._lk:

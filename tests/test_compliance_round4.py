@@ -162,7 +162,10 @@ class ComplianceRound4Tests(unittest.TestCase):
                         'first run must write a per-device camera auth config')
         with open(app.CAMERA_AUTH_FILE) as f:
             data = json.load(f)
-        self.assertEqual([bytes.fromhex(h) for h in data['payloads']], payloads)
+        restored = [self.web_app.decrypt_secret(h) for h in data['payloads']]
+        self.assertEqual([bytes.fromhex(h) for h in restored], payloads)
+        for h in data['payloads']:
+            self.assertTrue(h.startswith(self.web_app.SECRET_ENC_PREFIX), 'auth payloads must be encrypted at rest')
         self.assertEqual(payloads, app.CAMERA_CLIENT.auth_payloads)
         mode = os.stat(app.CAMERA_AUTH_FILE).st_mode & 0o777
         self.assertLessEqual(mode, 0o600, 'camera auth config must not be world readable')
