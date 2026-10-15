@@ -7,10 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Luna Sync</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"
-      onerror="this.removeAttribute('href');window.__leafFail=1">
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"
-      onerror="window.__leafFail=1" defer></script>
+
 <style>
 :root{color-scheme:light;--ink:#1a2430;--text2:#3c4a5c;--muted:#64748b;--faint:#8a99a8;--line:#dde5ec;--accent:#263140;--danger:#c4443c;--danger-soft:rgba(196,68,60,.08)}
 *{box-sizing:border-box}html,body{min-height:100%}
@@ -541,7 +538,7 @@ td.muted{color:var(--muted);font-size:12.5px}
       <div id="wall" class="wall"></div>
       <div id="timelineWrap" class="timeline" style="display:none"></div>
       <div id="tlNav" class="tlnav" style="display:none"></div>
-      <div id="mapWrap" style="display:none"><div id="mapEl"></div></div>
+      <div id="mapWrap" style="display:none"><div id="mapEl"></div><button id="bMapOnline" class="tonal" style="position:absolute;top:10px;right:38px;z-index:800" title="联网加载街道底图（当前为内置离线底图）">在线底图</button></div>
       <div class="table-wrap" id="ltableWrap" style="display:none">
         <table class="file-table tight">
           <thead><tr><th class="w-prev">预览</th><th>文件名</th><th class="w-kind">类型</th><th class="w-date">拍摄日期</th><th class="w-size">大小</th><th class="w-act">操作</th></tr></thead>
@@ -1647,6 +1644,13 @@ $('lvGrid').onclick=function(){setViewMode('grid')};
 $('lvTable').onclick=function(){setViewMode('table')};
 $('lvTimeline').onclick=function(){setViewMode('timeline')};
 $('lvMap').onclick=function(){setViewMode('map')};
+$('bMapOnline').onclick=function(e){
+  e.stopPropagation();
+  window.__MAP_ONLINE=!window.__MAP_ONLINE;
+  if(MAP){MAP.remove();MAP=null;MAP_MARKERS=[];}
+  var cur=localVisible();
+  renderMap(cur);
+};
 $('lq').oninput=function(){renderLocal()};
 $('bClearCache').onclick=async function(){
   if(!confirm(tr('clearCacheConfirm')))return;
@@ -1910,17 +1914,35 @@ function renderMap(list){
   }
   imgs=imgs.slice(0,800);
   var host=$('mapEl');
-  if(window.__leafFail||typeof L==='undefined'){
-    host.innerHTML='<div class="map-empty">'+tr('mapNoLib')+'</div>';return;
+  if(typeof L==='undefined'&&!window.__leafTried){
+    window.__leafTried=true;
+    var css=document.createElement('link');css.rel='stylesheet';
+    css.href='/static/map/leaflet.min.css';
+    css.onerror=function(){window.__leafFail=1};
+    document.head.appendChild(css);
+    var sc=document.createElement('script');
+    sc.src='/static/map/leaflet.min.js';
+    sc.onload=function(){ if(typeof renderMapRetry==='function') renderMapRetry(); };
+    sc.onerror=function(){window.__leafFail=1};
+    document.head.appendChild(sc);
   }
   // Leaflet freezes if initialized inside display:none, so init on first
   // visible entry only; later entries just refresh size and re-add markers.
   if(!MAP){
-    MAP=L.map(host,{zoomControl:true}).setView([25,110],4);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      maxZoom:19,
-      attribution:'&copy; OpenStreetMap contributors'
-    }).addTo(MAP);
+    MAP=L.map(host,{zoomControl:true,maxZoom:12,attributionControl:false}).setView([25,110],3);
+    if(window.__MAP_ONLINE){
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+        maxZoom:19,
+        attribution:'&copy; OpenStreetMap contributors'
+      }).addTo(MAP);
+    }else{
+      // offline world base map: bundled Natural Earth 110m boundaries, zero
+      // external requests; fetch may also be served from the app itself
+      fetch('/static/map/world_110m_lite.json').then(function(r){return r.json()}).then(function(geo){
+        L.geoJSON(geo,{style:{color:'#7a90a8',weight:1,fillColor:'#dfe7ee',fillOpacity:1}}).addTo(MAP);
+        if(window.__pendingFit){MAP.fitBounds(window.__pendingFit.pad(0.15));window.__pendingFit=null;}
+      }).catch(function(){ /* map shows markers on plain background */ });
+    }
     MAP_MARKERS=[];
   }
   setTimeout(function(){MAP.invalidateSize()},60);
@@ -1950,8 +1972,13 @@ function renderMap(list){
         '<div class="nm">'+esc(nm)+'</div><div class="co">'+g.lat.toFixed(4)+', '+g.lon.toFixed(4)+'</div></div>');
       MAP_MARKERS.push(m);pts.push([g.lat,g.lon]);
     });
-    if(pts.length===1)MAP.setView(pts[0],13);
-    else MAP.fitBounds(L.latLngBounds(pts).pad(0.15));
+    if(window.__MAP_ONLINE){
+      if(pts.length===1)MAP.setView(pts[0],13);
+      else MAP.fitBounds(L.latLngBounds(pts).pad(0.15));
+    }else{
+      window.__pendingFit=L.latLngBounds(pts);
+      if(pts.length===1)MAP.setView(pts[0],10);
+    }
   }).catch(function(){
     var sc=$('mapScan');if(sc)sc.remove();
     var note=document.createElement('div');note.className='map-empty';note.textContent=tr('mapNoLib');
