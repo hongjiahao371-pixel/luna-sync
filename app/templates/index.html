@@ -204,9 +204,6 @@ td.muted{color:var(--muted);font-size:12.5px}
 .projbanner .pb-name{font-size:15px;font-weight:600;color:var(--ink)}
 .projbanner .pb-meta{font-size:12px;color:var(--muted)}
 .projbanner .pb-coverchip{font-size:11px;color:#8a6d1c;background:rgba(242,173,26,.18);border-radius:999px;padding:1px 8px;margin-left:6px}
-#mapWrap{flex:1;min-height:0;position:relative;background:#dfe6ec}
-#mapEl{position:absolute;inset:0}
-#mapWrap .map-empty{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 20px;color:var(--muted);font-size:13px;box-shadow:0 10px 26px -14px rgba(31,44,67,.25);text-align:center;z-index:500}
 .map-photo{width:160px;display:block}
 .map-photo img{width:100%;height:100px;object-fit:cover;border-radius:6px;display:block;margin-bottom:4px}
 .map-photo .nm{font-size:11.5px;color:#1a2430;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -506,7 +503,6 @@ td.muted{color:var(--muted);font-size:12.5px}
           <button id="lvGrid" class="icon-btn on" title="网格墙" data-tip="网格墙" aria-label="网格墙"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
           <button id="lvTable" class="icon-btn" title="表格" data-tip="表格" aria-label="表格"><svg viewBox="0 0 24 24"><path d="M9 6h12"/><path d="M9 12h12"/><path d="M9 18h12"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></button>
           <button id="lvTimeline" class="icon-btn" title="时间轴" data-tip="时间轴" aria-label="时间轴"><svg viewBox="0 0 24 24"><path d="M12 3v3"/><path d="M12 18v3"/><circle cx="12" cy="12" r="3.2"/><path d="M5 7h2.5M5 12h2.5M5 17h2.5M16.5 7H19M16.5 12H19M16.5 17H19" fill="none"/></svg></button>
-          <button id="lvMap" class="icon-btn" title="地图" data-tip="地图" aria-label="地图"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" fill="none"/><path d="M9 4v14M15 6v14" fill="none"/><circle cx="12" cy="10.5" r="1.6"/></svg></button>
         </div>
         <div class="seg">
           <button id="pkAll" class="on">全部</button>
@@ -538,7 +534,6 @@ td.muted{color:var(--muted);font-size:12.5px}
       <div id="wall" class="wall"></div>
       <div id="timelineWrap" class="timeline" style="display:none"></div>
       <div id="tlNav" class="tlnav" style="display:none"></div>
-      <div id="mapWrap" style="display:none"><div id="mapEl"></div><button id="bMapOnline" class="tonal" style="position:absolute;top:10px;right:38px;z-index:800" title="联网加载街道底图（当前为内置离线底图）">在线底图</button></div>
       <div class="table-wrap" id="ltableWrap" style="display:none">
         <table class="file-table tight">
           <thead><tr><th class="w-prev">预览</th><th>文件名</th><th class="w-kind">类型</th><th class="w-date">拍摄日期</th><th class="w-size">大小</th><th class="w-act">操作</th></tr></thead>
@@ -1241,7 +1236,7 @@ $('bTagAdd').onclick=openTagMgr;
 /* ---- timeline view ---- */
 function setViewMode(m){
   LMODE=m;
-  ['lvGrid','lvTable','lvTimeline','lvMap'].forEach(function(id){
+  ['lvGrid','lvTable','lvTimeline'].forEach(function(id){
     var b=$(id);if(b)b.classList.toggle('on',id==='lv'+m.charAt(0).toUpperCase()+m.slice(1));
   });
   renderLocal();
@@ -1249,7 +1244,6 @@ function setViewMode(m){
 function renderTimeline(list){
   var wrap=$('timelineWrap'),nav=$('tlNav');
   $('wall').style.display='none';$('ltableWrap').style.display='none';
-  var mw3=$('mapWrap');if(mw3)mw3.style.display='none';
   wrap.style.display='block';nav.style.display='flex';
   var days={};
   list.forEach(function(x){var k=itemDateKey(x)||tr('timelineUndated');(days[k]=days[k]||[]).push(x)});
@@ -1401,14 +1395,12 @@ function renderLocal(){
   var list=sortLocal(localVisible());
   if(LMODE==='grid'){renderWall(list)}
   else if(LMODE==='timeline'){renderTimeline(list)}
-  else if(LMODE==='map'){renderMap(list)}
   else{renderLocalTable(list)}
   renderProjBanner(list);
 }
 function renderWall(list){
   $('wall').style.display='grid';$('ltableWrap').style.display='none';
-  var tl=$('timelineWrap'),tn=$('tlNav'),mw=$('mapWrap');
-  if(tl)tl.style.display='none';if(tn)tn.style.display='none';if(mw)mw.style.display='none';
+  var tl=$('timelineWrap'),tn=$('tlNav');if(tl)tl.style.display='none';if(tn)tn.style.display='none';
   var w=$('wall');w.innerHTML='';
   if(!list.length){w.innerHTML='<div class="wall-empty">'+(localFiles().length?tr('noMatchedFiles'):(tr('noLocalFiles')+'<br><small>'+tr('localHint')+'</small>'))+'</div>';return}
   list.forEach(function(it){
@@ -1433,8 +1425,7 @@ function renderWall(list){
 }
 function renderLocalTable(list){
   $('wall').style.display='none';$('ltableWrap').style.display='block';
-  var tl2=$('timelineWrap'),tn2=$('tlNav'),mw2=$('mapWrap');
-  if(tl2)tl2.style.display='none';if(tn2)tn2.style.display='none';if(mw2)mw2.style.display='none';
+  var tl2=$('timelineWrap'),tn2=$('tlNav');if(tl2)tl2.style.display='none';if(tn2)tn2.style.display='none';
   var tb=$('ltbody');tb.innerHTML='';$('lempty').style.display=list.length?'none':'grid';
   list.forEach(function(it){
     var row=document.createElement('tr');
@@ -1643,14 +1634,7 @@ $('lfAll').onclick=function(){setLF('all')};$('lfImg').onclick=function(){setLF(
 $('lvGrid').onclick=function(){setViewMode('grid')};
 $('lvTable').onclick=function(){setViewMode('table')};
 $('lvTimeline').onclick=function(){setViewMode('timeline')};
-$('lvMap').onclick=function(){setViewMode('map')};
-$('bMapOnline').onclick=function(e){
-  e.stopPropagation();
-  window.__MAP_ONLINE=!window.__MAP_ONLINE;
-  if(MAP){MAP.remove();MAP=null;MAP_MARKERS=[];}
-  var cur=localVisible();
-  renderMap(cur);
-};
+
 $('lq').oninput=function(){renderLocal()};
 $('bClearCache').onclick=async function(){
   if(!confirm(tr('clearCacheConfirm')))return;
@@ -1901,90 +1885,6 @@ function fillSortSel(){
   sel.value=LSORT;
 }
 $('sortSel').onchange=function(){LSORT=this.value;try{localStorage.setItem('lunaSort',LSORT)}catch(e){};renderLocal()};
-/* ---- map view ---- */
-var MAP=null,MAP_MARKERS=null;
-function renderMap(list){
-  $('wall').style.display='none';$('ltableWrap').style.display='none';
-  var tl=$('timelineWrap'),tn=$('tlNav');if(tl)tl.style.display='none';if(tn)tn.style.display='none';
-  var wrap=$('mapWrap');wrap.style.display='block';
-  var imgs=list.filter(function(x){return isImg(x.kind)&&x.kind!=='DNG'}).map(pickKey);
-  if(imgs.length<10){
-    // 当前相册照片太少时扫全库：地图是全库导航工具，不该被相册过滤清空
-    imgs=localFiles().filter(function(x){return isImg(x.kind)&&x.kind!=='DNG'}).map(pickKey);
-  }
-  imgs=imgs.slice(0,800);
-  var host=$('mapEl');
-  if(typeof L==='undefined'&&!window.__leafTried){
-    window.__leafTried=true;
-    var css=document.createElement('link');css.rel='stylesheet';
-    css.href='/static/map/leaflet.min.css';
-    css.onerror=function(){window.__leafFail=1};
-    document.head.appendChild(css);
-    var sc=document.createElement('script');
-    sc.src='/static/map/leaflet.min.js';
-    sc.onload=function(){ if(typeof renderMapRetry==='function') renderMapRetry(); };
-    sc.onerror=function(){window.__leafFail=1};
-    document.head.appendChild(sc);
-  }
-  // Leaflet freezes if initialized inside display:none, so init on first
-  // visible entry only; later entries just refresh size and re-add markers.
-  if(!MAP){
-    MAP=L.map(host,{zoomControl:true,maxZoom:12,attributionControl:false}).setView([25,110],3);
-    if(window.__MAP_ONLINE){
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-        maxZoom:19,
-        attribution:'&copy; OpenStreetMap contributors'
-      }).addTo(MAP);
-    }else{
-      // offline world base map: bundled Natural Earth 110m boundaries, zero
-      // external requests; fetch may also be served from the app itself
-      fetch('/static/map/world_110m_lite.json').then(function(r){return r.json()}).then(function(geo){
-        L.geoJSON(geo,{style:{color:'#7a90a8',weight:1,fillColor:'#dfe7ee',fillOpacity:1}}).addTo(MAP);
-        if(window.__pendingFit){MAP.fitBounds(window.__pendingFit.pad(0.15));window.__pendingFit=null;}
-      }).catch(function(){ /* map shows markers on plain background */ });
-    }
-    MAP_MARKERS=[];
-  }
-  setTimeout(function(){MAP.invalidateSize()},60);
-  if(MAP_MARKERS){MAP_MARKERS.forEach(function(m){MAP.removeLayer(m)});}
-  MAP_MARKERS=[];
-  var n=imgs.length;
-  var empty=$('mapWrap').querySelector('.map-empty');if(empty)empty.remove();
-  if(!n){host.innerHTML='<div class="map-empty">'+tr('mapEmpty')+'</div>';return}
-  var tip=tr('mapScanning');
-  var scan=document.createElement('div');scan.className='map-empty';scan.id='mapScan';scan.textContent=tip;
-  host.appendChild(scan);
-  fetch('/api/gps/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:imgs})})
-    .then(function(r){return r.json()}).then(function(d){
-    var sc=$('mapScan');if(sc)sc.remove();
-    var gps=d.gps||{},keys=Object.keys(gps);
-    if(!keys.length){
-      // 提示条不覆盖已建好的 map（覆盖会触发 Leaflet 冻结问题）
-      var note=document.createElement('div');note.className='map-empty';note.textContent=tr('mapEmpty');
-      host.appendChild(note);return;
-    }
-    var pts=[];
-    keys.forEach(function(k){
-      var g=gps[k],it=localFiles().find(function(x){return pickKey(x)===k});
-      var nm=it?it.name:k;
-      var m=L.marker([g.lat,g.lon]).addTo(MAP).bindPopup(
-        '<div class="map-photo"><img src="/thumb/'+encodeURIComponent(k)+'" loading="lazy">'+
-        '<div class="nm">'+esc(nm)+'</div><div class="co">'+g.lat.toFixed(4)+', '+g.lon.toFixed(4)+'</div></div>');
-      MAP_MARKERS.push(m);pts.push([g.lat,g.lon]);
-    });
-    if(window.__MAP_ONLINE){
-      if(pts.length===1)MAP.setView(pts[0],13);
-      else MAP.fitBounds(L.latLngBounds(pts).pad(0.15));
-    }else{
-      window.__pendingFit=L.latLngBounds(pts);
-      if(pts.length===1)MAP.setView(pts[0],10);
-    }
-  }).catch(function(){
-    var sc=$('mapScan');if(sc)sc.remove();
-    var note=document.createElement('div');note.className='map-empty';note.textContent=tr('mapNoLib');
-    host.appendChild(note);
-  });
-}
 /* ---- project banner (gives the cover a visible home) ---- */
 function renderProjBanner(list){
   var b=$('projBanner');if(!b)return;
