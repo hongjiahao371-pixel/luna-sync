@@ -529,6 +529,7 @@ td.muted{color:var(--muted);font-size:12.5px}
         <div class="dropdown">
           <button id="bMore" class="ghost">更多 ▾</button>
           <div class="dropdown-menu" id="moreMenu" style="display:none">
+            <button id="bDupScan" class="menu-item">重复清理</button>
             <button id="bDelRejects" class="menu-item danger-text">删除落选</button>
             <button id="bClearCache" class="menu-item">清除缓存</button>
           </div>
@@ -542,6 +543,24 @@ td.muted{color:var(--muted);font-size:12.5px}
         </div>
         <div id="semStatus" style="padding:0 18px 8px;color:var(--muted);font-size:12px"></div>
         <div id="semResults" style="flex:1;overflow:auto;padding:0 18px 20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;align-content:start"></div>
+      </div>
+      <div id="simOv" style="display:none;position:absolute;inset:0;background:rgba(247,249,250,.98);z-index:65;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 18px">
+          <strong id="simTitle">相似素材</strong>
+          <span id="simMeta" style="color:var(--muted);font-size:12px"></span>
+          <button id="simClose" class="ghost" style="margin-left:auto">关闭</button>
+        </div>
+        <div id="simBody" style="flex:1;overflow:auto;padding:0 18px 20px"></div>
+      </div>
+      <div id="dupOv" style="display:none;position:absolute;inset:0;background:rgba(247,249,250,.98);z-index:65;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 18px">
+          <strong>重复文件清理</strong>
+          <span id="dupMeta" style="color:var(--muted);font-size:12px"></span>
+          <button id="dupRescan" class="ghost">重新扫描</button>
+          <button id="dupMove" class="primary" style="display:none">移除所选到回收站</button>
+          <button id="dupClose" class="ghost" style="margin-left:auto">关闭</button>
+        </div>
+        <div id="dupBody" style="flex:1;overflow:auto;padding:0 18px 20px"></div>
       </div>
       <div id="projBanner" class="projbanner" style="display:none"></div>
       <div id="tagBar" class="tagbar" style="display:none"></div>
@@ -1293,6 +1312,36 @@ function timelineCardHTML(it){
   var meta='<div class="meta"><b title="'+esc(it.name)+'">'+esc(it.name)+'</b><span>'+(tstr?tstr+' · ':'')+fmt(it.bytes)+'</span></div>';
   return '<div class="card'+(PICKSEL.has(key)?' pick-sel':'')+'" data-key="'+esc(key)+'">'+img+badge+play+pk+tm+cb+meta+'</div>';
 }
+function attachScrub(card, it, key, im){
+  if(!im) return;
+  var SPRITE_FRAMES = 12; // 与后端 _sprite_generate 的 tile 帧数一致
+  var url = '/sprite/' + encodeURIComponent(key);
+  var sprite = new Image();
+  var ready = false, tried = false, timer = null;
+  function load(){
+    if(ready || tried) return;
+    tried = true;
+    sprite.onload = function(){ ready = true; };
+    sprite.onerror = function(){ timer = setTimeout(function(){ tried = false; load(); }, 2500); };
+    sprite.src = url;
+  }
+  card.addEventListener('mouseenter', function(){
+    if(!ready) load();
+  });
+  card.addEventListener('mousemove', function(e){
+    if(!ready) return;
+    var rect = card.getBoundingClientRect();
+    var frac = Math.max(0, Math.min(0.999, (e.clientX - rect.left) / rect.width));
+    im.style.background = 'url(' + url + ') no-repeat';
+    im.style.backgroundSize = (SPRITE_FRAMES * 100) + '% 100%';
+    im.style.backgroundPosition = (frac * 100).toFixed(1) + '% 0';
+  });
+  card.addEventListener('mouseleave', function(){
+    im.style.background = '';
+    if(timer){ clearTimeout(timer); timer = null; }
+    tried = false;
+  });
+}
 function bindWallCards(scope){
   scope.querySelectorAll('.card').forEach(function(c){
     var key=c.getAttribute('data-key');
@@ -1432,6 +1481,7 @@ function renderWall(list){
     var im=c.querySelector('img');if(im){revealImg(im);im.onerror=function(){var ph=document.createElement('div');ph.className='ph';ph.textContent=isVid(it.kind)?'▶':it.kind;im.replaceWith(ph)}}
     c.querySelector('.del').onclick=function(e){e.stopPropagation();delLocal(key)};
     var covBtn=c.querySelector('.cov-btn');if(covBtn)covBtn.onclick=function(e){e.stopPropagation();setProjCover(key)};
+    if(isVid(it.kind)&&!PICKMODE){attachScrub(c,it,key,im)}
     if(PICKMODE){c.onclick=function(e){toggleCardSel(key,c)}}
     else c.onclick=function(){openPrev(it)};
     w.appendChild(c);
@@ -1472,6 +1522,10 @@ async function scan(){
 }
 function openPrev(it){
   $('ov').classList.add('open');$('ovn').textContent=it.name+' · '+fmt(it.bytes);$('ova').innerHTML='';var box=$('ovc2');
+  if(isImg(it.kind)){
+    var sb=document.createElement('button');sb.textContent='🔍 查找相似';sb.className='tonal';
+    sb.onclick=function(){openSimilar(keyOf(it))};$('ova').appendChild(sb);
+  }
   showExif(it).then(function(line){if($('ov').classList.contains('open'))$('ovn').textContent=it.name+' · '+fmt(it.bytes)+(line&&line!==tr('exifNA')?' · '+line:'')});
   var key=keyOf(it);
   if(isImg(it.kind)){
@@ -1676,6 +1730,87 @@ $('semGo').onclick=function(){
   }).catch(function(e){box.innerHTML='<div style="color:var(--danger)">搜索失败</div>'});
 };
 $('semQ').addEventListener('keydown',function(e){if(e.key==='Enter')$('semGo').click()});
+function openSimilar(key){
+  var ov=$('simOv');ov.style.display='flex';
+  $('simBody').innerHTML='<div style="color:var(--muted)">正在计算相似度（首次会扫描全库哈希）…</div>';
+  fetch('/api/similar/'+encodeURIComponent(key)).then(function(r){return r.json()}).then(function(d){
+    if(d.error){$('simBody').innerHTML='<div style="color:var(--danger)">'+d.error+'</div>';return}
+    $('simTitle').textContent='与 '+key.split('/').pop()+' 相似的素材';
+    $('simMeta').textContent=d.count+' 张 · 耗时 '+d.elapsed+'s';
+    var body=$('simBody');body.innerHTML='';
+    var mk=function(rel, badge, cap){
+      var c=document.createElement('div');c.className='sem-card';
+      c.innerHTML='<img loading="lazy" src="/thumb/'+encodeURIComponent(rel)+'" alt="">'+
+        '<div class="sem-score">'+badge+'</div><div class="sem-cap">'+(cap||rel.split('/').pop())+'</div>';
+      c.onclick=function(){openPrev({id:rel,name:rel.split('/').pop(),kind:'JPG'})};
+      return c;
+    };
+    var wrap=document.createElement('div');
+    wrap.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px';
+    wrap.appendChild(mk(key,'基准',''));
+    (d.similar||[]).forEach(function(s){wrap.appendChild(mk(s.path,'相似 '+s.score,s.path.split('/').pop()))});
+    body.appendChild(wrap);
+  }).catch(function(e){$('simBody').innerHTML='<div style="color:var(--danger)">加载失败</div>'});
+}
+$('simClose').onclick=function(){$('simOv').style.display='none'};
+var DUP_SEL={};
+function fmtSize(n){if(n>1073741824)return (n/1073741824).toFixed(2)+' GB';if(n>1048576)return (n/1048576).toFixed(1)+' MB';return Math.max(1,Math.round(n/1024))+' KB'}
+function dupScan(){
+  DUP_SEL={};var ov=$('dupOv');ov.style.display='flex';
+  $('dupBody').innerHTML='<div style="color:var(--muted)">正在全库计算 SHA-256，大库需要一点时间…</div>';
+  $('dupMove').style.display='none';$('dupMeta').textContent='';
+  fetch('/api/duplicates/scan').then(function(r){return r.json()}).then(function(d){
+    var groups=d.groups||[];
+    $('dupMeta').textContent=groups.length?('发现 '+groups.length+' 组重复，可释放 '+fmtSize(d.waste||0)):'未发现重复文件';
+    var body=$('dupBody');body.innerHTML='';
+    if(!groups.length)return;
+    groups.forEach(function(g){
+      var card=document.createElement('div');card.className='card';card.style.cssText='margin-bottom:14px;padding:12px';
+      var head=document.createElement('div');head.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:8px';
+      head.innerHTML='<strong style="font-size:13px">保留：'+g.keep.split('/').pop()+'</strong>'+
+        '<span style="color:var(--muted);font-size:12px">重复 '+g.dupes.length+' 个 · 可释放 '+fmtSize(g.waste)+'</span>'+
+        '<button class="ghost" style="margin-left:auto;font-size:12px" data-grp="'+g.hash+'">全选本组</button>';
+      card.appendChild(head);
+      var row=document.createElement('div');row.style.cssText='display:flex;gap:10px;flex-wrap:wrap';
+      var mk=function(rel,label,badge){
+        var c=document.createElement('label');c.style.cssText='width:132px;cursor:pointer;position:relative;display:block';
+        c.innerHTML='<img src="/thumb/'+encodeURIComponent(rel)+'" style="width:132px;height:88px;object-fit:cover;border-radius:8px;display:block">'+
+          '<div style="font-size:11px;margin-top:4px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+rel.split('/').pop()+'</div>'+
+          '<div style="font-size:11px;color:'+badgeColor(badge)+'">'+label+'</div>';
+        revealImg(c.querySelector('img'));
+        var cb=document.createElement('input');cb.type='checkbox';cb.style.cssText='position:absolute;top:6px;left:6px';
+        cb.checked=false;cb.disabled=(label==='保留');
+        cb.onchange=function(){if(cb.checked)DUP_SEL[rel]=1;else delete DUP_SEL[rel];
+          $('dupMove').style.display=Object.keys(DUP_SEL).length?'inline-flex':'none';
+          $('dupMove').textContent='移除所选('+Object.keys(DUP_SEL).length+')到回收站'};
+        c.insertBefore(cb,c.firstChild);
+        return c;
+      };
+      row.appendChild(mk(g.keep,'保留',''));
+      g.dupes.forEach(function(r){row.appendChild(mk(r,'重复','var(--muted)'))});
+      card.appendChild(row);body.appendChild(card);
+      head.querySelector('button').onclick=function(){
+        g.dupes.forEach(function(r){DUP_SEL[r]=1});
+        body.querySelectorAll('input[type=checkbox]:not(:disabled)').forEach(function(x){x.checked=true});
+        $('dupMove').style.display='inline-flex';
+        $('dupMove').textContent='移除所选('+Object.keys(DUP_SEL).length+')到回收站';
+      };
+    });
+  }).catch(function(){$('dupBody').innerHTML='<div style="color:var(--danger)">扫描失败</div>'});
+}
+function badgeColor(){return 'var(--muted)'}
+$('bDupScan').addEventListener('click',dupScan);
+$('dupRescan').onclick=dupScan;
+$('dupClose').onclick=function(){$('dupOv').style.display='none'};
+$('dupMove').onclick=function(){
+  var paths=Object.keys(DUP_SEL);if(!paths.length)return;
+  if(!confirm('将所选 '+paths.length+' 个重复文件移到回收站（可恢复），确定？'))return;
+  fetch('/api/duplicates/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:paths})})
+    .then(function(r){return r.json()}).then(function(d){
+      if(d.ok){alert('已移除 '+d.moved+' 个文件到回收站');dupScan();scan()}
+      else alert(d.error||'移除失败');
+    });
+};
 
 $('lq').oninput=function(){renderLocal()};
 $('bClearCache').onclick=async function(){

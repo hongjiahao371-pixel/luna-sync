@@ -3,6 +3,28 @@
 提交新版本时复制到开发者门户的「版本更新说明」字段（上限 5000 字符）。
 粘贴前删除尚未包含在当前构建中的条目。
 
+## v1.1.0 (build 43) · 素材整理与 AI 能力 / Media tools & AI
+
+zh-CN:
+
+1. 新增 AI 语义搜索：用一句自然语言（如「白色的鸭子」）搜索照片视频，本地视觉模型自动为素材生成中文描述并建立索引，支持按相关度排序
+2. 新增视频悬停刮擦：网格视图中鼠标悬停在视频卡片上即可预览整段视频的画面缩略条
+3. 新增相似素材查找：在照片预览中一键查找视觉相似的照片，便于比较挑选
+4. 新增重复文件清理：自动识别完全重复的文件，按组选择后一键移入回收站（可恢复）
+5. 界面优化：工具栏精简重组，低频功能收进「工具」「更多」菜单；语义搜索、重复清理等新功能均有中文界面
+6. 新增画质优化管线：预设风格（标准/鲜明/柔和/单色）、色温冷暖、暗角、拉直、降噪、HDR 增强，可组合应用于导出
+7. 移除地图视图（Luna 相机不记录 GPS 航点信息，功能与硬件不匹配）
+
+en-US:
+
+1. AI semantic search: find photos and videos with a natural-language phrase; an on-device vision model captions your media locally and ranks results by relevance
+2. Video hover scrubbing: hover a video card in the grid to preview its frames
+3. Find similar: locate visually similar photos from any preview for easy comparison
+4. Duplicate cleanup: groups exact duplicate files and moves the selected ones to the restorable trash
+5. UI refresh: streamlined toolbar with low-frequency actions collapsed into Tools / More menus
+6. New image-enhancement pipeline: style presets, temperature, vignette, straighten, denoise and HDR boost, freely combinable on export
+7. Removed the map view (the Luna camera does not record GPS waypoints)
+
 ## v1.1.0 (build 9)
 
 zh-CN:

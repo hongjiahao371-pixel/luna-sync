@@ -641,7 +641,9 @@ def camera_keepalive_worker():
 def local_files():
     out = {}
     if os.path.isdir(DLDIR):
-        for root, _, files in os.walk(DLDIR):
+        for root, dirs, files in os.walk(DLDIR):
+            # 剪枝隐藏目录：.trash 等回收/内部目录绝不能重新进入素材库索引
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
             for f in files:
                 if f.endswith('.part'):
                     continue
@@ -2611,6 +2613,64 @@ def share_thumb(token, idx):
         abort(404)
     return thumb(paths[idx])
 
+@app.route('/api/duplicates/scan', methods=['GET', 'POST'])
+def api_duplicates_scan():
+    """Group library files by SHA-256;每组保留最早一张。"""
+    import hashlib as _h
+    groups = {}
+    seen = {}
+    for rel in sorted(local_files()):
+        p = local_path(rel)
+        if not p or not os.path.isfile(p):
+            continue
+        h = _h.sha256()
+        with open(p, 'rb') as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                h.update(chunk)
+        digest = h.hexdigest()
+        if digest in seen:
+            groups.setdefault(digest, {'keep': seen[digest], 'dupes': []})['dupes'].append(rel)
+        else:
+            seen[digest] = rel
+    out = []
+    for d, g in groups.items():
+        if not g['dupes']:
+            continue
+        waste = 0
+        for r in g['dupes']:
+            rp = local_path(r)
+            if rp and os.path.isfile(rp):
+                waste += os.path.getsize(rp)
+        out.append({'hash': d, 'keep': g['keep'], 'dupes': g['dupes'], 'waste': waste})
+    out.sort(key=lambda x: -x['waste'])
+    return jsonify({'groups': out, 'count': len(out),
+                    'waste': sum(g['waste'] for g in out)})
+
+@app.route('/api/duplicates/delete', methods=['POST'])
+def api_duplicates_delete():
+    """Move duplicate files to the trash folder (restorable)."""
+    data = request.json or {}
+    paths = [str(x) for x in (data.get('paths') or []) if str(x)][:500]
+    if not paths:
+        return jsonify({'ok': False, 'error': 'paths_required'}), 400
+    moved = 0
+    for rel in paths:
+        p = local_path(rel)
+        if not p or not os.path.isfile(p):
+            continue
+        unique = '%d_%s' % (int(time.time() * 1000000) % 1000000000, re.sub(r'[^A-Za-z0-9._-]', '_', rel))
+        base = safe_path(TRASH_DIR, unique)
+        os.makedirs(base, exist_ok=True)
+        try:
+            shutil.move(p, os.path.join(base, os.path.basename(p)))
+            with open(os.path.join(base, '.trashed-at'), 'w') as stamp:
+                stamp.write(rel)
+            moved += 1
+        except OSError:
+            continue
+    addlog('重复清理：移入回收站 %d 个' % moved)
+    return jsonify({'ok': True, 'moved': moved})
+
 @app.route('/api/storage/stats')
 def api_storage_stats():
     months = {}
@@ -2645,6 +2705,170 @@ def api_storage_stats():
     months_list = [{'month': k, 'bytes': v['bytes'], 'count': v['count']}
                    for k, v in sorted(months.items(), reverse=True)]
     return jsonify({'total': total, 'months': months_list, 'caches': caches})
+
+# ---------------- 视频悬停刮擦（12 帧雪碧图） ----------------
+SPRITE_FRAMES = 12
+SPRITE_DIR = os.path.join(STATE_DIR, 'sprites')
+os.makedirs(SPRITE_DIR, exist_ok=True)
+_sprite_q = []
+_sprite_lk = threading.Lock()
+_sprite_status = {}
+
+def _video_duration(path):
+    try:
+        r = run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'csv=p=0', path], 30)
+        return float(r.stdout.strip())
+    except Exception:
+        return None
+
+def _sprite_path(rel):
+    return os.path.join(SPRITE_DIR, rel.replace('/', '_') + '.jpg')
+
+def _sprite_generate(rel):
+    st = _sprite_path(rel)
+    if os.path.isfile(st) and os.path.getsize(st) > 0:
+        return 'ready'
+    src = local_path(rel)
+    if not src or not os.path.isfile(src):
+        return 'missing'
+    dur = _video_duration(src)
+    if not dur or dur < 1:
+        return 'failed'
+    interval = max(0.5, dur / SPRITE_FRAMES)
+    tmp = st + '.tmp.jpg'
+    vf = 'fps=1/%.2f,scale=160:-2:flags=bicubic,tile=%dx1' % (interval, SPRITE_FRAMES)
+    r = run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+             '-i', src, '-vf', vf, '-frames:v', '1', '-update', '1', tmp], 600)
+    if r.returncode == 0 and os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
+        os.replace(tmp, st)
+        return 'ready'
+    if os.path.isfile(tmp):
+        os.remove(tmp)
+    return 'failed'
+
+def _sprite_worker():
+    while True:
+        rel = None
+        with _sprite_lk:
+            if _sprite_q:
+                rel = _sprite_q.pop(0)
+        if rel is None:
+            time.sleep(3)
+            continue
+        if _sprite_status.get(rel) in ('generating', 'ready'):
+            continue
+        _sprite_status[rel] = 'generating'
+        _sprite_status[rel] = _sprite_generate(rel)
+
+threading.Thread(target=_sprite_worker, daemon=True).start()
+
+def _sprite_enqueue(rel):
+    if not rel.lower().endswith(('.mp4', '.mov', '.lrv')):
+        return
+    if os.path.isfile(_sprite_path(rel)):
+        return
+    with _sprite_lk:
+        if rel not in _sprite_q and _sprite_status.get(rel) != 'generating':
+            _sprite_q.append(rel)
+            _sprite_status[rel] = 'queued'
+
+@app.route('/sprite/<path:name>')
+def api_sprite(name):
+    st = _sprite_path(name)
+    if not os.path.isfile(st):
+        _sprite_enqueue(name)
+        return ('', 204)
+    return send_file(st, mimetype='image/jpeg', conditional=True)
+
+# ---------------- 相似素材（dhash + 颜色签名） ----------------
+SIMILAR_DIR = os.path.join(STATE_DIR, 'similar')
+os.makedirs(SIMILAR_DIR, exist_ok=True)
+SIMILAR_CACHE = os.path.join(SIMILAR_DIR, 'hashes.json')
+_similar_lk = threading.Lock()
+
+def _img_dhash_and_color(path):
+    """8x8 dhash + 4x4 mean-color signature for similarity gating."""
+    with Image.open(path) as im:
+        im = im.convert('RGB')
+        im = im.transpose(Image.FLIP_TOP_BOTTOM) if False else im
+        small = im.resize((9, 8))
+        gray = small.convert('L')
+        px = list(gray.getdata())
+        rows = [px[i*9:(i+1)*9] for i in range(8)]
+        bits = ''
+        for row in rows:
+            for x in range(8):
+                bits += '1' if row[x] > row[x+1] else '0'
+        dhash_hex = '%016x' % int(bits, 2)
+        tiny = im.resize((4, 4))
+        data = list(tiny.getdata())
+        avg_c = tuple(sum(c[i] for c in data) // len(data) for i in range(3))
+        return dhash_hex, avg_c
+
+def _hamming(h1, h2):
+    return bin(int(h1, 16) ^ int(h2, 16)).count('1')
+
+def _color_dist(c1, c2):
+    return sum(abs(a-b) for a, b in zip(c1, c2)) / 3
+
+def _similar_index_all(force=False):
+    """Lazily compute dhash+color for the whole library (cached to json)."""
+    with _similar_lk:
+        idx = {}
+        if os.path.isfile(SIMILAR_CACHE) and not force:
+            try:
+                with open(SIMILAR_CACHE) as f:
+                    idx = json.load(f)
+            except Exception:
+                idx = {}
+        changed = False
+        for rel in local_files():
+            low = rel.lower()
+            if rel in idx or not low.endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                continue
+            src = local_path(rel)
+            if not src:
+                continue
+            try:
+                d, c = _img_dhash_and_color(src)
+                idx[rel] = {'d': d, 'c': c}
+                changed = True
+            except Exception:
+                continue
+        if changed:
+            with open(SIMILAR_CACHE, 'w') as f:
+                json.dump(idx, f)
+            os.chmod(SIMILAR_CACHE, 0o600)
+        return idx
+
+@app.route('/api/similar/<path:name>')
+def api_similar(name):
+    import time as _t
+    t0 = _t.time()
+    idx = _similar_index_all()
+    target = idx.get(name)
+    if not target:
+        return jsonify({'error': 'no_hash_for_target'}), 404
+    out = []
+    for rel, d in idx.items():
+        if rel == name:
+            continue
+        dh = _hamming(target['d'], d['d'])
+        cd = _color_dist(target['c'], d['c'])
+        if dh <= 12 or cd < 40:
+            out.append({'path': rel, 'dhash_dist': dh, 'color_dist': round(cd, 1),
+                        'score': round(max(0, 100 - (dh * 4 + cd * 0.5)), 1)})
+    out.sort(key=lambda x: x['score'], reverse=True)
+    out = out[:24]
+    for o in out:
+        o['thumb'] = '/thumb/' + o['path']
+        o['name'] = os.path.basename(o['path'])
+    return jsonify({'target': name, 'count': len(out), 'elapsed': round(_t.time()-t0, 2), 'similar': out})
+
+# ---------------- END 相似素材 ----------------
+
+# ---------------- END 视频悬停刮擦 ----------------
 
 # ---------------- AI 语义搜索 ----------------
 # 链路：缩略图 → 视觉模型生成中文描述(caption) → embedding 模型转向量 →
@@ -2794,6 +3018,10 @@ def _sem_worker():
                 item = SEM_STATE['queue'].pop(0)
                 _save_sem_state()
         if item is None:
+            with sem_lk:
+                if SEM_STATE['running'] or SEM_STATE['queue']:
+                    SEM_STATE['running'] = False
+                    _save_sem_state()
             time.sleep(5)
             continue
         rel = item['path']
@@ -2882,8 +3110,16 @@ def api_semantic_scan():
 def api_semantic_reset_failed():
     with sem_lk:
         SEM_STATE['failed'] = {}
+        idx = _sem_load_index()
+        queued_paths = {q['path'] for q in SEM_STATE['queue']}
+        missing = [rel for rel in _sem_rel_paths()
+                   if rel not in idx and rel not in queued_paths]
+        for rel in missing:
+            SEM_STATE['queue'].append({'path': rel})
+        if missing and not SEM_STATE['running']:
+            SEM_STATE['running'] = True
         _save_sem_state()
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'requeued': len(missing)})
 
 def _cos(a, b):
     dot = sum(x * y for x, y in zip(a, b))
