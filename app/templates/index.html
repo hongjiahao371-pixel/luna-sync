@@ -191,6 +191,10 @@ td.muted{color:var(--muted);font-size:12.5px}
 .albumbar button,.locbar button{height:32px;padding:0 12px;border-radius:8px}
 .albumbar select,.locbar select{height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:0 8px;cursor:pointer}
 .albumbar .primary,.locbar .primary{background:#263140}
+.sem-card{position:relative;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9);box-shadow:0 10px 26px -14px rgba(31,44,67,.2);cursor:pointer}
+.sem-card img{width:100%;height:130px;object-fit:cover;display:block;background:#eef1f4}
+.sem-card .sem-cap{padding:6px 8px;font-size:11.5px;color:var(--muted);line-height:1.4;min-height:34px}
+.sem-card .sem-score{position:absolute;top:8px;right:8px;background:rgba(47,111,214,.9);color:#fff;font-size:11px;border-radius:999px;padding:1px 8px}
 .dropdown{position:relative;display:inline-block}
 .dropdown-menu{position:absolute;top:calc(100% + 6px);right:0;min-width:172px;background:#fff;border:1px solid var(--line);
   border-radius:10px;box-shadow:0 16px 40px rgba(16,24,40,.18);padding:6px;z-index:180;display:none}
@@ -514,6 +518,7 @@ td.muted{color:var(--muted);font-size:12.5px}
         <div class="seg" id="tagSeg" style="display:none"><button id="tagAllBtn" class="on">全部标签</button></div>
         <button id="bTagMgr" class="tonal">标签</button>
         <input id="lq" class="grow" type="text" placeholder="搜索本地文件名">
+        <button id="bSemSearch" class="tonal" title="AI 语义搜索：用自然语言描述要找的内容">AI 搜索</button>
         <span class="stat" id="lstat">-</span>
         <button id="bPickMode" class="tonal">选择模式</button>
         <button id="bAddToProj" class="secondary" style="display:none">添加到项目</button>
@@ -528,6 +533,15 @@ td.muted{color:var(--muted);font-size:12.5px}
             <button id="bClearCache" class="menu-item">清除缓存</button>
           </div>
         </div>
+      </div>
+      <div id="semOv" style="display:none;position:absolute;inset:0;background:rgba(247,249,250,.98);z-index:60;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 18px">
+          <input id="semQ" class="grow" type="text" placeholder="用自然语言描述要找的内容，如：白色鸭子在荷塘里">
+          <button id="semGo" class="primary">搜索</button>
+          <button id="semClose" class="ghost">关闭</button>
+        </div>
+        <div id="semStatus" style="padding:0 18px 8px;color:var(--muted);font-size:12px"></div>
+        <div id="semResults" style="flex:1;overflow:auto;padding:0 18px 20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;align-content:start"></div>
       </div>
       <div id="projBanner" class="projbanner" style="display:none"></div>
       <div id="tagBar" class="tagbar" style="display:none"></div>
@@ -1634,6 +1648,34 @@ $('lfAll').onclick=function(){setLF('all')};$('lfImg').onclick=function(){setLF(
 $('lvGrid').onclick=function(){setViewMode('grid')};
 $('lvTable').onclick=function(){setViewMode('table')};
 $('lvTimeline').onclick=function(){setViewMode('timeline')};
+$('bSemSearch').onclick=function(){
+  var ov=$('semOv');ov.style.display='flex';
+  $('semQ').focus();
+  fetch('/api/semantic/status').then(function(r){return r.json()}).then(function(st){
+    var s=$('semStatus');
+    if(!st.enabled){s.textContent='语义搜索未启用：请在「工具 ▾ → AI 设置」中开启并配置服务地址';return}
+    s.textContent='已索引 '+st.indexed+' / '+st.total+' 张'+(st.queued?(' · 排队中 '+st.queued):'')+(st.failed?(' · 失败 '+st.failed):'');
+  });
+};
+$('semClose').onclick=function(){$('semOv').style.display='none'};
+$('semGo').onclick=function(){
+  var q=$('semQ').value.trim();
+  if(!q)return;
+  var box=$('semResults');box.innerHTML='<div style="color:var(--muted)">搜索中…</div>';
+  fetch('/api/semantic/search?q='+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(d){
+    if(d.error){box.innerHTML='<div style="color:var(--danger)">'+d.error+'</div>';return}
+    var rs=d.results||[];
+    if(!rs.length){box.innerHTML='<div style="color:var(--muted)">没有找到匹配的照片</div>';return}
+    box.innerHTML='';
+    rs.forEach(function(r){
+      var c=document.createElement('div');c.className='sem-card';
+      c.innerHTML='<img loading="lazy" src="'+r.thumb+'" alt=""><div class="sem-score">'+Math.round(r.score*100)+'%</div><div class="sem-cap">'+r.caption+'</div>';
+      c.onclick=function(){openPrev({id:r.path,name:r.name,kind:'JPG'})};
+      box.appendChild(c);
+    });
+  }).catch(function(e){box.innerHTML='<div style="color:var(--danger)">搜索失败</div>'});
+};
+$('semQ').addEventListener('keydown',function(e){if(e.key==='Enter')$('semGo').click()});
 
 $('lq').oninput=function(){renderLocal()};
 $('bClearCache').onclick=async function(){

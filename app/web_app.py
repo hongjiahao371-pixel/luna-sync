@@ -2646,6 +2646,285 @@ def api_storage_stats():
                    for k, v in sorted(months.items(), reverse=True)]
     return jsonify({'total': total, 'months': months_list, 'caches': caches})
 
+# ---------------- AI 语义搜索 ----------------
+# 链路：缩略图 → 视觉模型生成中文描述(caption) → embedding 模型转向量 →
+# 搜索时查询文本同样向量化，余弦相似度排序。两个服务默认指向
+# 5.10 上 DJI 素材工作台部署的 llama-server（qwen3-vl / qwen3-embedding），
+# 可在设置页修改。全部配置存 settings.json。
+
+SEM_DEFAULTS = {
+    'ai_semantic_enabled': False,
+    'ai_vision_url': 'http://192.168.5.10:18080',
+    'ai_vision_model': 'qwen3-vl:2b',
+    'ai_embedding_url': 'http://192.168.5.10:18081',
+    'ai_embedding_model': 'qwen3-embedding:0.6b',
+}
+for _k, _v in SEM_DEFAULTS.items():
+    SETTINGS.setdefault(_k, _v)
+
+SEM_DIR = os.path.join(STATE_DIR, 'semantic')
+for d in (SEM_DIR,):
+    os.makedirs(d, exist_ok=True)
+
+SEM_STATE_FILE = os.path.join(STATE_DIR, 'semantic_state.json')
+SEM_STATE = {'queue': [], 'failed': {}, 'running': False}
+sem_lk = threading.Lock()
+
+def _load_sem_state():
+    global SEM_STATE
+    try:
+        if os.path.exists(SEM_STATE_FILE):
+            with open(SEM_STATE_FILE) as f:
+                d = json.load(f)
+            if isinstance(d, dict):
+                SEM_STATE.update(d)
+    except Exception as e:
+        log.warning('load_sem_state:' + str(e)[:50])
+
+def _save_sem_state():
+    try:
+        with open(SEM_STATE_FILE, 'w') as f:
+            json.dump(SEM_STATE, f)
+        os.chmod(SEM_STATE_FILE, 0o600)
+    except Exception as e:
+        log.warning('save_sem_state:' + str(e)[:50])
+
+_load_sem_state()
+
+def _sem_cfg():
+    return (bool(SETTINGS.get('ai_semantic_enabled')),
+            (SETTINGS.get('ai_vision_url') or '').strip(),
+            (SETTINGS.get('ai_vision_model') or '').strip(),
+            (SETTINGS.get('ai_embedding_url') or '').strip(),
+            (SETTINGS.get('ai_embedding_model') or '').strip())
+
+def _sem_rel_paths():
+    """All local image/video/raw rel paths eligible for captioning."""
+    out = []
+    for rel in local_files():
+        low = rel.lower()
+        if low.endswith(('.jpg', '.jpeg', '.png', '.webp', '.mp4', '.mov', '.insp')):
+            out.append(rel)
+    return sorted(out)
+
+def _sem_caption_for(rel):
+    src_path = local_path(rel) or safe_path(PREVIEW_SRC_DIR, rel)
+    if not src_path or not os.path.isfile(src_path):
+        thumb = os.path.join(THUMB_DIR, rel + '.jpg')
+        if os.path.isfile(thumb):
+            src_path = thumb
+        else:
+            return None
+    low = rel.lower()
+    if low.endswith(('.mp4', '.mov')):
+        probe = run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                     '-ss', '1', '-i', src_path, '-frames:v', '1',
+                     '-update', '1', '-vf', 'scale=768:-2:flags=bicubic',
+                     SEM_TMP_IMG], 60)
+        if probe.returncode != 0 or not os.path.isfile(SEM_TMP_IMG):
+            return None
+        img_path = SEM_TMP_IMG
+    else:
+        img_path = src_path
+    try:
+        with Image.open(img_path) as im:
+            im = im.convert('RGB')
+            im.thumbnail((768, 768))
+            buf = io.BytesIO()
+            im.save(buf, 'JPEG', quality=85)
+    finally:
+        if img_path == SEM_TMP_IMG and os.path.isfile(SEM_TMP_IMG):
+            os.remove(SEM_TMP_IMG)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    enabled, v_url, v_model, e_url, e_model = _sem_cfg()
+    j = run(['curl', '-s', '--max-time', '60', '-X', 'POST', v_url.rstrip('/') + '/v1/chat/completions',
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({
+                 'model': v_model, 'temperature': 0, 'max_tokens': 120,
+                 'messages': [
+                     {'role': 'system', 'content': '用一句中文描述照片或视频画面的内容（场景/主体/动作/光线），不超过40字，直接给出描述。'},
+                     {'role': 'user', 'content': [
+                         {'type': 'text', 'text': '描述这张图片'},
+                         {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + b64}},
+                     ]},
+                 ]})], 90)
+    try:
+        data = json.loads(j.stdout)
+        caption = data['choices'][0]['message']['content'].strip()
+    except Exception:
+        return None
+    if not caption or len(caption) < 6:
+        return None
+    for chunk in (caption[i:i+3] for i in range(0, min(len(caption)-3, 60))):
+        if caption.count(chunk) > len(caption) / 6:
+            return None
+    return caption
+
+def _sem_embed(texts):
+    enabled, v_url, v_model, e_url, e_model = _sem_cfg()
+    r = run(['curl', '-s', '--max-time', '60', '-X', 'POST', e_url.rstrip('/') + '/v1/embeddings',
+             '-H', 'Content-Type: application/json',
+             '-d', json.dumps({'model': e_model, 'input': texts})], 90)
+    data = json.loads(r.stdout)
+    items = sorted(data['data'], key=lambda x: x['index'])
+    return [d['embedding'] for d in items]
+
+def _sem_load_index():
+    idx_path = os.path.join(SEM_DIR, 'index.json')
+    try:
+        with open(idx_path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _sem_save_index(idx):
+    idx_path = os.path.join(SEM_DIR, 'index.json')
+    with open(idx_path, 'w') as f:
+        json.dump(idx, f)
+    os.chmod(idx_path, 0o600)
+
+SEM_TMP_IMG = os.path.join(SEM_DIR, 'sem_tmp.jpg')
+SEM_FAIL_PAUSE = 8
+
+def _sem_worker():
+    while True:
+        item = None
+        with sem_lk:
+            if SEM_STATE['queue']:
+                item = SEM_STATE['queue'].pop(0)
+                _save_sem_state()
+        if item is None:
+            time.sleep(5)
+            continue
+        rel = item['path']
+        caption, emb = None, None
+        try:
+            caption = _sem_caption_for(rel)
+            if caption is None:
+                raise RuntimeError('caption failed')
+            emb = _sem_embed([caption])[0]
+        except Exception as e:
+            with sem_lk:
+                fails = SEM_STATE['failed'].get(rel, 0) + 1
+                SEM_STATE['failed'][rel] = fails
+                if fails >= SEM_FAIL_PAUSE:
+                    SEM_STATE['queue'] = []
+                    _save_sem_state()
+                else:
+                    _save_sem_state()
+            log.warning('sem %s (%d): %s' % (rel, fails, str(e)[:60]))
+            time.sleep(2)
+            continue
+        idx = _sem_load_index()
+        idx[rel] = {'caption': caption, 'embedding': emb}
+        _sem_save_index(idx)
+        with sem_lk:
+            SEM_STATE['failed'].pop(rel, None)
+            _save_sem_state()
+
+threading.Thread(target=_sem_worker, daemon=True).start()
+
+@app.route('/api/semantic/settings', methods=['GET', 'POST'])
+def api_semantic_settings():
+    if request.method == 'POST':
+        data = request.json or {}
+        allowed = {'ai_semantic_enabled', 'ai_vision_url', 'ai_vision_model',
+                   'ai_embedding_url', 'ai_embedding_model'}
+        update = {k: data[k] for k in allowed if k in data}
+        if update:
+            save_settings(update)
+            SETTINGS.update(update)
+    with settings_lk2():
+        enabled = bool(SETTINGS.get('ai_semantic_enabled'))
+        return jsonify({'enabled': enabled,
+                        'ai_vision_url': SETTINGS.get('ai_vision_url'),
+                        'ai_vision_model': SETTINGS.get('ai_vision_model'),
+                        'ai_embedding_url': SETTINGS.get('ai_embedding_url'),
+                        'ai_embedding_model': SETTINGS.get('ai_embedding_model')})
+
+def settings_lk2():
+    class _N:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    return _N()
+
+@app.route('/api/semantic/status')
+def api_semantic_status():
+    enabled, v_url, v_model, e_url, e_model = _sem_cfg()
+    with sem_lk:
+        queued = len(SEM_STATE['queue'])
+        failed = dict(SEM_STATE['failed'])
+        running = SEM_STATE['running']
+    idx = _sem_load_index()
+    total = len(_sem_rel_paths())
+    return jsonify({'enabled': enabled, 'indexed': len(idx), 'total': total,
+                    'queued': queued, 'failed': len(failed), 'running': running,
+                    'urls': {'vision': v_url, 'embedding': e_url}})
+
+@app.route('/api/semantic/scan', methods=['POST'])
+def api_semantic_scan():
+    enabled, v_url, v_model, e_url, e_model = _sem_cfg()
+    if not enabled or not v_url or not e_url:
+        return jsonify({'ok': False, 'error': 'semantic_disabled'}), 400
+    with sem_lk:
+        if SEM_STATE['running']:
+            return jsonify({'ok': False, 'error': 'already_running'}), 409
+        idx = _sem_load_index()
+        missing = [rel for rel in _sem_rel_paths() if rel not in idx]
+        if SEM_STATE['queue']:
+            return jsonify({'ok': False, 'error': 'already_running'}), 409
+        SEM_STATE['queue'] = [{'path': rel} for rel in missing]
+        SEM_STATE['running'] = True
+        _save_sem_state()
+    return jsonify({'ok': True, 'queued': len(missing), 'indexed': len(idx)})
+
+@app.route('/api/semantic/reset-failed', methods=['POST'])
+def api_semantic_reset_failed():
+    with sem_lk:
+        SEM_STATE['failed'] = {}
+        _save_sem_state()
+    return jsonify({'ok': True})
+
+def _cos(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(x * x for x in b))
+    return dot / (na * nb) if na and nb else 0.0
+
+@app.route('/api/semantic/search')
+def api_semantic_search():
+    q = (request.args.get('q') or '').strip()
+    limit = max(1, min(100, int(request.args.get('limit', 60))))
+    if not q:
+        return jsonify({'results': []})
+    enabled, v_url, v_model, e_url, e_model = _sem_cfg()
+    if not e_url:
+        return jsonify({'error': 'semantic_disabled'}), 400
+    try:
+        q_emb = _sem_embed([q])[0]
+    except Exception as e:
+        return jsonify({'error': str(e)[:120]}), 502
+    idx = _sem_load_index()
+    scored = []
+    for rel, d in idx.items():
+        emb = d.get('embedding')
+        if not emb:
+            continue
+        scored.append((_cos(q_emb, emb), rel, d.get('caption', '')))
+    scored.sort(key=lambda x: -x[0])
+    out = []
+    for score, rel, caption in scored[:limit]:
+        if rel not in local_files():
+            continue
+        out.append({'path': rel, 'name': os.path.basename(rel),
+                    'caption': caption, 'score': round(score, 4),
+                    'thumb': '/thumb/' + rel})
+    return jsonify({'query': q, 'results': out})
+
+
+
+# ---------------- END AI 语义搜索 ----------------
+
 def _read_gps(path):
     """Best-effort GPS extraction; returns {} when unavailable.
     Handles both Image.Exif (get_ifd) and plain-dict _getexif return shapes;
