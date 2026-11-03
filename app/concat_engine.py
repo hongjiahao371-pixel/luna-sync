@@ -96,7 +96,7 @@ def detect_engine(explicit=None):
     which = shutil.which('concat')
     return which
 
-def run_concat_job(binary, work_root, media_files, out_path, progress=None):
+def run_concat_job(binary, work_root, media_files, out_path, progress=None, video=None):
     """把（已按有效区间预切好的）片段序列交给 Concat 引擎拼接导出。
 
     media_files: 有序绝对路径列表；out_path: 成片输出绝对路径。
@@ -115,7 +115,10 @@ def run_concat_job(binary, work_root, media_files, out_path, progress=None):
     eng = ConcatEngine(binary, roots)
     try:
         name = 'luna-%d' % int(time.time() * 1000 % 100000000)
-        r = eng.tool('project_create', {'location': projects, 'name': name}, 60)
+        create_args = {'location': projects, 'name': name}
+        if video:
+            create_args['video'] = video
+        r = eng.tool('project_create', create_args, 60)
         proj = os.path.join(projects, name)
         ids = []
         for f in media_files:
