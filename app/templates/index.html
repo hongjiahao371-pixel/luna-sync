@@ -583,6 +583,7 @@ td.muted{color:var(--muted);font-size:12.5px}
           <span class="muted" id="ccIntro" style="font-size:12.5px"></span>
           <span style="flex:1"></span>
           <span id="ccSummary" class="cull-pos" style="color:var(--muted)"></span>
+          <span id="ccEngine" class="tag done" style="display:none"></span>
           <button id="ccAddSel" class="tonal">加入勾选片段</button>
           <button id="ccGo" class="primary" disabled>开始拼接</button>
         </div>
@@ -2693,7 +2694,7 @@ $('ccGo').onclick=async function(){
       $('ccPhase').textContent=tr('ccPhaseBuild');
       $('ccBar').style.width=(st.total?Math.round(st.done/Math.max(1,st.total)*100):50)+'%';
       $('ccStat').textContent=st.done+'/'+st.total;
-      if(st.output){$('ccPhase').textContent=tr('ccDone')+st.output;$('ccBar').style.width='100%';scan();return}
+      if(st.output){$('ccPhase').textContent=(st.engine?'['+st.engine+'] ':'')+tr('ccDone')+st.output;$('ccBar').style.width='100%';scan();return}
       if(st.error){var ce=$('ccErrMsg');ce.textContent=tr('ccErr')+st.error;ce.style.display='block';return}
       setTimeout(poll,1200);
     }).catch(function(){})};
@@ -2702,11 +2703,21 @@ $('ccGo').onclick=async function(){
 };
 $('bConcat').addEventListener('click',function(){
   closeMenus();
+  fetch('/api/concat/engine').then(function(r){return r.json()}).then(function(d){
+    var b=$('ccEngine');if(!b)return;
+    b.style.display='inline-flex';
+    b.textContent=d.available?'引擎：Concat':'引擎：FFmpeg（未装 Concat）';
+  }).catch(function(){});
   var local=[...document.querySelectorAll('button')].find(function(b){return /本地已下载/.test(b.textContent)});
   if(local&&!local.classList.contains('on')&&!local.classList.contains('active'))local.click();
   setViewMode('edit');
 });
-$('lvEdit').onclick=function(){setViewMode('edit')};
+$('lvEdit').onclick=function(){setViewMode('edit');
+  fetch('/api/concat/engine').then(function(r){return r.json()}).then(function(d){
+    var b=$('ccEngine');if(!b)return;
+    b.style.display='inline-flex';
+    b.textContent=d.available?'引擎：Concat':'引擎：FFmpeg（未装 Concat）';
+  }).catch(function(){});};
 var dv2=$('cutDuration');if(dv2)dv2.value='30';
 applyLang();bindSort();markSort();poll();checkConsent();setInterval(function(){if(!document.hidden)poll()},1500);
 </script>

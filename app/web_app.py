@@ -6,6 +6,7 @@ from flask import Flask, jsonify, request, render_template, send_file, Response,
 from werkzeug.exceptions import HTTPException
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import luna_client
+from concat_engine import detect_engine, run_concat_job
 from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
@@ -1600,8 +1601,13 @@ def save_projects(data):
 
 AUTO = {'running': False, 'done': 0, 'total': 0, 'results': {}, 'recommended': [], 'blurry': []}
 EDIT = {'running': False, 'phase': '', 'done': 0, 'total': 0, 'error': '', 'output': ''}
-CCTASK = {'running': False, 'phase': '', 'done': 0, 'total': 0, 'error': '', 'output': ''}
+CCTASK = {'running': False, 'phase': '', 'done': 0, 'total': 0, 'error': '', 'output': '',
+          'engine': ''}
 concat_lk = threading.Lock()
+
+def _concat_engine_binary():
+    """Concat 无头引擎路径：设置显式指定 > 常见安装位置 > PATH。"""
+    return detect_engine(str(SETTINGS.get('concat_engine_path') or '').strip() or None)
 edit_job_lk = threading.Lock()
 auto_lk = threading.Lock()
 
@@ -3565,9 +3571,21 @@ def _concat_probe(path):
     except Exception:
         return (0, 0, 30.0, 0.0)
 
+def _ffmpeg_trim_seg(src_path, start, end, dst_path):
+    """精准预切一段（重编码保证帧精度）；end<=start 视为截到末尾"""
+    # -to 是绝对输入时间，必须放在 -i 之前（输出侧会把 end 当输出时长基准）
+    ss = ['-ss', '%.3f' % start] if start > 0 else []
+    to = ['-to', '%.3f' % end] if end > start else []
+    cmd = (['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error'] + ss + to +
+           ['-i', src_path])
+    cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+            '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', dst_path]
+    rr = run(cmd, 7200)
+    return rr.returncode == 0 and os.path.isfile(dst_path) and os.path.getsize(dst_path) > 0
+
 def _concat_worker(video_rels, trims):
-    """视频拼接：参数一致且无裁剪走 concat demuxer 无损 copy；
-    否则以第一段画幅/帧率为基准标准化转码（scale+pad）。"""
+    """剪辑工作台任务：Concat 无头引擎渲染（排序/成片封装），
+    掐头去尾由 ffmpeg 预切（0.2.8 导出器不认 clip_trim）；引擎不可用回落纯 ffmpeg。"""
     trim_map = {}
     for t in (trims or []):
         try:
@@ -3590,43 +3608,51 @@ def _concat_worker(video_rels, trims):
             raise RuntimeError('no_valid_videos')
         with concat_lk:
             CCTASK.update({'running': True, 'phase': 'build', 'done': 0,
-                           'total': len(segs), 'error': '', 'output': ''})
+                           'total': len(segs), 'error': '', 'output': '', 'engine': ''})
         work = os.path.join(STATE_DIR, 'concat_tmp')
         shutil.rmtree(work, ignore_errors=True)
         os.makedirs(work, exist_ok=True)
+
+        # ---- 1) 预切：有 trim 的段用 ffmpeg 精准切出有效区间
         parts = []
-        uniform = len({(s['w'], s['h'], s['fps']) for s in segs}) == 1 and all(s['w'] for s in segs)
-        trimmed = any(rel in trim_map for rel in [s['rel'] for s in segs])
-        if uniform and not trimmed:
-            mode = 'lossless'
-            parts = [s['path'] for s in segs]
-        else:
-            mode = 'normalized'
-            base = segs[0]
-            for idx, s in enumerate(segs):
-                start, end = trim_map.get(s['rel'], (0, 0))
-                start = min(start, max(0.0, s['dur'] - 0.1)) if s['dur'] else start
-                ss = ['-ss', '%.3f' % start] if start > 0 else []
-                # -to 是绝对输入时间，必须放在 -i 之前；end<=start 时视为截到末尾
-                to = ['-to', '%.3f' % end] if (end > start and (not s['dur'] or end < s['dur'])) else []
-                vf = ''
-                if (s['w'], s['h']) != (base['w'], base['h']):
-                    vf = ('scale=%d:%d:force_original_aspect_ratio=decrease,'
-                          'pad=%d:%d:(ow-iw)/2:(oh-ih)/2' % (base['w'], base['h'], base['w'], base['h']))
+        trimmed = False
+        for idx, s in enumerate(segs):
+            start, end = trim_map.get(s['rel'], (0, 0))
+            if start > 0 or (end > start and (not s['dur'] or end < s['dur'])):
                 seg_out = os.path.join(work, 'seg%03d.mp4' % idx)
-                cmd = (['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error'] + ss + to +
-                       ['-i', s['path']])
-                if vf:
-                    cmd += ['-vf', vf]
-                cmd += ['-r', '%g' % base['fps'], '-c:v', 'libx264', '-preset', 'veryfast',
-                        '-crf', '20', '-c:a', 'aac', '-b:a', '160k',
-                        '-movflags', '+faststart', seg_out]
-                rr = run(cmd, 7200)
-                if rr.returncode != 0 or not os.path.isfile(seg_out) or os.path.getsize(seg_out) == 0:
+                if _ffmpeg_trim_seg(s['path'], start, end, seg_out):
+                    parts.append(seg_out)
+                    trimmed = True
+                else:
                     raise RuntimeError('seg_failed:' + s['name'])
-                parts.append(seg_out)
+            else:
+                parts.append(s['path'])
+            with concat_lk:
+                CCTASK['done'] = idx + 1
+
+        # ---- 2) 渲染：Concat 引擎优先（排序+封装+可选标题/字幕能力），ffmpeg 兜底
+        engine_bin = _concat_engine_binary()
+        if engine_bin and len(parts) >= 1:
+            out_dir = safe_path(DLDIR, '拼接')
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = safe_path(out_dir, '拼接-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
+            try:
                 with concat_lk:
-                    CCTASK['done'] = idx + 1
+                    CCTASK['phase'] = 'concat-render'
+                run_concat_job(engine_bin, work, parts, out_path,
+                               progress=lambda d, t: None)
+                with concat_lk:
+                    CCTASK.update({'running': False,
+                                   'output': '拼接/' + os.path.basename(out_path),
+                                   'engine': 'Concat'})
+                addlog('视频拼接完成（Concat 引擎）：%s，%d 段' % (os.path.basename(out_path), len(segs)))
+                return
+            except Exception as e:
+                log.warning('concat engine failed, fallback to ffmpeg: ' + str(e)[:160])
+                if os.path.isfile(out_path):
+                    os.remove(out_path)
+
+        # ---- ffmpeg 兜底（与旧路径一致）
         lst_path = os.path.join(work, 'list.txt')
         with open(lst_path, 'w', encoding='utf-8') as f:
             for p in parts:
@@ -3640,8 +3666,9 @@ def _concat_worker(video_rels, trims):
         if rr.returncode != 0 or not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
             raise RuntimeError('mux_failed')
         with concat_lk:
-            CCTASK.update({'running': False, 'output': '拼接/' + os.path.basename(out_path)})
-        addlog('视频拼接完成（%s）：%s，%d 段' % (mode, os.path.basename(out_path), len(segs)))
+            CCTASK.update({'running': False, 'output': '拼接/' + os.path.basename(out_path),
+                           'engine': 'FFmpeg'})
+        addlog('视频拼接完成（FFmpeg）：%s，%d 段' % (os.path.basename(out_path), len(segs)))
     except Exception as e:
         log.warning('concat:' + str(e)[:120])
         with concat_lk:
@@ -3679,6 +3706,11 @@ def api_concat_start():
 def api_concat_status():
     with concat_lk:
         return jsonify(CCTASK)
+
+@app.route('/api/concat/engine')
+def api_concat_engine():
+    b = _concat_engine_binary()
+    return jsonify({'available': bool(b), 'path': b or ''})
 
 @app.route('/api/music/list')
 def api_music_list():
