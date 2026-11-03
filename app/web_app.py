@@ -1600,6 +1600,8 @@ def save_projects(data):
 
 AUTO = {'running': False, 'done': 0, 'total': 0, 'results': {}, 'recommended': [], 'blurry': []}
 EDIT = {'running': False, 'phase': '', 'done': 0, 'total': 0, 'error': '', 'output': ''}
+CCTASK = {'running': False, 'phase': '', 'done': 0, 'total': 0, 'error': '', 'output': ''}
+concat_lk = threading.Lock()
 edit_job_lk = threading.Lock()
 auto_lk = threading.Lock()
 
@@ -3546,6 +3548,137 @@ def _autocut_worker(video_rels, photo_rels, target, music_rel):
             EDIT['error'] = str(e)[:200]
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+def _concat_probe(path):
+    """返回 (w, h, fps, duration)；失败时退化 (0, 0, 30.0, 0.0)"""
+    try:
+        r = run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=width,height,r_frame_rate:format=duration',
+                 '-of', 'json', path], 60)
+        data = json.loads(r.stdout or '{}')
+        st = (data.get('streams') or [{}])[0]
+        num, _, den = (st.get('r_frame_rate') or '30/1').partition('/')
+        fps = float(num) / (float(den) if den else 1.0)
+        dur = float(data.get('format', {}).get('duration') or 0.0)
+        return (int(st.get('width') or 0), int(st.get('height') or 0),
+                round(fps, 3) or 30.0, dur)
+    except Exception:
+        return (0, 0, 30.0, 0.0)
+
+def _concat_worker(video_rels, trims):
+    """视频拼接：参数一致且无裁剪走 concat demuxer 无损 copy；
+    否则以第一段画幅/帧率为基准标准化转码（scale+pad）。"""
+    trim_map = {}
+    for t in (trims or []):
+        try:
+            trim_map[str(t.get('path'))] = (max(0.0, float(t.get('start') or 0)),
+                                            float(t.get('end') or 0))
+        except (TypeError, ValueError):
+            continue
+    segs = []
+    try:
+        for rel in video_rels:
+            # 只接受真实视频文件（.mp4/.mov）；LRV 代理与照片一律排除
+            if not rel.lower().endswith(('.mp4', '.mov')) or rel.lower().endswith('.lrv'):
+                continue
+            p = local_path(rel)
+            if p and os.path.isfile(p):
+                w, h, fps, dur = _concat_probe(p)
+                segs.append({'rel': rel, 'path': p, 'name': os.path.basename(rel),
+                             'w': w, 'h': h, 'fps': fps, 'dur': dur})
+        if not segs:
+            raise RuntimeError('no_valid_videos')
+        with concat_lk:
+            CCTASK.update({'running': True, 'phase': 'build', 'done': 0,
+                           'total': len(segs), 'error': '', 'output': ''})
+        work = os.path.join(STATE_DIR, 'concat_tmp')
+        shutil.rmtree(work, ignore_errors=True)
+        os.makedirs(work, exist_ok=True)
+        parts = []
+        uniform = len({(s['w'], s['h'], s['fps']) for s in segs}) == 1 and all(s['w'] for s in segs)
+        trimmed = any(rel in trim_map for rel in [s['rel'] for s in segs])
+        if uniform and not trimmed:
+            mode = 'lossless'
+            parts = [s['path'] for s in segs]
+        else:
+            mode = 'normalized'
+            base = segs[0]
+            for idx, s in enumerate(segs):
+                start, end = trim_map.get(s['rel'], (0, 0))
+                start = min(start, max(0.0, s['dur'] - 0.1)) if s['dur'] else start
+                ss = ['-ss', '%.3f' % start] if start > 0 else []
+                # -to 是绝对输入时间，必须放在 -i 之前；end<=start 时视为截到末尾
+                to = ['-to', '%.3f' % end] if (end > start and (not s['dur'] or end < s['dur'])) else []
+                vf = ''
+                if (s['w'], s['h']) != (base['w'], base['h']):
+                    vf = ('scale=%d:%d:force_original_aspect_ratio=decrease,'
+                          'pad=%d:%d:(ow-iw)/2:(oh-ih)/2' % (base['w'], base['h'], base['w'], base['h']))
+                seg_out = os.path.join(work, 'seg%03d.mp4' % idx)
+                cmd = (['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error'] + ss + to +
+                       ['-i', s['path']])
+                if vf:
+                    cmd += ['-vf', vf]
+                cmd += ['-r', '%g' % base['fps'], '-c:v', 'libx264', '-preset', 'veryfast',
+                        '-crf', '20', '-c:a', 'aac', '-b:a', '160k',
+                        '-movflags', '+faststart', seg_out]
+                rr = run(cmd, 7200)
+                if rr.returncode != 0 or not os.path.isfile(seg_out) or os.path.getsize(seg_out) == 0:
+                    raise RuntimeError('seg_failed:' + s['name'])
+                parts.append(seg_out)
+                with concat_lk:
+                    CCTASK['done'] = idx + 1
+        lst_path = os.path.join(work, 'list.txt')
+        with open(lst_path, 'w', encoding='utf-8') as f:
+            for p in parts:
+                f.write("file '%s'\n" % p.replace("'", "'\\''"))
+        out_dir = safe_path(DLDIR, '拼接')
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = safe_path(out_dir, '拼接-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
+        rr = run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                  '-f', 'concat', '-safe', '0', '-i', lst_path,
+                  '-c', 'copy', '-movflags', '+faststart', out_path], 3600)
+        if rr.returncode != 0 or not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
+            raise RuntimeError('mux_failed')
+        with concat_lk:
+            CCTASK.update({'running': False, 'output': '拼接/' + os.path.basename(out_path)})
+        addlog('视频拼接完成（%s）：%s，%d 段' % (mode, os.path.basename(out_path), len(segs)))
+    except Exception as e:
+        log.warning('concat:' + str(e)[:120])
+        with concat_lk:
+            CCTASK.update({'running': False, 'error': str(e)[:200]})
+    finally:
+        shutil.rmtree(os.path.join(STATE_DIR, 'concat_tmp'), ignore_errors=True)
+
+@app.route('/api/concat/probe', methods=['POST'])
+def api_concat_probe():
+    rels = [str(x) for x in (request.json or {}).get('paths') or []][:60]
+    out = []
+    for rel in rels:
+        p = local_path(rel)
+        w, h, fps, dur = _concat_probe(p) if (p and os.path.isfile(p)) else (0, 0, 30.0, 0.0)
+        out.append({'path': rel, 'duration': dur, 'width': w, 'height': h})
+    return jsonify({'items': out})
+
+@app.route('/api/concat/start', methods=['POST'])
+def api_concat_start():
+    data = request.json or {}
+    videos = [str(x) for x in (data.get('videos') or []) if str(x)]
+    trims = data.get('trims') or []
+    if not videos:
+        return jsonify({'ok': False, 'error': 'no_videos'}), 400
+    with concat_lk:
+        if CCTASK['running']:
+            return jsonify({'ok': False, 'error': 'already_running'}), 409
+        CCTASK.update({'running': True, 'phase': 'build', 'done': 0,
+                       'total': len(videos), 'error': '', 'output': ''})
+    threading.Thread(target=_concat_worker,
+                     args=(videos, trims), daemon=True).start()
+    return jsonify({'ok': True, 'count': len(videos)})
+
+@app.route('/api/concat/status')
+def api_concat_status():
+    with concat_lk:
+        return jsonify(CCTASK)
 
 @app.route('/api/music/list')
 def api_music_list():
