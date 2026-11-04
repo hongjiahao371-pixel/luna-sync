@@ -6,7 +6,7 @@ from flask import Flask, jsonify, request, render_template, send_file, Response,
 from werkzeug.exceptions import HTTPException
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import luna_client
-from concat_engine import detect_engine, run_concat_job
+from concat_engine import ConcatEngine, detect_engine, run_concat_job
 from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
@@ -3713,6 +3713,210 @@ def api_concat_status():
 def api_concat_engine():
     b = _concat_engine_binary()
     return jsonify({'available': bool(b), 'path': b or ''})
+
+# ---------------- 剪辑工作台（Concat 无头引擎常驻会话） ----------------
+EDIT_SESSION = {'engine': None, 'project': '', 'lock': threading.Lock(),
+                'last_used': 0.0, 'error': ''}
+EDIT_ALLOWED_OPS = {'addMedia', 'removeMedia', 'addClip', 'addClipAtFirstFree',
+                    'addClipsInSequence', 'addTextClip', 'addShapeClip',
+                    'moveClips', 'trimClip', 'splitClips', 'removeClips',
+                    'updateClip', 'setClipSpeed', 'freezeFrame', 'mergeClips',
+                    'addTrack', 'addTimeline', 'setClipTransform',
+                    'detachAudio', 'reattachAudio', 'replaceClipMedia'}
+
+def _edit_engine():
+    """常驻无头引擎进程；死了自动重启（项目从盘上重开）。"""
+    if EDIT_SESSION['engine'] is not None:
+        try:
+            EDIT_SESSION['engine'].call('tools/list', {}, 15)
+            return EDIT_SESSION['engine'], EDIT_SESSION['project']
+        except Exception:
+            try:
+                EDIT_SESSION['engine'].close()
+            except Exception:
+                pass
+            EDIT_SESSION['engine'] = None
+    b = _concat_engine_binary()
+    if not b:
+        raise RuntimeError('concat_engine_missing')
+    roots = DLDIR + ':' + os.path.join(STATE_DIR, 'editor')
+    os.makedirs(os.path.join(STATE_DIR, 'editor', 'projects'), exist_ok=True)
+    os.makedirs(os.path.join(STATE_DIR, 'editor', 'exports'), exist_ok=True)
+    eng = ConcatEngine(b, roots)
+    EDIT_SESSION['engine'] = eng
+    EDIT_SESSION['last_used'] = time.time()
+    proj = EDIT_SESSION.get('project') or ''
+    if proj and os.path.isdir(proj):
+        eng.tool('project_open', {'path': proj}, 120)
+    return eng, EDIT_SESSION['project']
+
+def _edit_apply(eng, project, command):
+    r = eng.tool('edit_apply', {'path': project, 'command': command}, 300)
+    if r['json'] is None and 'invalid' in (r['text'] or ''):
+        raise RuntimeError(r['text'][:160])
+    return r
+
+def _edit_state(eng, project):
+    return eng.tool('timeline_read', {'path': project}, 120)['json'] or {}
+
+def _edit_serialize(state):
+    tl = state.get('timeline', {})
+    return {'clips': [{'id': x.get('id'), 'name': x.get('name'),
+                       'kind': x.get('kind'), 'start': x.get('start'),
+                       'duration': x.get('duration'),
+                       'sourceStart': x.get('sourceStart'),
+                       'media': x.get('media')} for x in tl.get('clips', [])],
+            'duration': tl.get('duration'),
+            'media': [{'id': m.get('id'), 'name': m.get('name'),
+                       'duration': m.get('duration')} for m in state.get('media', [])],
+            'project': state.get('project')}
+
+@app.route('/api/editor/open', methods=['POST'])
+def api_editor_open():
+    paths = [str(x) for x in (request.json or {}).get('paths') or []][:60]
+    vids = [p for p in paths if p.lower().endswith(('.mp4', '.mov')) and local_path(p)]
+    if not vids:
+        return jsonify({'ok': False, 'error': 'no_videos'}), 400
+    b = _concat_engine_binary()
+    if not b:
+        return jsonify({'ok': False, 'error': 'concat_engine_missing'}), 400
+    with EDIT_SESSION['lock']:
+        try:
+            # 关旧会话
+            if EDIT_SESSION['engine'] is not None:
+                try:
+                    if EDIT_SESSION['project']:
+                        EDIT_SESSION['engine'].tool('project_close',
+                            {'path': EDIT_SESSION['project'], 'save': True}, 60)
+                    EDIT_SESSION['engine'].close()
+                except Exception:
+                    pass
+                EDIT_SESSION['engine'] = None
+            root = os.path.join(STATE_DIR, 'editor')
+            os.makedirs(os.path.join(root, 'projects'), exist_ok=True)
+            os.makedirs(os.path.join(root, 'exports'), exist_ok=True)
+            eng = ConcatEngine(b, root + ':' + DLDIR)
+            name = 'workbench-%s' % time.strftime('%Y%m%d-%H%M%S')
+            r = eng.tool('project_create', {'location': os.path.join(root, 'projects'),
+                                            'name': name}, 60)
+            proj = os.path.join(root, 'projects', name)
+            ids = []
+            for p in vids:
+                ap = local_path(p)
+                r = eng.tool('media_import', {'path': proj, 'file': ap}, 600)
+                cid = (r['json'] or {}).get('createdId')
+                if not cid:
+                    raise RuntimeError('import_failed:' + os.path.basename(p))
+                ids.append(cid)
+            r = eng.tool('edit_apply', {'path': proj, 'command': {
+                'op': 'addClipsInSequence', 'mediaIds': ids, 'start': 0}}, 300)
+            EDIT_SESSION.update({'engine': eng, 'project': proj,
+                                 'last_used': time.time(), 'error': ''})
+            state = _edit_state(eng, proj)
+            return jsonify({'ok': True, **_edit_serialize(state),
+                            'project': proj})
+        except Exception as e:
+            log.warning('editor open: ' + str(e)[:160])
+            try:
+                if EDIT_SESSION['engine'] is not None:
+                    EDIT_SESSION['engine'].close()
+            except Exception:
+                pass
+            EDIT_SESSION['engine'] = None
+            return jsonify({'ok': False, 'error': str(e)[:160]}), 500
+
+@app.route('/api/editor/state')
+def api_editor_state():
+    with EDIT_SESSION['lock']:
+        if EDIT_SESSION['engine'] is None:
+            return jsonify({'ok': False, 'error': 'no_session'}), 400
+        eng, proj = _edit_engine()
+        state = _edit_state(eng, proj)
+        return jsonify({'ok': True, **_edit_serialize(state), 'project': proj})
+
+@app.route('/api/editor/cmd', methods=['POST'])
+def api_editor_cmd():
+    command = request.json or {}
+    op = command.get('op')
+    if op not in EDIT_ALLOWED_OPS:
+        return jsonify({'ok': False, 'error': 'op_not_allowed'}), 400
+    with EDIT_SESSION['lock']:
+        if EDIT_SESSION['engine'] is None:
+            return jsonify({'ok': False, 'error': 'no_session'}), 400
+        eng, proj = _edit_engine()
+        command = dict(command)
+        command['op'] = op
+        r = _edit_apply(eng, proj, command)
+        eng.tool('project_save', {'path': proj}, 120)
+        EDIT_SESSION['last_used'] = time.time()
+        state = _edit_state(eng, proj)
+        return jsonify({'ok': True, **_edit_serialize(state), 'project': proj})
+
+@app.route('/api/editor/undo', methods=['POST'])
+def api_editor_undo():
+    with EDIT_SESSION['lock']:
+        if EDIT_SESSION['engine'] is None:
+            return jsonify({'ok': False, 'error': 'no_session'}), 400
+        eng, proj = _edit_engine()
+        eng.tool('edit_undo', {'path': proj}, 120)
+        state = _edit_state(eng, proj)
+        return jsonify({'ok': True, **_edit_serialize(state), 'project': proj})
+
+@app.route('/api/editor/preview')
+def api_editor_preview():
+    t = max(0.0, float(request.args.get('time', 0) or 0))
+    with EDIT_SESSION['lock']:
+        if EDIT_SESSION['engine'] is None:
+            abort(404)
+        eng, proj = _edit_engine()
+        out = os.path.join(STATE_DIR, 'editor', 'preview.png')
+        eng.tool('preview_frame', {'path': proj, 'time': t, 'output': out}, 120)
+        if not os.path.isfile(out):
+            abort(404)
+        resp = send_file(out, mimetype='image/png', max_age=0)
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
+
+@app.route('/api/editor/export', methods=['POST'])
+def api_editor_export():
+    with EDIT_SESSION['lock']:
+        if EDIT_SESSION['engine'] is None:
+            return jsonify({'ok': False, 'error': 'no_session'}), 400
+        eng, proj = _edit_engine()
+        root = os.path.join(STATE_DIR, 'editor')
+        out = os.path.join(root, 'exports', 'edit-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
+        r = eng.tool('export_start', {'path': proj, 'output': out, 'codec': 'h264'}, 60)
+        job = (r['json'] or {}).get('job')
+        if not job:
+            return jsonify({'ok': False, 'error': (r['text'] or 'export_failed')[:160]}), 500
+    # 导出在引擎线程自跑，轮询放锁外（预览仍可用）
+    for _ in range(240):
+        st = eng.tool('export_wait', {'job': job, 'timeoutSeconds': 30}, 90)['json'] or {}
+        if st.get('state') in ('done', 'failed', 'cancelled'):
+            break
+        time.sleep(1)
+    if st.get('state') != 'done':
+        return jsonify({'ok': False, 'error': 'export_' + str(st.get('state'))}), 500
+    out_dir = safe_path(DLDIR, '剪辑')
+    os.makedirs(out_dir, exist_ok=True)
+    final = safe_path(out_dir, '剪辑-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
+    shutil.move(out, final)
+    addlog('剪辑工作台导出：' + os.path.basename(final))
+    return jsonify({'ok': True, 'output': '剪辑/' + os.path.basename(final)})
+
+@app.route('/api/editor/close', methods=['POST'])
+def api_editor_close():
+    with EDIT_SESSION['lock']:
+        if EDIT_SESSION['engine'] is not None:
+            try:
+                if EDIT_SESSION['project']:
+                    EDIT_SESSION['engine'].tool('project_close',
+                        {'path': EDIT_SESSION['project'], 'save': True}, 120)
+                EDIT_SESSION['engine'].close()
+            except Exception:
+                pass
+        EDIT_SESSION.update({'engine': None, 'project': ''})
+    return jsonify({'ok': True})
 
 @app.route('/api/music/list')
 def api_music_list():
