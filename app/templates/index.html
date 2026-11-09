@@ -231,6 +231,7 @@ td.muted{color:var(--muted);font-size:12.5px}
 .ed-clip.sel{border-color:#ff9f43}
 .ed-clip.under{border-color:#2f6fd6}
 .ed-clip .ed-dur{position:absolute;left:4px;bottom:3px;font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+#viewEdit .edit-wrap{padding:14px 18px;overflow:auto;display:flex;flex-direction:column;gap:12px}
 .ed-playhead{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;box-shadow:0 0 6px rgba(255,82,82,.9);z-index:3}
 .edit-inspector{display:flex;gap:14px;flex-wrap:wrap}
 .insp-col{flex:1;min-width:230px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9)}
@@ -474,6 +475,7 @@ td.muted{color:var(--muted);font-size:12.5px}
     <div class="library-head"><div class="headmain"><h2>媒体库</h2><small id="libmeta">等待扫描</small></div><span class="tag">增量备份</span></div>
     <div class="tabs"><div class="segcontrol">
       <button class="tab active" id="tabCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>相机文件<span class="cnt" id="camCnt">0</span></button>
+      <button class="tab" id="tabEdit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>剪辑工作台</button>
       <button class="tab" id="tabLocal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>本地已下载<span class="cnt" id="localCnt">0</span></button>
     </div></div>
     <!-- Camera files view -->
@@ -494,6 +496,95 @@ td.muted{color:var(--muted);font-size:12.5px}
       <div id="empty" class="empty">等待扫描相机文件</div>
     </div>
     </div><!-- /viewCam -->
+    <div id="viewEdit" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+      <div id="editWrap" class="edit-wrap">
+        <div class="edit-topbar">
+          <strong id="edTitle">剪辑工作台</strong>
+          <span id="ccEngine" class="tag done" style="display:none"></span>
+          <span id="edState" class="muted" style="font-size:12px">未打开会话</span>
+          <span style="flex:1"></span>
+          <button id="edUndo" class="ghost" disabled>撤销</button>
+          <button id="edExport" class="primary" disabled>导出成片</button>
+        </div>
+        <div class="edit-main">
+          <div class="edit-preview">
+            <img id="edPreview" alt="预览" src="">
+            <div class="edit-preview-ctl">
+              <button id="edPrev" class="ghost" title="上一帧">◀</button>
+              <span id="edTime" class="cull-pos">0.0s</span>
+              <button id="edNext" class="ghost" title="下一帧">▶</button>
+              <button id="edSeekStart" class="ghost" title="回到开头">⏮</button>
+            </div>
+          </div>
+          <div class="edit-side">
+            <h3 style="margin:0 0 8px;font-size:13px" id="ccPoolTitle">素材库视频</h3>
+            <div id="ccPool" class="pool-grid"></div>
+          </div>
+        </div>
+        <div class="edit-tools">
+          <button id="edSplit" class="tonal" disabled>✂ 在播放头分割</button>
+          <button id="edDelSeg" class="tonal" disabled>🗑 删除播放头下片段</button>
+          <button id="edTrimHead" class="tonal" disabled>掐头到播放头</button>
+          <button id="edTrimTail" class="tonal" disabled>去尾到播放头</button>
+          <button id="edAddTitle" class="tonal" disabled>加标题</button>
+          <button id="edFreeze" class="tonal" disabled>📸 定格</button>
+          <button id="edDetachAudio" class="tonal" disabled>音轨分离</button>
+          <select id="edTransitionSel" class="tonal" disabled style="max-width:200px;height:32px"><option value="">转场（套用到选中片段）</option></select>
+          <button id="edBackground" class="tonal">竖屏模糊背景</button>
+          <button id="edPiP" class="tonal" disabled>画中画（上层轨）</button>
+          <span class="spacer"></span>
+          <span id="ccSummary" class="cull-pos" style="color:var(--muted)"></span>
+        </div>
+        <div id="ccList" class="timeline-strip"></div>
+        <div class="edit-inspector">
+          <div class="insp-col">
+            <h4>选中片段 · 属性</h4>
+            <label>变速 <input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0" style="width:56px;height:28px">x
+                 音量 <input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0" style="width:52px;height:28px"></label>
+            <label>透明度 <input id="edOpacity" type="number" step="0.1" min="0" max="1" placeholder="1.0" style="width:52px;height:28px">
+                 缩放 <input id="edScale" type="number" step="0.1" min="0.1" max="3" placeholder="1.0" style="width:52px;height:28px"></label>
+            <label>旋转 <input id="edRotation" type="number" step="5" placeholder="0" style="width:56px;height:28px">°
+                 位置X <input id="edOffsetX" type="number" step="0.05" placeholder="0" style="width:52px;height:28px">
+                 Y <input id="edOffsetY" type="number" step="0.05" placeholder="0" style="width:52px;height:28px"></label>
+            <label>裁剪 <input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="左" style="width:44px;height:28px">
+                 <input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="右" style="width:44px;height:28px">
+                 <input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="上" style="width:44px;height:28px">
+                 <input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="下" style="width:44px;height:28px"></label>
+            <label>淡入 <input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
+                 淡出 <input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
+                 混合 <select id="edBlend" style="height:28px"><option value="">正常</option><option value="screen">screen</option><option value="add">add</option><option value="multiply">multiply</option><option value="overlay">overlay</option></select></label>
+            <label><label class="chk" style="margin:0"><input type="checkbox" id="edFlipH"> 水平镜像</label>
+                 <label class="chk" style="margin:0"><input type="checkbox" id="edFlipV"> 垂直镜像</label></label>
+            <button id="edApplyProps" class="tonal">应用属性</button>
+            <button id="edMute" class="ghost">静音</button>
+            <button id="edStabilize" class="ghost">画面稳定</button>
+            <button id="edCutout" class="ghost">AI 抠像</button>
+          </div>
+          <div class="insp-col">
+            <h4>特效 / 滤镜 <span class="muted" style="font-size:11px" id="edEffCount"></span></h4>
+            <select id="edEffectSel" style="max-width:220px;height:30px"></select>
+            <label>强度 <input id="edEffectIntensity" type="number" step="0.1" min="0" max="2" value="1" style="width:56px;height:28px"></label>
+            <button id="edEffectApply" class="tonal">套用到选中片段</button>
+          </div>
+          <div class="insp-col">
+            <h4>字幕 <span class="muted" style="font-size:11px">每行: 开始 结束 文本（秒）</span></h4>
+            <textarea id="edCaptions" rows="3" style="width:100%;font-size:12px" placeholder="1.0 2.5 第一句&#10;3.0 4.5 第二句"></textarea>
+            <button id="edCaptionsAdd" class="tonal">添加字幕</button>
+          </div>
+        </div>
+        <div class="edit-topbar">
+          <strong>导出</strong>
+          <label>编码 <select id="edCodec" style="height:30px"><option value="h264">H.264</option><option value="hevc">HEVC</option><option value="av1">AV1</option></select></label>
+          <label>高度 <select id="edHeight" style="height:30px"><option value="">跟随时间线</option><option value="2160">4K</option><option value="1080">1080p</option><option value="720">720p</option></select></label>
+        </div>
+        <div id="edProg" style="display:none;margin-top:10px">
+          <div style="display:flex;gap:10px;align-items:center">
+            <span id="ccPhase" class="cull-pos" style="color:var(--ink)">导出中</span>
+            <div class="bar" style="flex:1;margin-top:0"><i id="ccBar"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- Local downloads view -->
     <div id="viewLocal" style="display:none;flex-direction:column;flex:1;min-height:0">
       <div class="albumbar">
@@ -594,93 +685,6 @@ td.muted{color:var(--muted);font-size:12.5px}
       </div>
       <div id="projBanner" class="projbanner" style="display:none"></div>
       <div id="tagBar" class="tagbar" style="display:none"></div>
-      <div id="editWrap" style="display:none" class="edit-wrap">
-        <div class="edit-topbar">
-          <strong id="edTitle">剪辑工作台</strong>
-          <span id="ccEngine" class="tag done" style="display:none"></span>
-          <span id="edState" class="muted" style="font-size:12px">未打开会话</span>
-          <span style="flex:1"></span>
-          <button id="edUndo" class="ghost" disabled>撤销</button>
-          <button id="edExport" class="primary" disabled>导出成片</button>
-        </div>
-        <div class="edit-main">
-          <div class="edit-preview">
-            <img id="edPreview" alt="预览" src="">
-            <div class="edit-preview-ctl">
-              <button id="edPrev" class="ghost" title="上一帧">◀</button>
-              <span id="edTime" class="cull-pos">0.0s</span>
-              <button id="edNext" class="ghost" title="下一帧">▶</button>
-              <button id="edSeekStart" class="ghost" title="回到开头">⏮</button>
-            </div>
-          </div>
-          <div class="edit-side">
-            <h3 style="margin:0 0 8px;font-size:13px" id="ccPoolTitle">素材库视频</h3>
-            <div id="ccPool" class="pool-grid"></div>
-          </div>
-        </div>
-        <div class="edit-tools">
-          <button id="edSplit" class="tonal" disabled>✂ 在播放头分割</button>
-          <button id="edDelSeg" class="tonal" disabled>🗑 删除播放头下片段</button>
-          <button id="edTrimHead" class="tonal" disabled>掐头到播放头</button>
-          <button id="edTrimTail" class="tonal" disabled>去尾到播放头</button>
-          <button id="edAddTitle" class="tonal" disabled>加标题</button>
-          <button id="edFreeze" class="tonal" disabled>📸 定格</button>
-          <button id="edDetachAudio" class="tonal" disabled>音轨分离</button>
-          <select id="edTransitionSel" class="tonal" disabled style="max-width:200px;height:32px"><option value="">转场（套用到选中片段）</option></select>
-          <button id="edBackground" class="tonal">竖屏模糊背景</button>
-          <button id="edPiP" class="tonal" disabled>画中画（上层轨）</button>
-          <span class="spacer"></span>
-          <span id="ccSummary" class="cull-pos" style="color:var(--muted)"></span>
-        </div>
-        <div id="ccList" class="timeline-strip"></div>
-        <div class="edit-inspector">
-          <div class="insp-col">
-            <h4>选中片段 · 属性</h4>
-            <label>变速 <input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0" style="width:56px;height:28px">x
-                 音量 <input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0" style="width:52px;height:28px"></label>
-            <label>透明度 <input id="edOpacity" type="number" step="0.1" min="0" max="1" placeholder="1.0" style="width:52px;height:28px">
-                 缩放 <input id="edScale" type="number" step="0.1" min="0.1" max="3" placeholder="1.0" style="width:52px;height:28px"></label>
-            <label>旋转 <input id="edRotation" type="number" step="5" placeholder="0" style="width:56px;height:28px">°
-                 位置X <input id="edOffsetX" type="number" step="0.05" placeholder="0" style="width:52px;height:28px">
-                 Y <input id="edOffsetY" type="number" step="0.05" placeholder="0" style="width:52px;height:28px"></label>
-            <label>裁剪 <input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="左" style="width:44px;height:28px">
-                 <input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="右" style="width:44px;height:28px">
-                 <input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="上" style="width:44px;height:28px">
-                 <input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="下" style="width:44px;height:28px"></label>
-            <label>淡入 <input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
-                 淡出 <input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
-                 混合 <select id="edBlend" style="height:28px"><option value="">正常</option><option value="screen">screen</option><option value="add">add</option><option value="multiply">multiply</option><option value="overlay">overlay</option></select></label>
-            <label><label class="chk" style="margin:0"><input type="checkbox" id="edFlipH"> 水平镜像</label>
-                 <label class="chk" style="margin:0"><input type="checkbox" id="edFlipV"> 垂直镜像</label></label>
-            <button id="edApplyProps" class="tonal">应用属性</button>
-            <button id="edMute" class="ghost">静音</button>
-            <button id="edStabilize" class="ghost">画面稳定</button>
-            <button id="edCutout" class="ghost">AI 抠像</button>
-          </div>
-          <div class="insp-col">
-            <h4>特效 / 滤镜 <span class="muted" style="font-size:11px" id="edEffCount"></span></h4>
-            <select id="edEffectSel" style="max-width:220px;height:30px"></select>
-            <label>强度 <input id="edEffectIntensity" type="number" step="0.1" min="0" max="2" value="1" style="width:56px;height:28px"></label>
-            <button id="edEffectApply" class="tonal">套用到选中片段</button>
-          </div>
-          <div class="insp-col">
-            <h4>字幕 <span class="muted" style="font-size:11px">每行: 开始 结束 文本（秒）</span></h4>
-            <textarea id="edCaptions" rows="3" style="width:100%;font-size:12px" placeholder="1.0 2.5 第一句&#10;3.0 4.5 第二句"></textarea>
-            <button id="edCaptionsAdd" class="tonal">添加字幕</button>
-          </div>
-        </div>
-        <div class="edit-topbar">
-          <strong>导出</strong>
-          <label>编码 <select id="edCodec" style="height:30px"><option value="h264">H.264</option><option value="hevc">HEVC</option><option value="av1">AV1</option></select></label>
-          <label>高度 <select id="edHeight" style="height:30px"><option value="">跟随时间线</option><option value="2160">4K</option><option value="1080">1080p</option><option value="720">720p</option></select></label>
-        </div>
-        <div id="edProg" style="display:none;margin-top:10px">
-          <div style="display:flex;gap:10px;align-items:center">
-            <span id="ccPhase" class="cull-pos" style="color:var(--ink)">导出中</span>
-            <div class="bar" style="flex:1;margin-top:0"><i id="ccBar"></i></div>
-          </div>
-        </div>
-      </div>
       <div id="wall" class="wall"></div>
       <div id="timelineWrap" class="timeline" style="display:none"></div>
       <div id="tlNav" class="tlnav" style="display:none"></div>
@@ -1576,14 +1580,6 @@ function render(){
 function renderLocal(){
   if(TAB!=='local')return;
   var list=sortLocal(localVisible());
-  if(LMODE==='edit'){
-    $('wall').style.display='none';$('ltableWrap').style.display='none';
-    var tle=$('timelineWrap'),tne=$('tlNav');if(tle)tle.style.display='none';if(tne)tne.style.display='none';
-    $('editWrap').style.display='block';
-    if(typeof edRenderPool==='function')edRenderPool();
-    return;
-  }
-  var ew=$('editWrap');if(ew)ew.style.display='none';
   if(LMODE==='grid'){renderWall(list)}
   else if(LMODE==='timeline'){renderTimeline(list)}
   else{renderLocalTable(list)}
@@ -1635,7 +1631,7 @@ function renderLocalTable(list){
   });
 }
 async function delLocal(name){if(confirm(tr('deleteLocalConfirm'))){await fetch('/api/file/'+encodeURIComponent(name),{method:'DELETE'});SEL.delete(name);scan()}}
-function switchTab(t){TAB=t;$('tabCam').classList.toggle('active',t==='cam');$('tabLocal').classList.toggle('active',t==='local');$('viewCam').style.display=t==='cam'?'flex':'none';$('viewLocal').style.display=t==='local'?'flex':'none';renderLocal()}
+function switchTab(t){TAB=t;$('tabCam').classList.toggle('active',t==='cam');$('tabLocal').classList.toggle('active',t==='local');$('tabEdit').classList.toggle('active',t==='edit');$('viewCam').style.display=t==='cam'?'flex':'none';$('viewLocal').style.display=t==='local'?'flex':'none';$('viewEdit').style.display=t==='edit'?'flex':'none';if(t!=='edit'&&LMODE==='edit'){LMODE='grid';var gb=$('lvGrid');if(gb)gb.classList.add('on')}renderLocal()}
 async function scan(){
   $('bScan').disabled=true;$('bScan').textContent=tr('scanning');
   try{
@@ -1825,7 +1821,7 @@ async function checkConsent(){
   catch(e){setConsentVisible(true)}
 }
 $('bScan').onclick=scan;$('bWifi').onclick=scanWifi;$('bConn').onclick=connWifi;$('bCan').onclick=cancelDownloads;$('bForget').onclick=async function(){if(confirm(tr('forgetConfirm'))){await fetch('/api/wifi/forget',{method:'POST'});$('pw').value='';$('rem').checked=false;await poll()}};$('bAuto').onclick=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!STATE.auto_sync})});poll()};$('autoLrv').onchange=async function(){await fetch('/api/auto-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({include_lrv:this.checked})});poll()};$('bDl').onclick=function(){if(!SEL.size)return alert(tr('selectFilesFirst'));queueFiles(Array.from(SEL))};$('bVisible').onclick=function(){var ns=visible().filter(function(x){return !done(x)}).map(keyOf);if(!ns.length)return alert(tr('visibleAllDone'));queueFiles(ns)};$('bMissing').onclick=function(){SEL.clear();visible().filter(function(x){return !done(x)}).forEach(function(x){SEL.add(keyOf(x))});render()};$('bAll').onclick=function(){var v=visible(),all=!v.every(function(x){return SEL.has(keyOf(x))});v.forEach(function(x){all?SEL.add(keyOf(x)):SEL.delete(keyOf(x))});render()};$('cAll').onchange=$('bAll').onclick;$('fl').onchange=render;$('fs').onchange=render;$('q').oninput=render;$('ovc').onclick=closePrev;$('ov').onclick=function(e){if(e.target===$('ov'))closePrev()};
-$('tabCam').onclick=function(){switchTab('cam')};$('tabLocal').onclick=function(){switchTab('local')};
+$('tabCam').onclick=function(){switchTab('cam')};$('tabLocal').onclick=function(){switchTab('local')};$('tabEdit').onclick=function(){switchTab('edit');edOpenWorkbench()};
 function setLF(v){LFIL=v;['lfAll','lfImg','lfVid'].forEach(function(id){$(id).classList.toggle('on',id===('lf'+{all:'All',img:'Img',vid:'Vid'}[v]))});renderLocal()}
 $('lfAll').onclick=function(){setLF('all')};$('lfImg').onclick=function(){setLF('img')};$('lfVid').onclick=function(){setLF('vid')};
 $('lvGrid').onclick=function(){setViewMode('grid')};
@@ -2966,9 +2962,7 @@ $('edTransitionSel').addEventListener('change',async function(){
 });
 function edOpenWorkbench(){
   closeMenus();
-  var local=[...document.querySelectorAll('button')].find(function(b){return /本地已下载/.test(b.textContent)});
-  if(local&&!local.classList.contains('on')&&!local.classList.contains('active'))local.click();
-  setViewMode('edit');
+  switchTab('edit');
   fetch('/api/concat/engine').then(function(r){return r.json()}).then(function(d){
     var b=$('ccEngine');if(!b)return;
     b.style.display='inline-flex';
@@ -2982,13 +2976,16 @@ function edOpenWorkbench(){
     var tries=0;
     var timer=setInterval(function(){
       tries++;
-      var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'}).map(pickKey).slice(0,30);
-      if(vids.length||tries>20){
+      var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'&&!/^(剪辑|拼接|自动剪辑)\//.test(x.id||x)}).map(pickKey).slice(0,30);
+      edRenderPool();
+      if(vids.length){
         clearInterval(timer);
-        if(!vids.length){$('edState').textContent='库里没有视频素材';return}
         edApi('/api/editor/open',{method:'POST',body:JSON.stringify({paths:vids})})
           .then(function(d){edRenderState(d);uiToast('剪辑会话已打开：'+(d.clips||[]).length+' 段')})
           .catch(function(e){$('edState').textContent='打开失败：'+e.message});
+      } else if(tries>60){
+        clearInterval(timer);
+        $('edState').textContent='库里没有视频素材（先去本地已下载同步/导入）';
       }
     }, 500);
   } else {
@@ -2998,7 +2995,7 @@ function edOpenWorkbench(){
   }
 }
 $('bConcat').addEventListener('click',edOpenWorkbench);
-$('lvEdit').onclick=edOpenWorkbench;
+$('lvEdit').onclick=function(){switchTab('edit')};
 var dv2=$('cutDuration');if(dv2)dv2.value='30';
 applyLang();bindSort();markSort();poll();checkConsent();setInterval(function(){if(!document.hidden)poll()},1500);
 </script>
