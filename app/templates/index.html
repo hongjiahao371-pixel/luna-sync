@@ -624,17 +624,38 @@ td.muted{color:var(--muted);font-size:12.5px}
           <button id="edTrimHead" class="tonal" disabled>掐头到播放头</button>
           <button id="edTrimTail" class="tonal" disabled>去尾到播放头</button>
           <button id="edAddTitle" class="tonal" disabled>加标题</button>
+          <button id="edFreeze" class="tonal" disabled>📸 定格</button>
+          <button id="edDetachAudio" class="tonal" disabled>音轨分离</button>
+          <select id="edTransitionSel" class="tonal" disabled style="max-width:200px;height:32px"><option value="">转场（套用到选中片段）</option></select>
+          <button id="edBackground" class="tonal">竖屏模糊背景</button>
+          <button id="edPiP" class="tonal" disabled>画中画（上层轨）</button>
           <span class="spacer"></span>
           <span id="ccSummary" class="cull-pos" style="color:var(--muted)"></span>
         </div>
         <div id="ccList" class="timeline-strip"></div>
         <div class="edit-inspector">
           <div class="insp-col">
-            <h4>选中片段</h4>
-            <label>变速 <input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0" style="width:64px;height:28px">x</label>
-            <label>音量 <input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0" style="width:64px;height:28px"></label>
-            <button id="edApplyProps" class="tonal">应用</button>
+            <h4>选中片段 · 属性</h4>
+            <label>变速 <input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0" style="width:56px;height:28px">x
+                 音量 <input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0" style="width:52px;height:28px"></label>
+            <label>透明度 <input id="edOpacity" type="number" step="0.1" min="0" max="1" placeholder="1.0" style="width:52px;height:28px">
+                 缩放 <input id="edScale" type="number" step="0.1" min="0.1" max="3" placeholder="1.0" style="width:52px;height:28px"></label>
+            <label>旋转 <input id="edRotation" type="number" step="5" placeholder="0" style="width:56px;height:28px">°
+                 位置X <input id="edOffsetX" type="number" step="0.05" placeholder="0" style="width:52px;height:28px">
+                 Y <input id="edOffsetY" type="number" step="0.05" placeholder="0" style="width:52px;height:28px"></label>
+            <label>裁剪 <input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="左" style="width:44px;height:28px">
+                 <input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="右" style="width:44px;height:28px">
+                 <input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="上" style="width:44px;height:28px">
+                 <input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="下" style="width:44px;height:28px"></label>
+            <label>淡入 <input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
+                 淡出 <input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
+                 混合 <select id="edBlend" style="height:28px"><option value="">正常</option><option value="screen">screen</option><option value="add">add</option><option value="multiply">multiply</option><option value="overlay">overlay</option></select></label>
+            <label><label class="chk" style="margin:0"><input type="checkbox" id="edFlipH"> 水平镜像</label>
+                 <label class="chk" style="margin:0"><input type="checkbox" id="edFlipV"> 垂直镜像</label></label>
+            <button id="edApplyProps" class="tonal">应用属性</button>
             <button id="edMute" class="ghost">静音</button>
+            <button id="edStabilize" class="ghost">画面稳定</button>
+            <button id="edCutout" class="ghost">AI 抠像</button>
           </div>
           <div class="insp-col">
             <h4>特效 / 滤镜 <span class="muted" style="font-size:11px" id="edEffCount"></span></h4>
@@ -2657,9 +2678,10 @@ function edRenderState(d){
   ED.clips.forEach(function(c){var m=ED.media.find(function(x){return x.id===c.media});if(m&&!c.dur0)c.dur0=m.duration});
   $('edState').textContent='会话中 · '+(typeof ED.proj==='string'?ED.proj.split('/').pop():(ED.proj&&ED.proj.name)||'');
   $('edUndo').disabled=false;$('edExport').disabled=!ED.clips.length;
-  ['edSplit','edDelSeg','edTrimHead','edTrimTail','edAddTitle'].forEach(function(id){
+  ['edSplit','edDelSeg','edTrimHead','edTrimTail','edAddTitle','edFreeze','edDetachAudio','edPiP'].forEach(function(id){
     var b=$(id);if(b)b.disabled=!ED.clips.length;
   });
+  var ets=$('edTransitionSel');if(ets)ets.disabled=!ED.clips.length;
   edRenderTimeline(); edRenderPool(); edSeek(ED.play);
 }
 function edClipsSorted(){return ED.clips.slice().sort(function(a,b){return a.start-b.start})}
@@ -2814,19 +2836,49 @@ async function edLoadEffects(){
       return '<option value="'+esc2(e.id)+'">'+esc2(e.category+' · '+e.name)+'</option>';}).join('');
   }catch(e){/* ignore */}
 }
+function edSelClip(){return ED.clips.find(function(x){return x.id===ED.sel})||edClipAt(ED.play)}
+function edNum(id){var v=parseFloat($(id).value);return isNaN(v)?null:v}
 $('edApplyProps').onclick=async function(){
-  var c=ED.clips.find(function(x){return x.id===ED.sel})||edClipAt(ED.play);
-  if(!c)return uiToast('先点时间轴选中一个片段','warn');
-  var sp=parseFloat($('edSpeed').value);
-  if(sp>0){
-    try{await edCmd({op:'setClipSpeed', clipId:c.id, speed:sp});uiToast('变速已应用：'+sp+'x')}
-    catch(err){uiToast('变速失败：'+err.message,'warn')}
+  var c=edSelClip();if(!c)return uiToast('先点时间轴选中一个片段','warn');
+  var errs=[];
+  // 1) 变速（独立命令）
+  var sp=edNum('edSpeed');
+  if(sp>0){try{await edCmd({op:'setClipSpeed', clipId:c.id, speed:sp})}catch(e){errs.push('变速:'+e.message)}}
+  // 2) 画面属性（transform + patch 一次下发）
+  var sc=edNum('edScale'), ro=edNum('edRotation'), ox=edNum('edOffsetX'), oy=edNum('edOffsetY');
+  if(sc!==null||ro!==null||ox!==null||oy!==null){
+    try{await edCmd({op:'setClipTransform', clipId:c.id,
+      scale: sc!==null?sc:(c.scale||1), rotation: ro!==null?ro:(c.rotation||0),
+      offsetX: ox!==null?ox:(c.offsetX||0), offsetY: oy!==null?oy:(c.offsetY||0)})}
+    catch(e){errs.push('变换:'+e.message)}
   }
-  var vo=$('edVolume').value;
-  if(vo!==''){
-    try{await edCmd({op:'updateClip', clipId:c.id, patch:{volume:parseFloat(vo)}});uiToast('音量已应用')}
-    catch(err){uiToast('音量失败：'+err.message,'warn')}
-  }
+  var patch={};
+  var op_=edNum('edOpacity');if(op_!==null)patch.opacity=op_;
+  var cl=edNum('edCropL'),cr=edNum('edCropR'),ct=edNum('edCropT'),cb=edNum('edCropB');
+  if(cl!==null||cr!==null||ct!==null||cb!==null)patch.crop={left:cl||0,right:cr||0,top:ct||0,bottom:cb||0};
+  var fi=edNum('edFadeIn');if(fi!==null)patch.fadeIn=fi;
+  var fo=edNum('edFadeOut');if(fo!==null)patch.fadeOut=fo;
+  if($('edBlend').value)patch.blend=$('edBlend').value;
+  if($('edFlipH').checked)patch.flipH=true;
+  if($('edFlipV').checked)patch.flipV=true;
+  if(Object.keys(patch).length){try{await edCmd({op:'updateClip', clipId:c.id, patch:patch})}catch(e){errs.push('属性:'+e.message)}}
+  if(errs.length)uiToast('部分失败：'+errs.join('；'),'warn');
+  else uiToast('属性已应用');
+};
+$('edMute').onclick=async function(){
+  var c=edSelClip();if(!c)return uiToast('先选中一个片段','warn');
+  try{await edCmd({op:'updateClip', clipId:c.id, patch:{muted:true}});uiToast('已静音')}
+  catch(err){uiToast('静音失败：'+err.message,'warn')}
+};
+$('edStabilize').onclick=async function(){
+  var c=edSelClip();if(!c)return uiToast('先选中一个片段','warn');
+  try{await edCmd({op:'setClipStabilize', clipId:c.id, stabilize:{enabled:true}});uiToast('画面稳定已开启（导出时分析）')}
+  catch(err){uiToast('稳定失败：'+err.message,'warn')}
+};
+$('edCutout').onclick=async function(){
+  var c=edSelClip();if(!c)return uiToast('先选中一个片段','warn');
+  try{await edCmd({op:'setClipCutout', clipId:c.id, cutout:{enabled:true}});uiToast('AI 抠像已开启')}
+  catch(err){uiToast('抠像失败：'+err.message+'（可能需要模型）','warn')}
 };
 $('edMute').onclick=async function(){
   var c=ED.clips.find(function(x){return x.id===ED.sel})||edClipAt(ED.play);
@@ -2865,6 +2917,53 @@ $('edCaptionsAdd').onclick=async function(){
     uiToast('已添加 '+caps.length+' 条字幕');
   }catch(err){uiToast('字幕失败：'+err.message,'warn')}
 };
+$('edFreeze').onclick=async function(){
+  var c=edClipAt(ED.play);if(!c)return uiToast('播放头下没有片段','warn');
+  try{var d=await edCmd({op:'freezeFrame', clipId:c.id, time:ED.play});uiToast('定格已插入')}
+  catch(err){uiToast('定格失败：'+err.message,'warn')}
+};
+$('edDetachAudio').onclick=async function(){
+  var c=edClipAt(ED.play);if(!c)return uiToast('播放头下没有片段','warn');
+  try{var d=await edCmd({op:'detachAudio', clipId:c.id});uiToast('音轨已分离（独立音频轨）')}
+  catch(err){uiToast('分离失败：'+err.message,'warn')}
+};
+$('edPiP').onclick=async function(){
+  var c=ED.clips.find(function(x){return x.id===ED.sel});
+  var rel=c||null;
+  if(!rel){ // 从池里加一段到上层轨
+    return uiToast('先在时间轴选中一个片段，或用素材池加入','warn');
+  }
+  try{
+    var d=await edCmd({op:'addClip', mediaId:c.media||rel.media, trackId:'T2', start:Math.max(0,ED.play)});
+    // 缩小放右上（画中画）
+    var nid=(d.clips||[]).slice().sort(function(a,b){return b.start-a.start})[0];
+    if(nid){ await edCmd({op:'setClipTransform', clipId:nid.id, scale:0.35, offsetX:0.25, offsetY:-0.25}); }
+    uiToast('画中画已加到上层轨');
+  }catch(err){uiToast('画中画失败：'+err.message,'warn')}
+};
+$('edBackground').onclick=async function(){
+  try{
+    await edApi('/api/editor/cmd',{method:'POST',body:JSON.stringify({op:'setTimelineBackground', background:{kind:'blur'}})});
+    uiToast('竖屏背景已切换为模糊');
+    edPreview();
+  }catch(err){uiToast('背景设置失败：'+err.message,'warn')}
+};
+async function edLoadTransitions(){
+  try{
+    var d=await (await fetch('/api/editor/effects')).json();
+    var sel=$('edTransitionSel');if(!sel)return;
+    var trs=(d.effects||[]).filter(function(e){return e.kind==='transition'});
+    sel.innerHTML='<option value="">转场 → 选中片段</option>'+trs.map(function(e){
+      return '<option value="'+esc2(e.id)+'">'+esc2(e.category+' · '+e.name)+'</option>';}).join('');
+  }catch(e){}
+}
+$('edTransitionSel').addEventListener('change',async function(){
+  var id=this.value;if(!id)return;
+  var c=edClipAt(ED.play);if(!c)return uiToast('播放头下没有片段','warn');
+  try{await edCmd({op:'updateClip', clipId:c.id, patch:{transitionIn:{id:id, duration:1.0}}});uiToast('转场已套用：'+id)}
+  catch(err){uiToast('转场失败：'+err.message,'warn')}
+  this.selectedIndex=0;
+});
 function edOpenWorkbench(){
   closeMenus();
   var local=[...document.querySelectorAll('button')].find(function(b){return /本地已下载/.test(b.textContent)});
@@ -2877,13 +2976,21 @@ function edOpenWorkbench(){
   }).catch(function(){});
   edRenderPool();
   edLoadEffects();
+  edLoadTransitions();
   if(!ED.open){
-    var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'}).map(pickKey).slice(0,30);
-    if(vids.length){
-      edApi('/api/editor/open',{method:'POST',body:JSON.stringify({paths:vids})})
-        .then(function(d){edRenderState(d);uiToast('剪辑会话已打开：'+(d.clips||[]).length+' 段')})
-        .catch(function(e){$('edState').textContent='打开失败：'+e.message});
-    }
+    // 等素材列表就绪（最多 10s），再自动开会话
+    var tries=0;
+    var timer=setInterval(function(){
+      tries++;
+      var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'}).map(pickKey).slice(0,30);
+      if(vids.length||tries>20){
+        clearInterval(timer);
+        if(!vids.length){$('edState').textContent='库里没有视频素材';return}
+        edApi('/api/editor/open',{method:'POST',body:JSON.stringify({paths:vids})})
+          .then(function(d){edRenderState(d);uiToast('剪辑会话已打开：'+(d.clips||[]).length+' 段')})
+          .catch(function(e){$('edState').textContent='打开失败：'+e.message});
+      }
+    }, 500);
   } else {
     fetch('/api/editor/state').then(function(r){return r.json()}).then(function(d){
       if(d.ok)edRenderState(d);

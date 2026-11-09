@@ -3727,7 +3727,10 @@ EDIT_ALLOWED_OPS = {'addMedia', 'removeMedia', 'addClip', 'addClipAtFirstFree',
                     'setEffectKey', 'clearEffectKey', 'clearEffectKeys',
                     'setClipCutout', 'setClipStabilize', 'addCutoutStroke',
                     'detachAudio', 'reattachAudio', 'replaceClipMedia',
-                    'setMediaPath', 'setMediaRange', 'frameClip', 'batch'}
+                    'setMediaPath', 'setMediaRange', 'frameClip', 'batch',
+                    'setClipSpeedCurve', 'setClipEnhanced', 'setTimelineBackground',
+                    'addFont', 'removeFont', 'selectTimeline', 'setTrackFlag',
+                    'setMediaColorRange', 'fillSlot', 'setMediaPlaceholder', 'updateMediaPath'}
 
 def _edit_engine():
     """常驻无头引擎进程；死了自动重启（项目从盘上重开）。"""
@@ -3851,8 +3854,11 @@ def api_editor_cmd():
         eng, proj = _edit_engine()
         command = dict(command)
         command['op'] = op
-        r = _edit_apply(eng, proj, command)
-        eng.tool('project_save', {'path': proj}, 120)
+        try:
+            r = _edit_apply(eng, proj, command)
+            eng.tool('project_save', {'path': proj}, 120)
+        except RuntimeError as e:
+            return jsonify({'ok': False, 'error': str(e)[:200]}), 400
         EDIT_SESSION['last_used'] = time.time()
         state = _edit_state(eng, proj)
         return jsonify({'ok': True, **_edit_serialize(state), 'project': proj})
