@@ -3718,11 +3718,16 @@ def api_concat_engine():
 EDIT_SESSION = {'engine': None, 'project': '', 'lock': threading.Lock(),
                 'last_used': 0.0, 'error': ''}
 EDIT_ALLOWED_OPS = {'addMedia', 'removeMedia', 'addClip', 'addClipAtFirstFree',
-                    'addClipsInSequence', 'addTextClip', 'addShapeClip',
+                    'addClipsInSequence', 'addTextClip', 'addShapeClip', 'addLayerClip',
                     'moveClips', 'trimClip', 'splitClips', 'removeClips',
-                    'updateClip', 'setClipSpeed', 'freezeFrame', 'mergeClips',
-                    'addTrack', 'addTimeline', 'setClipTransform',
-                    'detachAudio', 'reattachAudio', 'replaceClipMedia'}
+                    'updateClip', 'setClipSpeed', 'setClipSpeedCurve', 'freezeFrame',
+                    'mergeClips', 'consolidateClips', 'setClipEnhanced',
+                    'addTrack', 'addTimeline', 'setTimelineVideo', 'setTimelineBackground',
+                    'setClipTransform', 'setClipKey', 'clearClipKey', 'clearClipKeys',
+                    'setEffectKey', 'clearEffectKey', 'clearEffectKeys',
+                    'setClipCutout', 'setClipStabilize', 'addCutoutStroke',
+                    'detachAudio', 'reattachAudio', 'replaceClipMedia',
+                    'setMediaPath', 'setMediaRange', 'frameClip', 'batch'}
 
 def _edit_engine():
     """常驻无头引擎进程；死了自动重启（项目从盘上重开）。"""
@@ -3883,9 +3888,16 @@ def api_editor_export():
         if EDIT_SESSION['engine'] is None:
             return jsonify({'ok': False, 'error': 'no_session'}), 400
         eng, proj = _edit_engine()
+        opts = request.json or {}
+        codec = str(opts.get('codec') or 'h264').lower()
+        if codec not in ('h264', 'hevc', 'av1'):
+            return jsonify({'ok': False, 'error': 'invalid_codec'}), 400
         root = os.path.join(STATE_DIR, 'editor')
         out = os.path.join(root, 'exports', 'edit-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
-        r = eng.tool('export_start', {'path': proj, 'output': out, 'codec': 'h264'}, 60)
+        args = {'path': proj, 'output': out, 'codec': codec}
+        if opts.get('height'):
+            args['height'] = max(360, min(2160, int(opts['height'])))
+        r = eng.tool('export_start', args, 60)
         job = (r['json'] or {}).get('job')
         if not job:
             return jsonify({'ok': False, 'error': (r['text'] or 'export_failed')[:160]}), 500
@@ -3903,6 +3915,31 @@ def api_editor_export():
     shutil.move(out, final)
     addlog('剪辑工作台导出：' + os.path.basename(final))
     return jsonify({'ok': True, 'output': '剪辑/' + os.path.basename(final)})
+
+@app.route('/api/editor/effects')
+def api_editor_effects():
+    """Concat 特效目录（127 项：filter/effect/transition/audio），本地缓存。"""
+    catalog = os.path.join(os.path.dirname(__file__), 'concat_effects_catalog.json')
+    try:
+        with open(catalog, encoding='utf-8') as f:
+            return jsonify({'ok': True, 'effects': json.load(f)})
+    except Exception:
+        eng, proj = _edit_engine()
+        r = eng.tool('effects_list', {}, 120)
+        return jsonify({'ok': True, 'effects': r['json'] or []})
+
+@app.route('/api/editor/captions', methods=['POST'])
+def api_editor_captions():
+    """放一组字幕（start/end 秒 + text）。"""
+    with EDIT_SESSION['lock']:
+        if EDIT_SESSION['engine'] is None:
+            return jsonify({'ok': False, 'error': 'no_session'}), 400
+        eng, proj = _edit_engine()
+        caps = (request.json or {}).get('captions') or []
+        if not caps:
+            return jsonify({'ok': False, 'error': 'captions_required'}), 400
+        r = eng.tool('captions_add', {'path': proj, 'captions': caps}, 300)
+        return jsonify({'ok': True, 'result': (r['text'] or '')[:200]})
 
 @app.route('/api/editor/close', methods=['POST'])
 def api_editor_close():

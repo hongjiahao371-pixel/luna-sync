@@ -232,6 +232,10 @@ td.muted{color:var(--muted);font-size:12.5px}
 .ed-clip.under{border-color:#2f6fd6}
 .ed-clip .ed-dur{position:absolute;left:4px;bottom:3px;font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
 .ed-playhead{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;box-shadow:0 0 6px rgba(255,82,82,.9);z-index:3}
+.edit-inspector{display:flex;gap:14px;flex-wrap:wrap}
+.insp-col{flex:1;min-width:230px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9)}
+.insp-col h4{margin:0 0 8px;font-size:12.5px}
+.insp-col label{display:block;font-size:12px;color:var(--muted);margin:6px 0}
 .pool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
 .pool-card{position:relative;cursor:pointer;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9);box-shadow:0 6px 16px -10px rgba(31,44,67,.2)}
 .pool-card img{width:100%;height:92px;object-fit:cover;display:block}
@@ -624,6 +628,31 @@ td.muted{color:var(--muted);font-size:12.5px}
           <span id="ccSummary" class="cull-pos" style="color:var(--muted)"></span>
         </div>
         <div id="ccList" class="timeline-strip"></div>
+        <div class="edit-inspector">
+          <div class="insp-col">
+            <h4>选中片段</h4>
+            <label>变速 <input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0" style="width:64px;height:28px">x</label>
+            <label>音量 <input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0" style="width:64px;height:28px"></label>
+            <button id="edApplyProps" class="tonal">应用</button>
+            <button id="edMute" class="ghost">静音</button>
+          </div>
+          <div class="insp-col">
+            <h4>特效 / 滤镜 <span class="muted" style="font-size:11px" id="edEffCount"></span></h4>
+            <select id="edEffectSel" style="max-width:220px;height:30px"></select>
+            <label>强度 <input id="edEffectIntensity" type="number" step="0.1" min="0" max="2" value="1" style="width:56px;height:28px"></label>
+            <button id="edEffectApply" class="tonal">套用到选中片段</button>
+          </div>
+          <div class="insp-col">
+            <h4>字幕 <span class="muted" style="font-size:11px">每行: 开始 结束 文本（秒）</span></h4>
+            <textarea id="edCaptions" rows="3" style="width:100%;font-size:12px" placeholder="1.0 2.5 第一句&#10;3.0 4.5 第二句"></textarea>
+            <button id="edCaptionsAdd" class="tonal">添加字幕</button>
+          </div>
+        </div>
+        <div class="edit-topbar">
+          <strong>导出</strong>
+          <label>编码 <select id="edCodec" style="height:30px"><option value="h264">H.264</option><option value="hevc">HEVC</option><option value="av1">AV1</option></select></label>
+          <label>高度 <select id="edHeight" style="height:30px"><option value="">跟随时间线</option><option value="2160">4K</option><option value="1080">1080p</option><option value="720">720p</option></select></label>
+        </div>
         <div id="edProg" style="display:none;margin-top:10px">
           <div style="display:flex;gap:10px;align-items:center">
             <span id="ccPhase" class="cull-pos" style="color:var(--ink)">导出中</span>
@@ -2764,12 +2793,77 @@ $('edExport').onclick=async function(){
   if(!ED.clips.length)return;
   $('edProg').style.display='block';$('ccBar').style.width='5%';
   try{
-    var d=await edApi('/api/editor/export',{method:'POST'});
+    var opts={codec:($('edCodec')||{}).value||'h264'};
+    if(($('edHeight')||{}).value)opts.height=parseInt($('edHeight').value,10);
+    var d=await edApi('/api/editor/export',{method:'POST',body:JSON.stringify(opts)});
     $('ccBar').style.width='100%';$('ccPhase').textContent='成片已生成：'+d.output;
     uiToast('成片已生成：'+d.output);
   }catch(err){
     $('ccPhase').textContent='导出失败：'+err.message;uiToast('导出失败：'+err.message,'warn');
   }
+};
+/* ---- 片段属性 / 特效 / 字幕面板 ---- */
+var ED_FX = [];
+async function edLoadEffects(){
+  try{
+    var d=await (await fetch('/api/editor/effects')).json();
+    ED_FX=d.effects||[];
+    var sel=$('edEffectSel');if(!sel)return;
+    var count=$('edEffCount');if(count)count.textContent='('+ED_FX.length+')';
+    sel.innerHTML='<option value="">— 选择特效 —</option>'+ED_FX.map(function(e){
+      return '<option value="'+esc2(e.id)+'">'+esc2(e.category+' · '+e.name)+'</option>';}).join('');
+  }catch(e){/* ignore */}
+}
+$('edApplyProps').onclick=async function(){
+  var c=ED.clips.find(function(x){return x.id===ED.sel})||edClipAt(ED.play);
+  if(!c)return uiToast('先点时间轴选中一个片段','warn');
+  var sp=parseFloat($('edSpeed').value);
+  if(sp>0){
+    try{await edCmd({op:'setClipSpeed', clipId:c.id, speed:sp});uiToast('变速已应用：'+sp+'x')}
+    catch(err){uiToast('变速失败：'+err.message,'warn')}
+  }
+  var vo=$('edVolume').value;
+  if(vo!==''){
+    try{await edCmd({op:'updateClip', clipId:c.id, patch:{volume:parseFloat(vo)}});uiToast('音量已应用')}
+    catch(err){uiToast('音量失败：'+err.message,'warn')}
+  }
+};
+$('edMute').onclick=async function(){
+  var c=ED.clips.find(function(x){return x.id===ED.sel})||edClipAt(ED.play);
+  if(!c)return uiToast('先选中一个片段','warn');
+  try{await edCmd({op:'updateClip', clipId:c.id, patch:{muted:true}});uiToast('已静音')}
+  catch(err){uiToast('静音失败：'+err.message,'warn')}
+};
+$('edEffectApply').onclick=async function(){
+  var c=ED.clips.find(function(x){return x.id===ED.sel})||edClipAt(ED.play);
+  if(!c)return uiToast('先点时间轴选中一个片段','warn');
+  var effId=$('edEffectSel').value;if(!effId)return uiToast('先选一个特效','warn');
+  var inten=parseFloat($('edEffectIntensity').value)||1;
+  var eff=ED_FX.find(function(x){return x.id===effId})||{};
+  var params={};
+  (eff.params||[]).forEach(function(p){
+    if(p.animate===false&&p.key==='intensity')params[p.key]=inten;
+    else if(p.default!==undefined&&p.animate===false)params[p.key]=p.default;
+  });
+  if(eff.kind==='transition')return uiToast('转场特效需要两段相邻片段，暂不支持从面板套用','warn');
+  try{
+    await edCmd({op:'updateClip', clipId:c.id, patch:{videoEffects:[{id:effId, params:params, enabled:true}]}});
+    uiToast('特效已套用：'+effId);
+  }catch(err){uiToast('特效失败：'+err.message,'warn')}
+};
+$('edCaptionsAdd').onclick=async function(){
+  var raw=($('edCaptions').value||'').trim();if(!raw)return uiToast('先按格式填字幕','warn');
+  var caps=[];
+  raw.split('\n').forEach(function(line){
+    var m=line.trim().match(/^([\d.]+)\s+([\d.]+)\s+(.+)$/);
+    if(m)caps.push({start:parseFloat(m[1]), end:parseFloat(m[2]), text:m[3]});
+  });
+  if(!caps.length)return uiToast('没有解析出有效字幕行','warn');
+  try{
+    var d=await (await fetch('/api/editor/captions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({captions:caps})})).json();
+    if(!d.ok)throw new Error(d.error||'failed');
+    uiToast('已添加 '+caps.length+' 条字幕');
+  }catch(err){uiToast('字幕失败：'+err.message,'warn')}
 };
 function edOpenWorkbench(){
   closeMenus();
@@ -2782,6 +2876,7 @@ function edOpenWorkbench(){
     b.textContent=d.available?'引擎：Concat':'引擎：FFmpeg（未装 Concat）';
   }).catch(function(){});
   edRenderPool();
+  edLoadEffects();
   if(!ED.open){
     var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'}).map(pickKey).slice(0,30);
     if(vids.length){
