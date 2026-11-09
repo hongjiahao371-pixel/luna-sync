@@ -3854,6 +3854,10 @@ def api_editor_cmd():
         eng, proj = _edit_engine()
         command = dict(command)
         command['op'] = op
+        if op == 'addMedia' and command.get('item'):
+            ap = local_path(str(command['item']))
+            if ap and os.path.isfile(ap):
+                command['item'] = ap
         try:
             r = _edit_apply(eng, proj, command)
             eng.tool('project_save', {'path': proj}, 120)
