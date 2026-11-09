@@ -3854,10 +3854,27 @@ def api_editor_cmd():
         eng, proj = _edit_engine()
         command = dict(command)
         command['op'] = op
-        if op == 'addMedia' and command.get('item'):
-            ap = local_path(str(command['item']))
+        if op == 'addMedia' and command.get('item') is not None:
+            item = command['item']
+            rel = item.get('path') if isinstance(item, dict) else str(item)
+            ap = local_path(rel)
             if ap and os.path.isfile(ap):
-                command['item'] = ap
+                w, h, fps, dur = _concat_probe(ap)
+                has_audio = False
+                rr = run(['ffprobe', '-v', 'error', '-select_streams', 'a',
+                          '-show_entries', 'stream=codec_type', '-of', 'json', ap], 30)
+                try:
+                    has_audio = len(json.loads(rr.stdout or '{}').get('streams', [])) > 0
+                except Exception:
+                    pass
+                nm = os.path.basename(ap)
+                kind = 'video' if nm.lower().endswith(('.mp4', '.mov')) else 'photo'
+                full = {'path': ap, 'name': nm, 'kind': kind, 'hasAudio': has_audio,
+                        'duration': dur or 0}
+                if w: full['width'] = w
+                if h: full['height'] = h
+                if fps: full['frameRate'] = fps
+                command['item'] = full
         try:
             r = _edit_apply(eng, proj, command)
             eng.tool('project_save', {'path': proj}, 120)
@@ -4031,6 +4048,83 @@ def api_editor_transcribe_start():
 def api_editor_transcribe_status():
     with trtask_lk:
         return jsonify(TRTASK)
+
+def _edit_projects_list():
+    root = os.path.join(STATE_DIR, 'editor', 'projects')
+    items = []
+    if os.path.isdir(root):
+        for name in sorted(os.listdir(root)):
+            doc = os.path.join(root, name, 'concat.json')
+            if os.path.isdir(os.path.join(root, name)) and os.path.isfile(doc):
+                items.append({'name': name, 'mtime': int(os.path.getmtime(doc))})
+    items.sort(key=lambda x: -x['mtime'])
+    return items
+
+def _edit_proj_name(raw):
+    name = re.sub(r'[^\w\-\u4e00-\u9fa5]', '', str(raw or ''))[:60]
+    return name or ''
+
+def _edit_switch(eng, action, name):
+    """关当前项目（保存）→ new 创建 / open 打开目标项目。"""
+    if EDIT_SESSION.get('project'):
+        try:
+            eng.tool('project_close', {'path': EDIT_SESSION['project'], 'save': True}, 120)
+        except Exception:
+            pass
+    proj = os.path.join(STATE_DIR, 'editor', 'projects', name)
+    if action == 'new':
+        if os.path.isfile(os.path.join(proj, 'concat.json')):
+            eng.tool('project_open', {'path': proj}, 120)
+        else:
+            eng.tool('project_create', {'location': os.path.join(STATE_DIR, 'editor', 'projects'),
+                                        'name': name}, 120)
+    else:
+        eng.tool('project_open', {'path': proj}, 120)
+    EDIT_SESSION['project'] = proj
+    return proj
+
+@app.route('/api/editor/session', methods=['GET', 'POST'])
+def api_editor_session():
+    if request.method == 'GET':
+        with EDIT_SESSION['lock']:
+            has = EDIT_SESSION['engine'] is not None and EDIT_SESSION['project']
+            out = {'ok': True, 'has_session': bool(has),
+                   'projects': _edit_projects_list(),
+                   'project': EDIT_SESSION['project']}
+            if has:
+                try:
+                    eng, proj = _edit_engine()
+                    st = _edit_state(eng, proj)
+                    out.update(_edit_serialize(st))
+                    out['project'] = proj
+                except Exception as e:
+                    out['state_error'] = str(e)[:120]
+            return jsonify(out)
+    d = request.json or {}
+    action = d.get('action')
+    name = _edit_proj_name(d.get('name'))
+    if action not in ('new', 'open'):
+        return jsonify({'ok': False, 'error': 'action_invalid'}), 400
+    if action == 'open':
+        proj = os.path.join(STATE_DIR, 'editor', 'projects', name)
+        if not os.path.isfile(os.path.join(proj, 'concat.json')):
+            return jsonify({'ok': False, 'error': 'project_not_found'}), 404
+    with EDIT_SESSION['lock']:
+        b = _concat_engine_binary()
+        if not b:
+            return jsonify({'ok': False, 'error': 'concat_engine_missing'}), 400
+        try:
+            if EDIT_SESSION['engine'] is None:
+                roots = os.path.join(STATE_DIR, 'editor') + ':' + DLDIR
+                EDIT_SESSION['engine'] = ConcatEngine(b, roots)
+            _edit_switch(EDIT_SESSION['engine'], action, name)
+            EDIT_SESSION['last_used'] = time.time()
+        except RuntimeError as e:
+            return jsonify({'ok': False, 'error': str(e)[:160]}), 500
+        state = _edit_state(EDIT_SESSION['engine'], EDIT_SESSION['project'])
+        return jsonify({'ok': True, **_edit_serialize(state),
+                        'project': EDIT_SESSION['project'],
+                        'projects': _edit_projects_list()})
 
 @app.route('/api/editor/close', methods=['POST'])
 def api_editor_close():

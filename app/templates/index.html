@@ -501,6 +501,9 @@ td.muted{color:var(--muted);font-size:12.5px}
         <div class="edit-topbar">
           <strong id="edTitle">剪辑工作台</strong>
           <span id="ccEngine" class="tag done" style="display:none"></span>
+          <select id="edProjSel" style="max-width:240px;height:32px"><option value="">— 选择项目 —</option></select>
+          <button id="edProjNew" class="tonal">＋新建项目</button>
+          <button id="edImportAll" class="tonal">导入素材库全部视频</button>
           <span id="edState" class="muted" style="font-size:12px">未打开会话</span>
           <span style="flex:1"></span>
           <button id="edUndo" class="ghost" disabled>撤销</button>
@@ -2727,15 +2730,15 @@ async function edAddToTimeline(rel){
   var base=rel.split('/').pop();
   var m=ED.media.find(function(x){return (x.name||'')===base});
   if(m){
-    var d=await edCmd({op:'addClipAtFirstFree', mediaId:m.id});
+    var d=await edCmd({op:'addClipAtFirstFree', mediaId:m.id, start:ED.duration});
     var last=edClipsSorted().slice(-1)[0];
     if(last)edSeek(last.start+0.05);
     return;
   }
-  var d=await edCmd({op:'addMedia', item:rel});
+  var d=await edCmd({op:'addMedia', item:{path:rel}});
   var created=(d.media||[]).slice(-1)[0];
   if(!created)return uiToast('加入失败：引擎未返回素材','warn');
-  await edCmd({op:'addClipAtFirstFree', mediaId:created.id});
+  await edCmd({op:'addClipAtFirstFree', mediaId:created.id, start:ED.duration});
   var st=await (await fetch('/api/editor/state')).json();
   if(st.ok)edRenderState(st);
   var last=edClipsSorted().slice(-1)[0];
@@ -2980,6 +2983,44 @@ async function edLoadTransitions(){
       return '<option value="'+esc2(e.id)+'">'+esc2(e.category+' · '+e.name)+'</option>';}).join('');
   }catch(e){}
 }
+function edRenderProjects(projects, current){
+  var sel=$('edProjSel');if(!sel)return;
+  var base=current?String(current).split('/').pop():'';
+  sel.innerHTML=projects.map(function(p){
+    return '<option value="'+esc2(p.name)+'">'+esc2(p.name)+'</option>';
+  }).join('');
+  if(base)sel.value=base;
+}
+async function edSession(action, name){
+  var body={action:action};
+  if(name)body.name=name;
+  var d=await edApi('/api/editor/session',{method:'POST',body:JSON.stringify(body)});
+  edRenderState(d);edRenderProjects(d.projects||[], d.project);
+  return d;
+}
+$('edProjNew').onclick=async function(){
+  var name=prompt('新项目名称：');if(!name)return;
+  try{
+    var d=await edSession('new', name);
+    uiToast('项目已创建：'+name+'（时间轴是空的，从素材池加片段）');
+  }catch(e){uiToast('创建失败：'+e.message,'warn')}
+};
+$('edProjSel').addEventListener('change',async function(){
+  if(!this.value)return;
+  try{await edSession('open', this.value);uiToast('项目已打开：'+this.value)}
+  catch(e){uiToast('打开失败：'+e.message,'warn')}
+});
+$('edImportAll').onclick=async function(){
+  if(!ED.open)return uiToast('先新建或打开一个项目','warn');
+  var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'&&!/^(剪辑|拼接|自动剪辑)\//.test(x.id||x)});
+  if(!vids.length)return uiToast('素材库没有视频','warn');
+  var added=0;
+  for(var i=0;i<vids.length;i++){
+    try{ await edAddToTimeline(pickKey(vids[i])); added++; }
+    catch(e){/* skip */}
+  }
+  uiToast('已导入 '+added+' 段到时间轴');
+};
 function edOpenWorkbench(){
   closeMenus();
   switchTab('edit');
@@ -2991,27 +3032,14 @@ function edOpenWorkbench(){
   edRenderPool();
   edLoadEffects();
   edLoadTransitions();
-  if(!ED.open){
-    var tries=0;
-    var timer=setInterval(function(){
-      tries++;
-      var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'&&!/^(剪辑|拼接|自动剪辑)\//.test(x.id||x)}).map(pickKey).slice(0,30);
-      edRenderPool();
-      if(vids.length){
-        clearInterval(timer);
-        edApi('/api/editor/open',{method:'POST',body:JSON.stringify({paths:vids})})
-          .then(function(d){edRenderState(d);uiToast('剪辑会话已打开：'+(d.clips||[]).length+' 段')})
-          .catch(function(e){$('edState').textContent='打开失败：'+e.message});
-      } else if(tries>60){
-        clearInterval(timer);
-        $('edState').textContent='库里没有视频素材（先去本地已下载同步/导入）';
-      }
-    }, 500);
-  } else {
-    fetch('/api/editor/state').then(function(r){return r.json()}).then(function(d){
-      if(d.ok)edRenderState(d);
-    }).catch(function(){});
-  }
+  fetch('/api/editor/session').then(function(r){return r.json()}).then(function(d){
+    edRenderProjects(d.projects||[], d.project);
+    if(d.has_session && d.state){
+      try{ edRenderState(Object.assign({project:d.project}, d.state)); }catch(e){}
+    } else {
+      $('edState').textContent='选择项目或点「＋新建项目」开始';
+    }
+  }).catch(function(){});
 }
 $('bConcat').addEventListener('click',edOpenWorkbench);
 $('lvEdit').onclick=function(){switchTab('edit');edOpenWorkbench()};
