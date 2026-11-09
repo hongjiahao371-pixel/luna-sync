@@ -2877,7 +2877,7 @@ $('edStabilize').onclick=async function(){
 };
 $('edCutout').onclick=async function(){
   var c=edSelClip();if(!c)return uiToast('先选中一个片段','warn');
-  try{await edCmd({op:'setClipCutout', clipId:c.id, cutout:{enabled:true}});uiToast('AI 抠像已开启')}
+  try{await edCmd({op:'setClipCutout', clipId:c.id, cutout:{mode:'auto', feather:0.01}});uiToast('AI 抠像已开启（导出时生效）')}
   catch(err){uiToast('抠像失败：'+err.message+'（可能需要模型）','warn')}
 };
 $('edMute').onclick=async function(){
