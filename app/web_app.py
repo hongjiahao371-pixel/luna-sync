@@ -3947,6 +3947,87 @@ def api_editor_captions():
         r = eng.tool('captions_add', {'path': proj, 'captions': caps}, 300)
         return jsonify({'ok': True, 'result': (r['text'] or '')[:200]})
 
+TRTASK = {'running': False, 'phase': '', 'done': 0, 'total': 0, 'error': '',
+          'segments': [], 'path': ''}
+trtask_lk = threading.Lock()
+
+def _transcribe_worker(src_path, window_start, window_dur, model_size, language):
+    """提取片段窗口音频 → faster-whisper 转写 → 相对窗口的字幕段。"""
+    try:
+        with trtask_lk:
+            TRTASK.update({'running': True, 'phase': 'extract', 'done': 0, 'total': 3,
+                           'error': '', 'segments': [], 'path': src_path})
+        work = os.path.join(STATE_DIR, 'editor')
+        os.makedirs(work, exist_ok=True)
+        wav = os.path.join(work, 'tr_%d.wav' % int(time.time() * 1000))
+        cmd = ['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error']
+        if window_start > 0:
+            cmd += ['-ss', '%.3f' % window_start]
+        if window_dur and window_dur > 0:
+            cmd += ['-t', '%.3f' % window_dur]
+        cmd += ['-i', src_path, '-vn', '-ar', '16000', '-ac', '1',
+                '-c:a', 'pcm_s16le', wav]
+        rr = run(cmd, 600)
+        if rr.returncode != 0 or not os.path.isfile(wav):
+            raise RuntimeError('audio_extract_failed')
+        with trtask_lk:
+            TRTASK['phase'] = 'transcribe'
+            TRTASK['done'] = 1
+        from faster_whisper import WhisperModel
+        model_dir = os.path.join(STATE_DIR, 'whisper-models')
+        os.makedirs(model_dir, exist_ok=True)
+        # 本地目录优先（NAS 无外网场景：手动放 faster-whisper 模型文件即可）
+        local_model = os.path.join(model_dir, 'faster-whisper-' + model_size)
+        if os.path.isdir(local_model) and os.path.isfile(os.path.join(local_model, 'model.bin')):
+            model = WhisperModel(local_model, device='cpu', compute_type='int8')
+        else:
+            model = WhisperModel(model_size, device='cpu', compute_type='int8',
+                                 download_root=model_dir)
+        it, info = model.transcribe(wav, language=language, vad_filter=True,
+                                    vad_parameters={'min_silence_duration_ms': 500})
+        segs = []
+        for s in it:
+            if s.text and s.text.strip():
+                segs.append({'start': round(s.start, 2), 'end': round(s.end, 2),
+                             'text': s.text.strip()})
+            with trtask_lk:
+                TRTASK['done'] = min(3, 2)
+        os.remove(wav)
+        with trtask_lk:
+            TRTASK.update({'running': False, 'phase': 'done', 'done': 3,
+                           'segments': segs})
+        addlog('自动字幕转写完成：%s，%d 段' % (os.path.basename(src_path), len(segs)))
+    except Exception as e:
+        log.warning('transcribe:' + str(e)[:160])
+        with trtask_lk:
+            TRTASK.update({'running': False, 'error': str(e)[:200]})
+
+@app.route('/api/editor/transcribe/start', methods=['POST'])
+def api_editor_transcribe_start():
+    data = request.json or {}
+    rel = str(data.get('path') or '')
+    p = local_path(rel)
+    if not p or not os.path.isfile(p):
+        return jsonify({'ok': False, 'error': 'path_invalid'}), 400
+    model_size = str(data.get('model') or 'base')
+    if model_size not in ('tiny', 'base', 'small', 'medium', 'large-v3'):
+        model_size = 'base'
+    language = data.get('language') or None
+    start = max(0.0, float(data.get('start') or 0))
+    dur = max(0.0, float(data.get('duration') or 0))
+    with trtask_lk:
+        if TRTASK['running']:
+            return jsonify({'ok': False, 'error': 'already_running'}), 409
+        TRTASK.update({'running': True, 'phase': 'queued'})
+    threading.Thread(target=_transcribe_worker,
+                     args=(p, start, dur, model_size, language), daemon=True).start()
+    return jsonify({'ok': True})
+
+@app.route('/api/editor/transcribe/status')
+def api_editor_transcribe_status():
+    with trtask_lk:
+        return jsonify(TRTASK)
+
 @app.route('/api/editor/close', methods=['POST'])
 def api_editor_close():
     with EDIT_SESSION['lock']:

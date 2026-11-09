@@ -570,6 +570,12 @@ td.muted{color:var(--muted);font-size:12.5px}
             <h4>字幕 <span class="muted" style="font-size:11px">每行: 开始 结束 文本（秒）</span></h4>
             <textarea id="edCaptions" rows="3" style="width:100%;font-size:12px" placeholder="1.0 2.5 第一句&#10;3.0 4.5 第二句"></textarea>
             <button id="edCaptionsAdd" class="tonal">添加字幕</button>
+            <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(31,44,67,.08)">
+              <label>模型 <select id="edWhisperModel" style="height:28px"><option value="base">base（快）</option><option value="tiny">tiny（最快）</option><option value="small">small（更准）</option></select>
+                   语言 <select id="edWhisperLang" style="height:28px"><option value="">自动</option><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option></select></label>
+              <button id="edAutoCaption" class="primary" style="margin-top:6px;width:100%">🎙 AI 自动识别语音字幕</button>
+              <div id="edAutoCapStatus" class="muted" style="font-size:11px;margin-top:4px"></div>
+            </div>
           </div>
         </div>
         <div class="edit-topbar">
@@ -2898,6 +2904,38 @@ $('edEffectApply').onclick=async function(){
     await edCmd({op:'updateClip', clipId:c.id, patch:{videoEffects:[{id:effId, params:params, enabled:true}]}});
     uiToast('特效已套用：'+effId);
   }catch(err){uiToast('特效失败：'+err.message,'warn')}
+};
+function edSelClipSync(){
+  var c=ED.clips.find(function(x){return x.id===ED.sel})||edClipAt(ED.play);
+  if(c){$('edSpeed').value='';$('edVolume').value='';}
+  return c;
+}
+$('edAutoCaption').onclick=async function(){
+  var c=edSelClip();if(!c)return uiToast('先点时间轴选中一个片段','warn');
+  var btn=$('edAutoCaption');btn.disabled=true;
+  $('edAutoCapStatus').textContent='提取音频并转写中…（首次需下载模型）';
+  try{
+    await edApi('/api/editor/transcribe/start',{method:'POST',body:JSON.stringify({
+      path:c.id, model:$('edWhisperModel').value, language:$('edWhisperLang').value||null,
+      start:c.sourceStart||0, duration:c.duration||0})});
+    var poll=async function(){
+      var st=await (await fetch('/api/editor/transcribe/status')).json();
+      $('edAutoCapStatus').textContent=st.running?(st.phase==='extract'?'提取音频…':'转写中…'):(st.error?('失败：'+st.error):'完成');
+      if(st.running){setTimeout(poll,1500);return}
+      btn.disabled=false;
+      if(st.error){uiToast('转写失败：'+st.error,'warn');return}
+      // 转写段 → 字幕（时间=片段起点+窗口偏移）
+      var caps=(st.segments||[]).map(function(s){
+        return {start:Math.round((c.start+(c.sourceStart||0)+s.start)*100)/100,
+                end:Math.round((c.start+(c.sourceStart||0)+s.end)*100)/100, text:s.text};});
+      if(!caps.length){uiToast('没有识别到语音','warn');$('edAutoCapStatus').textContent='没有识别到语音内容';return}
+      var d=await (await fetch('/api/editor/captions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({captions:caps})})).json();
+      if(!d.ok)throw new Error(d.error||'failed');
+      $('edAutoCapStatus').textContent='已生成 '+caps.length+' 条字幕';
+      uiToast('自动字幕已生成：'+caps.length+' 条');
+    };
+    setTimeout(poll,1500);
+  }catch(err){btn.disabled=false;uiToast('转写失败：'+err.message,'warn')}
 };
 $('edCaptionsAdd').onclick=async function(){
   var raw=($('edCaptions').value||'').trim();if(!raw)return uiToast('先按格式填字幕','warn');
