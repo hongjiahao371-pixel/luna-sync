@@ -2928,7 +2928,7 @@ document.querySelector('.edit-wrap').addEventListener('click',async function(e){
   if(ED.play<c.start+0.02||ED.play>c.start+c.duration-0.02)return uiToast('播放头不在此片段内','warn');
   var at=Math.min(1,Math.max(0,(ED.play-c.start)/c.duration));
   if(prop==='__clear__'){
-    try{await edCmd({op:'clearClipKeys', clipId:c.id});uiToast('关键帧已清除')}
+    try{await edCmd({op:'clearClipKeys', clipId:c.id, key:prop, entry:'', property:prop});uiToast('关键帧已清除')}
     catch(err){uiToast('清除失败：'+err.message,'warn')}
     return;
   }
