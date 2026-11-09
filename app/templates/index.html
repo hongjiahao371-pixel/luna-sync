@@ -558,10 +558,23 @@ td.muted{color:var(--muted);font-size:12.5px}
                  混合 <select id="edBlend" style="height:28px"><option value="">正常</option><option value="screen">screen</option><option value="add">add</option><option value="multiply">multiply</option><option value="overlay">overlay</option></select></label>
             <label><label class="chk" style="margin:0"><input type="checkbox" id="edFlipH"> 水平镜像</label>
                  <label class="chk" style="margin:0"><input type="checkbox" id="edFlipV"> 垂直镜像</label></label>
-            <button id="edApplyProps" class="tonal">应用属性</button>
-            <button id="edMute" class="ghost">静音</button>
-            <button id="edStabilize" class="ghost">画面稳定</button>
-            <button id="edCutout" class="ghost">AI 抠像</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+              <button id="edApplyProps" class="tonal">应用属性</button>
+              <button id="edMute" class="ghost">静音</button>
+              <button id="edStabilize" class="ghost">画面稳定</button>
+              <button id="edCutout" class="ghost">AI 抠像</button>
+            </div>
+            <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(31,44,67,.15)">
+              <div class="muted" style="font-size:11px;margin-bottom:4px">关键帧（在播放头处记录当前值，形成动画）：</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="ghost" data-kf="scale" title="缩放关键帧">⏺缩放</button>
+                <button class="ghost" data-kf="offsetX" title="位置X关键帧">⏺位置X</button>
+                <button class="ghost" data-kf="offsetY" title="位置Y关键帧">⏺位置Y</button>
+                <button class="ghost" data-kf="rotation" title="旋转关键帧">⏺旋转</button>
+                <button class="ghost" data-kf="opacity" title="透明度关键帧">⏺透明度</button>
+                <button class="ghost" data-kf="__clear__" title="清除全部关键帧">✕清关键帧</button>
+              </div>
+            </div>
           </div>
           <div class="insp-col">
             <h4>特效 / 滤镜 <span class="muted" style="font-size:11px" id="edEffCount"></span></h4>
@@ -2906,6 +2919,24 @@ $('edCutout').onclick=async function(){
   try{await edCmd({op:'setClipCutout', clipId:c.id, cutout:{mode:'auto', feather:0.01}});uiToast('AI 抠像已开启（导出时生效）')}
   catch(err){uiToast('抠像失败：'+err.message+'（可能需要模型）','warn')}
 };
+/* 关键帧：at = 播放头在片段内的相对位置（0..1） */
+var KF_PROPS = {scale:'edScale', offsetX:'edOffsetX', offsetY:'edOffsetY', rotation:'edRotation', opacity:'edOpacity'};
+document.querySelector('.edit-wrap').addEventListener('click',async function(e){
+  var b=e.target.closest('[data-kf]');if(!b)return;
+  var prop=b.dataset.kf;
+  var c=edSelClip();if(!c)return uiToast('先选中一个片段','warn');
+  if(ED.play<c.start+0.02||ED.play>c.start+c.duration-0.02)return uiToast('播放头不在此片段内','warn');
+  var at=Math.min(1,Math.max(0,(ED.play-c.start)/c.duration));
+  if(prop==='__clear__'){
+    try{await edCmd({op:'clearClipKeys', clipId:c.id});uiToast('关键帧已清除')}
+    catch(err){uiToast('清除失败：'+err.message,'warn')}
+    return;
+  }
+  var inp=$(KF_PROPS[prop]);
+  var v=inp&&inp.value!==''?parseFloat(inp.value):(prop==='opacity'?1:1);
+  try{await edCmd({op:'setClipKey', clipId:c.id, at:at, property:prop, value:v});uiToast('关键帧已打：'+prop+'='+v+' @'+at.toFixed(2))}
+  catch(err){uiToast('关键帧失败：'+err.message,'warn')}
+});
 /* ---- 字幕（手动 + AI 转写） ---- */
 $('edCaptionsAdd').onclick=async function(){
   var raw=($('edCaptions').value||'').trim();if(!raw)return uiToast('先按格式填字幕','warn');
