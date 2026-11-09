@@ -3717,6 +3717,22 @@ def api_concat_engine():
 # ---------------- 剪辑工作台（Concat 无头引擎常驻会话） ----------------
 EDIT_SESSION = {'engine': None, 'project': '', 'lock': threading.Lock(),
                 'last_used': 0.0, 'error': ''}
+EDITOR_LAST_FILE = os.path.join(STATE_DIR, 'editor', 'last-project.json')
+
+def _edit_last_set(project):
+    try:
+        os.makedirs(os.path.dirname(EDITOR_LAST_FILE), exist_ok=True)
+        with open(EDITOR_LAST_FILE, 'w') as f:
+            json.dump({'project': project}, f)
+    except Exception:
+        pass
+
+def _edit_last_get():
+    try:
+        with open(EDITOR_LAST_FILE, encoding='utf-8') as f:
+            return (json.load(f) or {}).get('project') or ''
+    except Exception:
+        return ''
 EDIT_ALLOWED_OPS = {'addMedia', 'removeMedia', 'addClip', 'addClipAtFirstFree',
                     'addClipsInSequence', 'addTextClip', 'addShapeClip', 'addLayerClip',
                     'moveClips', 'trimClip', 'splitClips', 'removeClips',
@@ -3818,8 +3834,10 @@ def api_editor_open():
                 ids.append(cid)
             r = eng.tool('edit_apply', {'path': proj, 'command': {
                 'op': 'addClipsInSequence', 'mediaIds': ids, 'start': 0}}, 300)
+            eng.tool('project_save', {'path': proj}, 120)
             EDIT_SESSION.update({'engine': eng, 'project': proj,
                                  'last_used': time.time(), 'error': ''})
+            _edit_last_set(proj)
             state = _edit_state(eng, proj)
             return jsonify({'ok': True, **_edit_serialize(state),
                             'project': proj})
@@ -3878,6 +3896,7 @@ def api_editor_cmd():
         try:
             r = _edit_apply(eng, proj, command)
             eng.tool('project_save', {'path': proj}, 120)
+            _edit_last_set(proj)
         except RuntimeError as e:
             return jsonify({'ok': False, 'error': str(e)[:200]}), 400
         EDIT_SESSION['last_used'] = time.time()
@@ -3902,10 +3921,17 @@ def api_editor_preview():
             abort(404)
         eng, proj = _edit_engine()
         out = os.path.join(STATE_DIR, 'editor', 'preview.png')
-        eng.tool('preview_frame', {'path': proj, 'time': t, 'output': out}, 120)
+        eng.tool('preview_frame', {'path': proj, 'time': t, 'width': 1280, 'output': out}, 120)
         if not os.path.isfile(out):
             abort(404)
-        resp = send_file(out, mimetype='image/png', max_age=0)
+        jpg = os.path.join(STATE_DIR, 'editor', 'preview.jpg')
+        try:
+            from PIL import Image
+            with Image.open(out) as im:
+                im.convert('RGB').save(jpg, 'JPEG', quality=85)
+            resp = send_file(jpg, mimetype='image/jpeg', max_age=0)
+        except Exception:
+            resp = send_file(out, mimetype='image/png', max_age=0)
         resp.headers['Cache-Control'] = 'no-store'
         return resp
 
@@ -4081,6 +4107,7 @@ def _edit_switch(eng, action, name):
     else:
         eng.tool('project_open', {'path': proj}, 120)
     EDIT_SESSION['project'] = proj
+    _edit_last_set(proj)
     return proj
 
 @app.route('/api/editor/session', methods=['GET', 'POST'])
@@ -4099,6 +4126,23 @@ def api_editor_session():
                     out['project'] = proj
                 except Exception as e:
                     out['state_error'] = str(e)[:120]
+            elif _edit_last_get() and os.path.isfile(
+                    os.path.join(STATE_DIR, 'editor', 'projects', _edit_last_get(), 'concat.json')):
+                # 服务器重启后自动恢复上次编辑的项目（项目已实时保存磁盘）
+                try:
+                    b = _concat_engine_binary()
+                    if b:
+                        roots = os.path.join(STATE_DIR, 'editor') + ':' + DLDIR
+                        eng = ConcatEngine(b, roots)
+                        eng.tool('project_open', {'path': _edit_last_get()}, 120)
+                        EDIT_SESSION['engine'] = eng
+                        EDIT_SESSION['project'] = _edit_last_get()
+                        st = _edit_state(eng, EDIT_SESSION['project'])
+                        out.update(_edit_serialize(st))
+                        out['project'] = EDIT_SESSION['project']
+                        out['recovered'] = True
+                except Exception as e:
+                    out['recover_error'] = str(e)[:120]
             return jsonify(out)
     d = request.json or {}
     action = d.get('action')
