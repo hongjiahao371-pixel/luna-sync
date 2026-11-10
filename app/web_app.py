@@ -3641,8 +3641,7 @@ def _concat_worker(video_rels, trims):
                     CCTASK['phase'] = 'concat-render'
                 w0, h0, f0, _ = _concat_probe(parts[0])
                 video = {'width': w0, 'height': h0, 'fps': f0} if w0 and h0 else None
-                run_concat_job(engine_bin, work, parts, out_path,
-                               progress=lambda d, t: None, video=video)
+                run_concat_job(engine_bin, work, parts, out_path, video=video)
                 with concat_lk:
                     CCTASK.update({'running': False,
                                    'output': '拼接/' + os.path.basename(out_path),

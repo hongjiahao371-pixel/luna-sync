@@ -96,11 +96,34 @@ def detect_engine(explicit=None):
     which = shutil.which('concat')
     return which
 
+def _adapt_video(eng, video):
+    """按引擎版本适配画幅参数：0.2.8={w,h,fps}；≥0.2.9={w,h,rateNum,rateDen}。"""
+    if not video:
+        return None
+    try:
+        ver = (eng.tool('concat_version', {}, 30)['json'] or {}).get('concat', '')
+    except Exception:
+        ver = ''
+    try:
+        minor = int((ver.split('.') + ['8', '0'])[1])
+    except ValueError:
+        minor = 8
+    shape = dict(video)
+    fps = shape.pop('fps', None)
+    if minor >= 9:
+        shape.setdefault('rateNum', max(1, round((fps or 30) * 1000)))
+        shape.setdefault('rateDen', 1000)
+    elif fps is not None:
+        shape['fps'] = fps
+    return shape
+
 def run_concat_job(binary, work_root, media_files, out_path, progress=None, video=None):
     """把（已按有效区间预切好的）片段序列交给 Concat 引擎拼接导出。
 
     media_files: 有序绝对路径列表；out_path: 成片输出绝对路径。
     返回导出文件路径。progress(done,total) 可选回调。
+    video 可选画幅（width/height/fps）；版本 schema 不同由 _adapt_video
+    自动适配（0.2.8 认 fps，0.2.9 认 rateNum/rateDen）。
     """
     projects = os.path.join(work_root, 'projects')
     exports = os.path.join(work_root, 'exports')
@@ -116,10 +139,16 @@ def run_concat_job(binary, work_root, media_files, out_path, progress=None, vide
     try:
         name = 'luna-%d' % int(time.time() * 1000 % 100000000)
         create_args = {'location': projects, 'name': name}
-        if video:
-            create_args['video'] = video
+        vshape = _adapt_video(eng, video)
+        if vshape:
+            create_args['video'] = vshape
         r = eng.tool('project_create', create_args, 60)
         proj = os.path.join(projects, name)
+        # 0.2.9 create 即 open；老版/异常路径兜底显式 open（已开则幂等返回）
+        try:
+            eng.tool('project_open', {'path': proj}, 60)
+        except Exception:
+            pass
         ids = []
         for f in media_files:
             r = eng.tool('media_import', {'path': proj, 'file': f}, 300)
