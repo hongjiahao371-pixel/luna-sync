@@ -24,6 +24,7 @@ def emit(name, value):
 emit('CFG_BACKEND', backend)
 emit('CFG_IFACE', iface)
 emit('CFG_WPA_CTRL', wpa_ctrl)
+emit('STATE_DIR', os.environ.get('STATE_DIR') or cfg.get('state_dir') or '/app/state')
 PY
 )"
 
