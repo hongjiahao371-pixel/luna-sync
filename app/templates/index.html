@@ -232,81 +232,88 @@ td.muted{color:var(--muted);font-size:12.5px}
 .ed-clip.under{border-color:#2f6fd6}
 .ed-clip .ed-dur{position:absolute;left:4px;bottom:3px;font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
 #viewEdit .edit-wrap{padding:14px 18px;overflow:auto;display:flex;flex-direction:column;gap:12px}
-/* ===== Concat 风格深色剪辑工作台 ===== */
-.cne{background:#17171f;color:#d7d7e0;font-size:13px;display:flex;flex-direction:column;gap:0;min-height:100%}
-.cne-top{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#1e1e28;border-bottom:1px solid #2a2a36}
-.cne-proj{display:flex;align-items:center;gap:8px}
-.cne-logo{color:#7c5cff;font-size:16px}
-.cne-title{font-weight:600;color:#e8e8f0}
-.cne-actions{display:flex;gap:8px;margin-left:auto}
-.cne-icon{background:#26263a;color:#d7d7e0;border:none;border-radius:6px;padding:5px 10px;cursor:pointer}
-.cne-export{background:#7c5cff;color:#fff;border:none;border-radius:6px;padding:6px 16px;font-weight:600;cursor:pointer}
-.cne-body{display:flex;gap:1px;background:#2a2a36;flex:1;min-height:0}
-.cne-bin{width:250px;flex-shrink:0;background:#1e1e28;padding:10px;overflow:auto;max-height:560px}
-.cne-tabs{display:flex;gap:2px;margin-bottom:10px;flex-wrap:wrap}
-.cne-tab{background:transparent;color:#9a9ab0;border:none;border-radius:5px;padding:5px 9px;cursor:pointer;font-size:12px}
-.cne-tab.on{background:#2f2f45;color:#e8e8f0}
-.cne-tabpane .cne-hint{color:#7a7a92;font-size:11px;padding:8px 4px}
-.cne-pool{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.cne-list{display:flex;flex-direction:column;gap:4px;max-height:420px;overflow:auto}
-.cne-list .cne-fx{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:6px;cursor:pointer;background:#222230;color:#c9c9da;font-size:12px}
-.cne-list .cne-fx:hover{background:#2f2f45}
-.cne-center{flex:1;min-width:0;background:#12121a;padding:8px 12px;display:flex;flex-direction:column}
-.cne-preview-meta{display:flex;gap:12px;font-size:11px;color:#7a7a92;padding:2px 4px}
-.cne-saved{color:#3dba6a}
-.cne-preview{background:#000;border-radius:4px;overflow:hidden;display:grid;place-items:center;min-height:260px}
-.cne-preview img{width:100%;max-height:420px;object-fit:contain;display:block}
-.cne-transport{display:flex;align-items:center;gap:8px;padding:8px 4px}
-.cne-tc{font-family:ui-monospace,Menlo,monospace;color:#e8e8f0;font-size:13px;letter-spacing:1px}
-.cne-tbtn{background:#26263a;color:#d7d7e0;border:none;border-radius:5px;padding:4px 10px;cursor:pointer}
-.cne-quality{color:#7a7a92;font-size:11px}
-.cne-insp{width:290px;flex-shrink:0;background:#1e1e28;padding:10px;overflow:auto;max-height:560px}
-.cne-insp-tabs{display:flex;gap:2px;margin-bottom:10px}
-.cne-itab{background:transparent;color:#9a9ab0;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:12px}
-.cne-itab.on{background:#2f2f45;color:#e8e8f0}
-.cne-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:#9a9ab0}
-.cne-row input[type=number],.cne-row input[type=text],.cne-row select,.cne-row textarea,.cne-row input[type=color]{background:#12121a;border:1px solid #2a2a36;color:#e8e8f0;border-radius:5px;padding:4px 6px;font-size:12px}
-.cne-row textarea{width:100%;resize:vertical}
-.cne-row input[type=color]{padding:1px;width:34px;height:26px}
-.cne-chk{display:flex;align-items:center;gap:3px;color:#9a9ab0;font-size:11px}
-.cne-ai{display:flex;gap:6px;margin:10px 0}
-.cne-aibtn{flex:1;background:#2f2345;color:#c9b8ff;border:1px solid #4a3a6a;border-radius:6px;padding:6px;font-size:12px;cursor:pointer}
-.cne-aibtn:hover{background:#3a2d55}
-.cne-aibtn.wide{width:100%;margin-top:6px}
-.cne-kf{margin-top:10px;padding-top:8px;border-top:1px dashed #2a2a36}
-.cne-kfhead{color:#7a7a92;font-size:11px;margin-bottom:5px}
-.cne-kfbtns{display:flex;gap:4px;flex-wrap:wrap}
-.cne-kfbtns button{background:#222230;color:#9a9ab0;border:none;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer}
-.cne-kfbtns button.danger{color:#ff7a8a}
-.cne-btn{background:#26263a;color:#d7d7e0;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer}
-.cne-btn.wide{width:100%;margin-top:6px}
-.cne-sep{height:1px;background:#2a2a36;margin:12px 0}
-.cne-status{color:#7a7a92;font-size:11px;margin-top:4px;min-height:14px}
-.cne-tl{background:#17171f;padding:8px 12px 16px;position:relative}
-.cne-tl-tools{display:flex;gap:6px;align-items:center;padding:4px 0 8px}
-.cne-tl-tools button{background:#26263a;color:#d7d7e0;border:none;border-radius:5px;padding:5px 12px;font-size:12px;cursor:pointer}
-.cne-tl-tools button:disabled{opacity:.4;cursor:default}
-.cne-tl-tools .spacer{flex:1}
-.cne-sum{color:#7a7a92;font-size:11px}
-.cne-ruler{height:20px;background:#12121a;border-radius:4px 4px 0 0;position:relative;font-family:ui-monospace,monospace;font-size:10px;color:#6a6a80}
-.cne-lanes{position:relative;background:#12121a;border-radius:0 0 4px 4px;min-height:190px;overflow-x:auto}
-.ed-lane{display:flex;align-items:center;gap:2px;height:56px;margin:3px 0;position:relative;background:#1a1a24;border-radius:4px}
-.ed-lane .lane-tag{position:absolute;left:4px;top:2px;font-size:9px;color:#6a6a80;z-index:1}
-.ed-clip{position:relative;height:48px;border-radius:4px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;min-width:30px}
-.ed-clip img{width:100%;height:100%;object-fit:cover;display:block;opacity:.9}
-.ed-clip.sel{outline:2px solid #7c5cff}
-.ed-clip.under{outline:2px solid #3dba6a}
-.ed-clip.video{background:#2b3a6e}
-.ed-clip.video img{display:block}
-.ed-clip.text{background:#5a3a6e;color:#ffb8e0;font-size:11px;padding:0 6px;text-align:center}
-.ed-clip.text .ed-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ed-clip.audio{background:#1e4632}
-.ed-clip .ed-dur{position:absolute;right:3px;bottom:2px;font-size:9px;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(0,0,0,.8)}
-.ed-playhead{position:absolute;top:0;bottom:0;width:2px;background:#7c5cff;box-shadow:0 0 6px rgba(124,92,255,.9);z-index:5;cursor:ew-resize}
-.cne-prog{display:flex;align-items:center;gap:10px;padding:8px 16px;background:#1e1e28}
-.cne-prog .bar{flex:1;background:#12121a;border-radius:99px;height:6px;overflow:hidden}
-.cne-prog .bar i{display:block;height:100%;background:#7c5cff;width:0}
-.cne-err{color:#ff7a8a;padding:6px 16px;font-size:12px}
+/* ===== Concat 风格深色剪辑工作台（色板=Concat dark.slint 官方值） ===== */
+.cne{background:#0e0e10;color:#f5f5f7;font-size:13px;display:flex;flex-direction:column;min-height:100%}
+.cne-top{display:flex;align-items:center;gap:10px;padding:8px 14px;background:#212123;border-bottom:1px solid #ffffff1a}
+.cne-projname{font-weight:600;color:#f5f5f7}
+.cc-saved{color:#6e6e73;font-size:11px;margin-left:-6px}
+.cne-actions{display:flex;gap:6px;margin-left:auto}
+.cne-actions button{background:#2b2b2e;color:#f5f5f7;border:1px solid #ffffff1a;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
+.cne-export{background:#7c5cff;color:#fff;border:none;border-radius:6px;padding:5px 14px;font-weight:600;cursor:pointer}
+.cne-main{display:flex;gap:1px;background:#ffffff1a;flex:1;min-height:0}
+.cne-bin{width:252px;flex-shrink:0;background:#212123;padding:10px;overflow:auto;max-height:600px}
+.cc-tabs{display:flex;gap:2px;margin-bottom:8px;flex-wrap:wrap}
+.cc-tabs button{background:transparent;color:#a1a1a6;border:none;border-radius:5px;padding:5px 8px;cursor:pointer;font-size:12px}
+.cc-tabs button.on{background:#2b2b2e;color:#f5f5f7}
+.cc-chips{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.cc-chips button{background:#19191b;color:#a1a1a6;border:none;border-radius:99px;padding:3px 10px;font-size:11px;cursor:pointer}
+.cc-chips button.on{background:#3373d1;color:#fff}
+.cc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cc-mcard{cursor:pointer;border-radius:6px;overflow:hidden;background:#19191b;border:1px solid #ffffff1a}
+.cc-mcard img{width:100%;height:52px;object-fit:cover;display:block}
+.cc-mcard .dur{position:absolute;margin:2px;padding:1px 4px;background:#000000a0;border-radius:3px;font-size:10px;color:#fff;right:4px;bottom:20px}
+.cc-mcard .nm{padding:4px 6px;font-size:10.5px;color:#c9c9ce;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-mcard:hover{border-color:#3373d1}
+.cc-import{width:100%;background:#2b2b2e;color:#f5f5f7;border:1px solid #ffffff1a;border-radius:6px;padding:6px;font-size:12px;cursor:pointer;margin-bottom:8px}
+.cc-pane{display:flex;flex-direction:column;gap:6px}
+.cc-fxrow{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;background:#19191b;font-size:12px;color:#c9c9ce}
+.cc-fxrow:hover{background:#2b2b2e}
+.cc-fxrow .chip{margin-left:auto;font-size:9px;padding:1px 6px;border-radius:99px}
+.cc-fxrow .chip.transition{background:#24300f;color:#8fc23a}
+.cc-fxrow .chip.effect{background:#3d1913;color:#f2674f}
+.cc-fxrow .chip.filter{background:#23204a;color:#6d63e8}
+.cc-fxrow .chip.audio{background:#12301c;color:#34c46f}
+.cc-center{flex:1;min-width:0;background:#0e0e10;padding:8px 12px;display:flex;flex-direction:column}
+.cc-meta{display:flex;gap:12px;font-size:11px;color:#a1a1a6;padding:2px 2px 6px;font-family:ui-monospace,Menlo,monospace}
+.cc-preview{background:#000;border-radius:6px;overflow:hidden;display:grid;place-items:center;min-height:240px;flex:1}
+.cc-preview img{max-width:100%;max-height:400px;object-fit:contain;display:block}
+.cc-transport{display:flex;align-items:center;gap:6px;padding:8px 2px;justify-content:center}
+.cc-transport button{background:#2b2b2e;color:#f5f5f7;border:none;border-radius:5px;padding:4px 10px;cursor:pointer}
+.cc-tc{font-family:ui-monospace,Menlo,monospace;color:#f5f5f7;font-size:12.5px;letter-spacing:.5px}
+.cc-tc .total{color:#6e6e73}
+.cc-quality{color:#a1a1a6;font-size:11px;border:1px solid #ffffff1a;border-radius:5px;padding:2px 8px;cursor:default}
+.cne-insp{width:288px;flex-shrink:0;background:#212123;padding:10px;overflow:auto;max-height:600px}
+.cc-itabs{display:flex;gap:2px;margin-bottom:10px;border-bottom:1px solid #ffffff1a;padding-bottom:6px}
+.cc-itabs button{flex:1;background:transparent;color:#a1a1a6;border:none;border-radius:5px;padding:5px;cursor:pointer;font-size:12px}
+.cc-itabs button.on{background:#2b2b2e;color:#f5f5f7}
+.cne-typo{display:flex;flex-direction:column;gap:8px;font-size:12px}
+.cne-typo .tylabel{color:#a1a1a6;font-size:11px}
+.cne-typo select,.cne-typo input[type=text],.cne-typo input[type=number],.cne-typo textarea{width:100%;background:#323235;color:#f5f5f7;border:1px solid #ffffff1a;border-radius:5px;padding:5px 8px;font-size:12px;box-sizing:border-box}
+.cne-typo .tyrow{display:flex;gap:8px;align-items:center}
+.cne-typo input[type=color]{width:36px;height:26px;padding:1px;border:1px solid #ffffff1a;border-radius:4px;background:#19191b}
+.cne-typo input[type=checkbox]{accent-color:#7c5cff}
+/* 底部时间轴 */
+.cc-tl{background:#0e0e10;border-top:1px solid #ffffff1a;padding:6px 10px 10px}
+.cc-tltabs{display:flex;gap:2px;align-items:center;margin-bottom:6px}
+.cc-tltabs button{background:transparent;color:#a1a1a6;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px}
+.cc-tltabs button.on{background:#2b2b2e;color:#f5f5f7}
+.cc-tladd{color:#6e6e73;font-size:14px;padding:4px 8px;cursor:pointer}
+.cc-tools{display:flex;gap:4px;align-items:center;padding:2px 0 6px}
+.cc-tools button{background:transparent;color:#c9c9ce;border:none;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:13px}
+.cc-tools button:hover{background:#2b2b2e}
+.cc-tools button:disabled{opacity:.35;cursor:default}
+.cc-tools .sep{width:1px;height:18px;background:#ffffff1a;margin:0 4px}
+.cc-ruler{height:22px;background:#19191b;border-radius:4px;position:relative;font-family:ui-monospace,Menlo,monospace;font-size:10px;color:#6e6e73;cursor:pointer;user-select:none}
+.cc-ruler span{position:absolute;top:4px;border-left:1px solid #2b2b2e;padding-left:4px;height:100%}
+.cc-lanewrap{position:relative}
+.cc-lanerow{display:flex;align-items:stretch;gap:0;margin-top:4px}
+.cc-lanehead{width:88px;flex-shrink:0;background:#19191b;border-radius:4px;padding:4px 6px;font-size:10px;color:#a1a1a6;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.cc-lanehead .nm{color:#e8e8f0;font-size:11px}
+.cc-lanehead .ic{display:flex;gap:6px;color:#6e6e73}
+.cc-lanebody{flex:1;background:#1a1a1c;border-radius:4px;position:relative;height:46px;overflow:hidden}
+.cc-lanebody .cblock{position:absolute;top:3px;bottom:3px;border-radius:4px;overflow:hidden;cursor:pointer;font-size:10px;display:flex;align-items:center;color:#fff}
+.cc-lanebody .cblock .strip{position:absolute;left:0;top:0;right:0;height:12px;opacity:.85}
+.cc-lanebody .cblock .nm{padding:0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:calc(100% - 8px);position:absolute;top:12px}
+.cc-lanebody .cblock.video{background:#142238;border:1px solid #3373d1}
+.cc-lanebody .cblock.video .strip{background:#3373d1}
+.cc-lanebody .cblock.text{background:#321c29;border:1px solid #cf5a99}
+.cc-lanebody .cblock.text .strip{background:#cf5a99}
+.cc-lanebody .cblock.audio{background:#12301c;border:1px solid #34c46f}
+.cc-lanebody .cblock.audio .strip{background:#34c46f;height:100%;opacity:.4}
+.cc-lanebody .cblock.sel{outline:2px solid #ffffff}
+.cc-playhead{position:absolute;top:0;bottom:0;width:2px;background:#7c5cff;z-index:6;cursor:ew-resize}
+.cc-playhead::before{content:'';position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:#7c5cff}
+.cne-empty{color:#6e6e73;padding:10px;font-size:12px}
 .ed-playhead{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;box-shadow:0 0 6px rgba(255,82,82,.9);z-index:3}
 .edit-inspector{display:flex;gap:14px;flex-wrap:wrap}
 .insp-col{flex:1;min-width:230px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9)}
@@ -572,134 +579,105 @@ td.muted{color:var(--muted);font-size:12.5px}
     </div>
     </div><!-- /viewCam -->
     <div id="viewEdit" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
-      <div id="editWrap" style="display:none" class="cne">
-        <div class="cne-top">
-          <div class="cne-proj">
-            <span class="cne-logo">✂</span>
-            <select id="edProjSel" class="cne-sel" title="项目"></select>
-            <button id="edProjNew" class="cne-btn">＋ 新建</button>
-            <button id="edImportAll" class="cne-btn">导入全部视频</button>
-          </div>
-          <div class="cne-title" id="edProjName"></div>
-          <div class="cne-actions">
-            <button id="edUndo" class="cne-icon" title="撤销" disabled>↩</button>
-            <button id="edRedo" class="cne-icon" title="重做" disabled>↪</button>
-            <button id="edExport" class="cne-export" disabled>导出</button>
-          </div>
+      <div id="editWrap" style="display:none" class="cc">
+        <div class="cc-top">
+          <select id="edProjSel" class="cc-projsel" title="项目"></select>
+          <button id="edProjNew" class="cc-newbtn" title="新建项目">＋</button>
+          <span class="cc-projname" id="edProjName">ProjectOne</span><span class="cc-saved" id="edSaved">saved</span>
+          <span style="flex:1"></span>
+          <button id="edUndo" title="撤销">↩</button>
+          <button id="edRedo" title="重做">↪</button>
+          <button id="edExport" class="cc-purple" disabled>⬆ Export 导出</button>
         </div>
-        <div class="cne-body">
-          <div class="cne-bin">
-            <div class="cne-tabs">
-              <button class="cne-tab on" data-ctab="media">媒体</button>
-              <button class="cne-tab" data-ctab="text">文字</button>
-              <button class="cne-tab" data-ctab="trans">转场</button>
-              <button class="cne-tab" data-ctab="fx">特效</button>
-              <button class="cne-tab" data-ctab="filters">滤镜</button>
+        <div class="cc-main">
+          <div class="cc-bin">
+            <div class="cc-tabs">
+              <button class="on" data-bt="media">Media 媒体</button>
+              <button data-bt="text">Text 文字</button>
+              <button data-bt="trans">Trans 转场</button>
+              <button data-bt="fx">Effects 特效</button>
+              <button data-bt="filters">Filters 滤镜</button>
+              <button data-bt="templates">Templates 模板</button>
             </div>
-            <div class="cne-tabpane" data-cpane="media">
-              <div id="ccPool" class="cne-pool"></div>
+            <div class="cc-chips" id="edChips">
+              <button class="on">All</button><button>Video</button><button>Audio</button><button>Images</button>
             </div>
-            <div class="cne-tabpane" data-cpane="text" style="display:none">
-              <button id="edAddTitlePane" class="cne-btn wide">＋ 添加标题片段</button>
-              <div class="cne-hint">点击后在上层轨插入文字片段，右侧排版面板编辑样式</div>
+            <button id="edImportAll" class="cc-import">⬇ Import 导入素材</button>
+            <div class="cc-btpane" data-bp="media"><div id="ccPool" class="cc-grid"></div></div>
+            <div class="cc-btpane" data-bp="text" style="display:none">
+              <button id="edAddTitlePane" class="cc-import">＋ 添加标题片段</button>
+              <div style="color:#a1a1a6;font-size:11px;padding:6px 2px">点时间轴选中文字片段后，在右侧 Typography 编辑字体/字号/颜色/描边/阴影/背景</div>
+              <button id="edAutoCaptionSel" class="cc-import">🎙 对选中片段 AI 语音转字幕</button>
             </div>
-            <div class="cne-tabpane" data-cpane="trans" style="display:none">
-              <div id="edTransList" class="cne-list"></div>
-              <div class="cne-hint">选中片段后点转场，套用在片段切入处</div>
-            </div>
-            <div class="cne-tabpane" data-cpane="fx" style="display:none">
-              <div id="edFxList" class="cne-list"></div>
-              <div class="cne-hint">选中片段后点特效套用；强度在套用后可用关键帧动画</div>
-            </div>
-            <div class="cne-tabpane" data-cpane="filters" style="display:none">
-              <div id="edFilterList" class="cne-list"></div>
+            <div class="cc-btpane" data-bp="trans" style="display:none"><div id="edTransList" class="cc-fxlist"></div></div>
+            <div class="cc-btpane" data-bp="fx" style="display:none"><div id="edFxList" class="cc-fxlist"></div></div>
+            <div class="cc-btpane" data-bp="filters" style="display:none"><div id="edFilterList" class="cc-fxlist"></div></div>
+            <div class="cc-btpane" data-bp="templates" style="display:none"><div id="edTplList" class="cc-fxlist"><div style="color:#6e6e73;font-size:11px">本机暂无模板</div></div></div>
+          </div>
+          <div class="cc-previewcol">
+            <div class="cc-pmeta"><span>Preview</span><span id="edResMeta">—</span></div>
+            <div class="cc-pv"><img id="edPreview" alt="preview"></div>
+            <div class="cc-transport">
+              <button id="edSeekStart" title="回开头">⏮</button>
+              <button id="edPrev" title="上一帧">◀</button>
+              <button id="edNext" title="下一帧">▶</button>
+              <span class="cc-tc"><span id="edTime">00:00:00:00</span> <span class="total">/ <span id="edTotal">00:00:00:00</span></span></span>
+              <span style="flex:1"></span>
+              <span class="cc-quality">Half</span>
             </div>
           </div>
-          <div class="cne-center">
-            <div class="cne-preview-meta"><span id="edResMeta">—</span><span id="edSaveMeta" class="cne-saved"></span></div>
-            <div class="cne-preview"><img id="edPreview" alt="预览" src=""></div>
-            <div class="cne-transport">
-              <span id="edTime" class="cne-tc">00:00:00:00</span>
-              <button id="edSeekStart" class="cne-tbtn" title="回到开头">⏮</button>
-              <button id="edPrev" class="cne-tbtn" title="上一帧">◀</button>
-              <button id="edNext" class="cne-tbtn" title="下一帧">▶</button>
-              <span class="spacer"></span>
-              <span class="cne-quality">预览</span>
-            </div>
-          </div>
-          <div class="cne-insp" id="edInsp">
-            <div class="cne-insp-tabs">
-              <button class="cne-itab on" data-itab="props">属性</button>
-              <button class="cne-itab" data-itab="typo">排版</button>
-            </div>
-            <div class="cne-itabpane" data-ipane="props">
-              <div class="cne-row"><label>变速</label><input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0"></div>
-              <div class="cne-row"><label>音量</label><input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0">
-                   <label class="cne-chk"><input type="checkbox" id="edMuteChk"> 静音</label></div>
-              <div class="cne-row"><label>透明度</label><input id="edOpacity" type="number" step="0.1" min="0" max="1" placeholder="1.0">
-                   缩放 <input id="edScale" type="number" step="0.1" min="0.1" max="3" placeholder="1.0"></div>
-              <div class="cne-row"><label>旋转</label><input id="edRotation" type="number" step="5" placeholder="0">
-                   位置X <input id="edOffsetX" type="number" step="0.05" placeholder="0"> Y <input id="edOffsetY" type="number" step="0.05" placeholder="0"></div>
-              <div class="cne-row"><label>裁剪</label>L <input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="0"> R <input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="0"> T <input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="0"> B <input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="0"></div>
-              <div class="cne-row"><label>淡化</label>入 <input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0"> 出 <input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0"></div>
-              <div class="cne-row"><label>混合</label><select id="edBlend"><option value="">正常</option><option value="screen">滤色</option><option value="add">叠加</option><option value="multiply">正片叠底</option><option value="overlay">覆盖</option></select>
-                   <label class="cne-chk"><input type="checkbox" id="edFlipH"> 镜像H</label><label class="cne-chk"><input type="checkbox" id="edFlipV"> 镜像V</label></div>
-              <div class="cne-ai">
-                <button id="edStabilize" class="cne-aibtn">🧲 画面稳定</button>
-                <button id="edCutout" class="cne-aibtn">🧍 AI 抠像</button>
+          <div class="cc-insp">
+            <div class="cc-itabs"><button class="on" data-it="props">属性 Properties</button><button data-it="typo">Text 排版</button></div>
+            <div class="cc-ip" data-ip="props">
+              <div class="cc-frow"><label>变速</label><input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0"></div>
+              <div class="cc-frow"><label>音量</label><input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0"><label class="cc-chk"><input type="checkbox" id="edMuteChk"> 静音</label></div>
+              <div class="cc-frow"><label>透明度</label><input id="edOpacity" type="number" step="0.1" min="0" max="1" placeholder="1.0"><label>缩放</label><input id="edScale" type="number" step="0.1" min="0.1" max="3" placeholder="1.0"></div>
+              <div class="cc-frow"><label>旋转</label><input id="edRotation" type="number" step="5" placeholder="0"><label>位置X</label><input id="edOffsetX" type="number" step="0.05" placeholder="0"><label>Y</label><input id="edOffsetY" type="number" step="0.05" placeholder="0"></div>
+              <div class="cc-frow"><label>裁剪</label>L<input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="0"> R<input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="0"> T<input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="0"> B<input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="0"></div>
+              <div class="cc-frow"><label>淡化</label>入<input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0"> 出<input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0">
+                混合<select id="edBlend"><option value="">正常</option><option value="screen">滤色</option><option value="add">叠加</option><option value="multiply">正片叠底</option><option value="overlay">覆盖</option></select></div>
+              <div class="cc-frow"><label class="cc-chk"><input type="checkbox" id="edFlipH"> 水平镜像</label><label class="cc-chk"><input type="checkbox" id="edFlipV"> 垂直镜像</label></div>
+              <div class="cc-kfhead">关键帧（播放头处记录当前值）</div>
+              <div class="cc-kfrow">
+                <button data-kf="scale">⏺ 缩放</button><button data-kf="offsetX">⏺ 位置X</button>
+                <button data-kf="offsetY">⏺ 位置Y</button><button data-kf="rotation">⏺ 旋转</button>
+                <button data-kf="opacity">⏺ 透明度</button><button data-kf="__clear__">✕ 清除</button>
               </div>
-              <div class="cne-kf">
-                <div class="cne-kfhead">关键帧（播放头处记录）</div>
-                <div class="cne-kfbtns">
-                  <button data-kf="scale">缩放</button><button data-kf="offsetX">位置X</button>
-                  <button data-kf="offsetY">位置Y</button><button data-kf="rotation">旋转</button>
-                  <button data-kf="opacity">透明度</button><button data-kf="__clear__" class="danger">清除</button>
-                </div>
-                <button id="edApplyProps" class="cne-btn wide">应用以上属性</button>
+              <div class="cc-airow">
+                <button id="edStabilize">🧲 画面稳定</button>
+                <button id="edCutout">🧍 AI 抠像</button>
               </div>
+              <button id="edApplyProps" class="cc-apply">应用属性</button>
             </div>
-            <div class="cne-itabpane" data-ipane="typo" style="display:none">
-              <div class="cne-row"><label>文字</label><textarea id="edTextContent" rows="2"></textarea></div>
-              <div class="cne-row"><label>字体</label><input id="edFontFamily" type="text" value="PingFang SC"></div>
-              <div class="cne-row"><label>字号</label><input id="edFontSize" type="number" step="0.01" min="0.02" max="0.3" value="0.08">
-                   字重 <select id="edFontWeight"><option>400</option><option>500</option><option>700</option><option>900</option></select>
-                   斜体 <input type="checkbox" id="edItalic"></div>
-              <div class="cne-row"><label>颜色</label><input id="edColor" type="color" value="#ffffff">
-                   对齐 <select id="edAlign"><option value="center">居中</option><option value="left">左</option><option value="right">右</option></select></div>
-              <div class="cne-row"><label>描边</label><input id="edStrokeColor" type="color" value="#000000">
-                   宽 <input id="edStrokeWidth" type="number" step="0.005" min="0" max="0.05" value="0.005">
-                   阴影 <input type="checkbox" id="edShadow" checked></div>
-              <div class="cne-row"><label>背景条</label><input type="checkbox" id="edBgOn">
-                   位置Y <input id="edTitleOffsetY" type="number" step="0.05" placeholder="0.3"></div>
-              <button id="edApplyTypo" class="cne-btn wide">应用排版</button>
-              <div class="cne-sep"></div>
-              <div class="cne-row"><label>字幕</label><textarea id="edCaptions" rows="3" placeholder="1.0 2.5 第一句&#10;3.0 4.5 第二句"></textarea></div>
-              <button id="edCaptionsAdd" class="cne-btn wide">添加字幕</button>
-              <label>模型 <select id="edWhisperModel"><option value="base">base（快）</option><option value="tiny">tiny</option><option value="small">small（准）</option></select>
-                   语言 <select id="edWhisperLang"><option value="">自动</option><option value="zh">中文</option><option value="en">EN</option></select></label>
-              <button id="edAutoCaption" class="cne-aibtn wide">🎙 AI 语音转字幕</button>
-              <div id="edAutoCapStatus" class="cne-status"></div>
+            <div class="cc-ip" data-ip="typo" style="display:none">
+              <div class="cc-frow"><label>文字</label><textarea id="edTextContent" rows="2"></textarea></div>
+              <div class="cc-frow"><label>字体</label><input id="edFontFamily" type="text" value="PingFang SC"></div>
+              <div class="cc-frow"><label>字号%</label><input id="edFontSize" type="number" step="0.01" min="0.02" max="0.3" value="8"><label>字重</label><select id="edFontWeight"><option>400</option><option>500</option><option>700</option><option>900</option></select><label class="cc-chk"><input type="checkbox" id="edItalic"> 斜体</label></div>
+              <div class="cc-frow"><label>颜色</label><input id="edColor" type="color" value="#ffffff"><label>对齐</label><select id="edAlign"><option value="center">居中</option><option value="left">左</option><option value="right">右</option></select></div>
+              <div class="cc-frow"><label>描边色</label><input id="edStrokeColor" type="color" value="#000000"><label>描边宽</label><input id="edStrokeWidth" type="number" step="0.005" min="0" max="0.05" value="0.005"><label class="cc-chk"><input type="checkbox" id="edShadow" checked> 阴影</label></div>
+              <div class="cc-frow"><label class="cc-chk"><input type="checkbox" id="edBgOn"> 背景条</label></div>
+              <button id="edApplyTypo" class="cc-apply">应用排版</button>
             </div>
           </div>
         </div>
-        <div class="cne-tl">
-          <div class="cne-tl-tools">
+        <div class="cc-tl">
+          <div class="cc-tltop">
             <button id="edSplit" title="在播放头分割选中片段" disabled>✂ 分割</button>
             <button id="edDelSeg" title="删除播放头下片段" disabled>🗑 删除</button>
             <button id="edTrimHead" title="掐头到播放头" disabled>⇤ 掐头</button>
             <button id="edTrimTail" title="去尾到播放头" disabled>⇥ 去尾</button>
-            <span class="spacer"></span>
-            <span id="ccSummary" class="cne-sum"></span>
+            <button id="edFreeze" title="定格" disabled>📸</button>
+            <button id="edDetachAudio" title="音轨分离" disabled>🎵</button>
+            <span style="flex:1"></span>
+            <span id="ccSummary" class="cc-sum"></span>
           </div>
-          <div class="cne-ruler" id="edRuler"></div>
-          <div id="ccList" class="cne-lanes"></div>
+          <div class="cc-ruler" id="edRuler"></div>
+          <div id="ccList" class="cc-lanes"></div>
+          <div id="edProg" class="cc-progbar" style="display:none"><i id="ccBar"></i></div>
+          <div id="ccErrMsg" class="cc-tlerr" style="display:none"></div>
+          <div id="edAutoCapStatus" class="cc-acstatus" style="display:none"></div>
         </div>
-        <div id="edProg" class="cne-prog" style="display:none">
-          <span id="ccPhase">导出中</span>
-          <div class="bar"><i id="ccBar"></i></div>
-          <span id="ccStat"></span>
-        </div>
-        <div id="ccErrMsg" class="cne-err" style="display:none"></div>
+      </div>
       </div>
         <div id="ccList" class="timeline-strip"></div>
         <div class="edit-inspector">
@@ -3091,7 +3069,7 @@ $('edCutout').onclick=async function(){
   catch(err){uiToast('抠像失败：'+err.message+'（可能需要模型）','warn')}
 };
 /* 关键帧：at = 播放头在片段内的相对位置（0..1） */
-document.querySelector('.cne-kfbtns').addEventListener('click',async function(e){
+document.querySelector('.cc-kfrow').addEventListener('click',async function(e){
   var b=e.target.closest('[data-kf]');if(!b)return;
   var prop=b.dataset.kf;
   var c=edSelClip();if(!c)return uiToast('先选中一个片段','warn');
@@ -3130,6 +3108,12 @@ function edSyncTypo(c){
   $('edBgOn').checked=!!st.background;
   if($('edTitleOffsetY'))$('edTitleOffsetY').value=c.offsetY||'';
 }
+/* 检查器标签切换（属性/排版） */
+document.querySelector('.cc-itabs').addEventListener('click',function(e){
+  var b=e.target.closest('[data-it]');if(!b)return;
+  document.querySelectorAll('.cc-itabs button').forEach(function(x){x.classList.toggle('on',x===b)});
+  document.querySelectorAll('.cc-ip').forEach(function(p){p.style.display=p.dataset.ip===b.dataset.it?'flex':'none'});
+});
 $('edApplyTypo').onclick=async function(){
   var c=edSelClip();if(!c)return uiToast('先选中一个片段','warn');
   var style={content:$('edTextContent').value||'文字',
@@ -3214,8 +3198,8 @@ async function edLoadEffects(){
     if(fxBox){
       var video=ED_FX.filter(function(e){return e.kind==='filter'||e.kind==='effect'});
       fxBox.innerHTML=video.map(function(e){
-        return '<div class="cne-fx" data-fxapply="'+esc2(e.id)+'" title="'+esc2(e.description||'')+'"><span>'+esc2(e.category+' · '+e.name)+'</span><span class="cne-fxkind">'+esc2(e.kind)+'</span></div>';
-      }).join('')||'<div class="cne-hint">无</div>';
+        return '<div class="fxi" data-fxapply="'+esc2(e.id)+'" title="'+esc2(e.description||'')+'"><span>'+esc2(e.category+' · '+e.name)+'</span><span class="chip effect">'+esc2(e.kind)+'</span></div>';
+      }).join('')||'<div class="cc-empty">无</div>';
     }
     var count=$('edEffCount');if(count)count.textContent='('+video.length+' 视频)';
     var asel=$('edAudioFilterSel');
@@ -3234,15 +3218,15 @@ async function edLoadEffects(){
     if(fbox){
       var filts=ED_FX.filter(function(e){return e.kind==='filter'});
       fbox.innerHTML=filts.map(function(e){
-        return '<div class="cne-fx" data-filtapply="'+esc2(e.id)+'"><span>'+esc2(e.category+' · '+e.name)+'</span><span class="cne-fxkind">滤镜</span></div>';
-      }).join('')||'<div class="cne-hint">无</div>';
+        return '<div class="fxi" data-filtapply="'+esc2(e.id)+'"><span>'+esc2(e.category+' · '+e.name)+'</span><span class="chip filter">滤镜</span></div>';
+      }).join('')||'<div class="cc-empty">无</div>';
     }
     var tlist=$('edTransList');
     if(tlist){
       var trs2=ED_FX.filter(function(e){return e.kind==='transition'});
       tlist.innerHTML=trs2.map(function(e){
-        return '<div class="cne-fx" data-transapply="'+esc2(e.id)+'"><span>'+esc2(e.category+' · '+e.name)+'</span><span class="cne-fxkind">转场</span></div>';
-      }).join('')||'<div class="cne-hint">无</div>';
+        return '<div class="fxi" data-transapply="'+esc2(e.id)+'"><span>'+esc2(e.category+' · '+e.name)+'</span><span class="chip transition">转场</span></div>';
+      }).join('')||'<div class="cc-empty">无</div>';
     }
   }catch(e){}
 }
