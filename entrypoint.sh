@@ -111,4 +111,18 @@ EOF
     fi
 fi
 
+# AI 转写模型种子：镜像预置（/opt/whisper-models）首启复制进数据卷；
+# 自部署镜像没有该目录时静默跳过（faster-whisper 在线下载兜底）
+if [ -d /opt/whisper-models ]; then
+    for m in /opt/whisper-models/faster-whisper-*; do
+        [ -d "$m" ] || continue
+        dest="${STATE_DIR:-/app/state}/whisper-models/$(basename "$m")"
+        if [ ! -f "$dest/model.bin" ]; then
+            mkdir -p "$dest"
+            cp -r "$m"/. "$dest"/ 2>/dev/null || true
+            echo "[entrypoint] seeded whisper model: $(basename "$m")"
+        fi
+    done
+fi
+
 exec python3 -u /app/web_app.py

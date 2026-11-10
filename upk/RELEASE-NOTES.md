@@ -3,6 +3,32 @@
 提交新版本时复制到开发者门户的「版本更新说明」字段（上限 5000 字符）。
 粘贴前删除尚未包含在当前构建中的条目。
 
+## v1.2.0 (build 45) · 剪辑工作台 / Edit Studio
+
+zh-CN:
+
+1. 新增「剪辑工作台」顶级入口：直接从同步素材库选片进入剪辑，多轨时间轴自由排布、拆分、删除（涟漪补位）、拖拽重排与缩放
+2. AI 自动字幕：本地语音识别为视频片段生成字幕轨（内置离线模型，开箱即用，可选模型规格与语言），字幕可逐条编辑样式
+3. AI 抠像与画面稳定：一键移除纯色/绿幕背景、一键消除手持抖动
+4. 关键帧动画：对缩放、位移、旋转、不透明度、音量做关键帧插值
+5. 内置 127 种特效与转场（含转场过渡、滤镜调色、音频效果），支持特效层叠加与参数调节
+6. 文字标题排版：字体、字号、颜色、描边、阴影、对齐、逐字样式
+7. 项目管理：剪辑工程随 NAS 数据持久保存，崩溃/重启后自动恢复未保存进度
+8. 导出可选分辨率（480p-4K）与码率，输出到「剪辑成片」文件夹
+9. 视频拼接台升级：Concat 开源剪辑引擎渲染，拼接、掐头去尾精度更高（引擎离线运行）
+
+en-US:
+
+1. New top-level Edit Studio: pick media from the synced library and cut on a multi-track timeline — split, ripple delete, drag to rearrange, zoom
+2. AI auto-captions: on-device speech recognition generates an editable subtitle track (offline model bundled, model size and language selectable)
+3. AI background removal and stabilization: one-click green-screen keying and camera-shake removal
+4. Keyframe animation for scale, position, rotation, opacity and volume
+5. 127 built-in effects and transitions (video transitions, filters, audio effects) with layers and parameter controls
+6. Text titles with full typography: font, size, color, stroke, shadow, alignment and per-word styling
+7. Project management: edit projects persist on the NAS and auto-recover after crashes or restarts
+8. Export with selectable resolution (480p-4K) and bitrate into the "Edits" folder
+9. The joining studio now renders with the open-source Concat engine for more precise joins and trims (runs fully offline)
+
 ## v1.1.0 (build 43) · 素材整理与 AI 能力 / Media tools & AI
 
 zh-CN:
