@@ -104,13 +104,14 @@ def _adapt_video(eng, video):
         ver = (eng.tool('concat_version', {}, 30)['json'] or {}).get('concat', '')
     except Exception:
         ver = ''
+    # '0.2.9' → (0,2,9)：注意 9 在 patch 位（.split('.')[1] 是 minor=2，别用错）
     try:
-        minor = int((ver.split('.') + ['8', '0'])[1])
+        ver_t = tuple(int(x) for x in ver.split('.') if x.isdigit())
     except ValueError:
-        minor = 8
+        ver_t = ()
     shape = dict(video)
     fps = shape.pop('fps', None)
-    if minor >= 9:
+    if ver_t and ver_t >= (0, 2, 9):
         shape.setdefault('rateNum', max(1, round((fps or 30) * 1000)))
         shape.setdefault('rateDen', 1000)
     elif fps is not None:
