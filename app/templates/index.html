@@ -2050,7 +2050,7 @@ function openSimilar(key){
     var body=$('simBody');body.innerHTML='';
     var mk=function(rel, badge, cap){
       var c=document.createElement('div');c.className='sem-card';
-      c.innerHTML='<img loading="lazy" src="/thumb/'+encodeURIComponent(rel)+'" alt="">'+
+      c.innerHTML='<img src="/thumb/'+encodeURIComponent(rel)+'" alt="">'+
         '<div class="sem-score">'+badge+'</div><div class="sem-cap">'+(cap||rel.split('/').pop())+'</div>';
       c.onclick=function(){openPrev({id:rel,name:rel.split('/').pop(),kind:'JPG'})};
       return c;
@@ -2889,7 +2889,7 @@ function edRenderTimeline(){
       var sel=ED.sel===c.id?' sel':'';
       var cls=lane.tag==='视频'?' video':' text';
       html+='<div class="ed-clip'+cls+sel+'" data-id="'+c.id+'" style="width:'+w+'%;margin-left:'+left+'%" title="'+esc2(c.name||'')+'">'
-        +(lane.tag==='视频'&&c.id?'<img loading="lazy" src="/thumb/'+encodeURIComponent(c.id)+'" alt="">':'<span class="ed-txt">'+esc2((c.text&&c.text.content)||c.name||'文字')+'</span>')
+        +(lane.tag==='视频'&&c.id?'<img src="/thumb/'+encodeURIComponent(c.id)+'" alt="">':'<span class="ed-txt">'+esc2((c.text&&c.text.content)||c.name||'文字')+'</span>')
         +'<span class="ed-dur">'+edFmt(c.duration)+'</span></div>';
     });
     html+='</div>';
@@ -2913,7 +2913,7 @@ function edRenderPool(){
   var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'});
   box.innerHTML=vids.map(function(x){var k=pickKey(x);
     return '<div class="pool-card" data-edadd="'+esc2(k)+'" title="'+esc2(k)+'">'
-      +'<img loading="lazy" src="/thumb/'+encodeURIComponent(k)+'" alt="">'
+      +'<img src="/thumb/'+encodeURIComponent(k)+'" alt="">'
       +'<span class="add">+</span><span class="nm">'+esc2(k.split('/').pop())+'</span></div>';
   }).join('')||'<div class="muted">库里还没有视频</div>';
 }
