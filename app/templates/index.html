@@ -54,27 +54,7 @@ label{display:inline-flex;align-items:center;gap:7px;color:inherit;cursor:pointe
 .main.ed-focus{grid-template-columns:minmax(0,1fr)}
 .main.ed-focus aside.panel{display:none}
 /* ===== 剪辑工作台响应式（15 寸/小窗不拥挤） ===== */
-#editWrap{--lane-gutter:92px}
-#edRuler{margin-left:var(--lane-gutter)}
-#ccList.cc-lanes{margin-left:var(--lane-gutter)}
-.cc-lanehead{width:calc(var(--lane-gutter) - 4px)}
-.cc-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-.cc-tabs::-webkit-scrollbar{display:none}
-.cc-tabs button{white-space:nowrap}
-.cc-frow label{white-space:nowrap}
-@media (max-width:1500px){
-  .cc-bin{width:222px}
-  .cc-insp{width:272px}
-}
-@media (max-width:1280px){
-  #editWrap{--lane-gutter:78px}
-  .cc-tabs{flex-wrap:wrap;overflow:visible}
-  .cc-tabs button{padding:4px 6px;font-size:10px}
-  .cc-bin{width:198px}
-  .cc-insp{width:248px}
-  .cc-frow label{min-width:44px}
-  .cc-frow{gap:4px}
-}
+
 .panel{min-width:0;height:100%;overflow:hidden;background:rgba(255,255,255,.88);border:1px solid rgba(255,255,255,.8);border-radius:16px;box-shadow:0 16px 40px -18px rgba(31,44,67,.2),inset 0 1px 0 rgba(255,255,255,.85)}
 aside.panel{display:flex;flex-direction:column;overflow:auto}
 aside.panel h2{margin:0;padding:15px 16px 8px;border:0;font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);background:transparent}
@@ -307,7 +287,7 @@ td.muted{color:var(--muted);font-size:12.5px}
 .cne-typo input[type=color]{width:36px;height:26px;padding:1px;border:1px solid #ffffff1a;border-radius:4px;background:#19191b}
 .cne-typo input[type=checkbox]{accent-color:#7c5cff}
 /* 底部时间轴 */
-.cc-tl{background:#0e0e10;border-top:1px solid #ffffff1a;padding:6px 10px 10px}
+.cc-tl{background:#0e0e10;border-top:1px solid #ffffff1a;padding:6px 10px 10px;overflow:hidden}
 .cc-tltabs{display:flex;gap:2px;align-items:center;margin-bottom:6px}
 .cc-tltabs button{background:transparent;color:#a1a1a6;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px}
 .cc-tltabs button.on{background:#2b2b2e;color:#f5f5f7}
@@ -391,6 +371,25 @@ td.muted{color:var(--muted);font-size:12.5px}
 .pool-card.pick .pickmark{display:flex}
 .pool-card.picked .pickmark{background:#7c5cff;color:#fff}
 .pool-card .inbin{position:absolute;left:6px;top:6px;background:#173a26;color:#57d98a;font-size:9px;padding:1px 5px;border-radius:4px;z-index:2}
+#editWrap{--lane-gutter:92px}
+#edRuler{margin-left:var(--lane-gutter)}
+#ccList.cc-lanes{margin-left:var(--lane-gutter)}
+.cc-lanehead{width:calc(var(--lane-gutter) - 4px)}
+.cc-tabs{flex-wrap:wrap}
+.cc-tabs button{white-space:nowrap}
+.cc-frow label{white-space:nowrap}
+@media (max-width:1500px){
+  .cc-bin{width:222px}
+  .cc-insp{width:272px}
+}
+@media (max-width:1280px){
+  #editWrap{--lane-gutter:78px}
+  .cc-tabs button{padding:4px 6px;font-size:10px}
+  .cc-bin{width:198px}
+  .cc-insp{width:248px}
+  .cc-frow label{min-width:44px}
+  .cc-frow{gap:4px}
+}
 
 
 /* 视频片段胶片缩略图（12 帧雪碧图横向平铺） */
@@ -2895,7 +2894,7 @@ function edRenderTimeline(){
   // 标尺（每 5s 一格，HH:MM:SS:FF 帧精度，与 Concat 一致）
   var ruler=$('edRuler');
   var marks='';var step=5;
-  for(var t=0;t<=Math.ceil(total/step)*step;t+=step){var pct=t/total*100;marks+='<span style="position:absolute;left:'+pct+'%">'+edTC(t)+'</span>'}
+  for(var t=0;t<=Math.ceil(total/step)*step;t+=step){var pct=t/total*100;if(pct>100)continue;marks+='<span style="position:absolute;left:'+pct+'%">'+edTC(t)+'</span>'}
   ruler.innerHTML=marks;
   function drawClip(c,audio){
     var w=Math.max(1.2, c.duration/total*100);
