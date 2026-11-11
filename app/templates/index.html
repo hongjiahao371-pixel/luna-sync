@@ -3401,7 +3401,7 @@ $('edImportAll').onclick=function(){
   var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'&&!/^(剪辑|拼接|自动剪辑)\//.test(x.id||x)});
   if(!vids.length)return uiToast('素材库没有视频','warn');
   ED.pickMode=!ED.pickMode;ED.pickSet={};
-  $('edImportAll').textContent=ED.pickMode?'✕ 退出选择':'⬇ Import 导入素材';
+  $('edImportAll').textContent=ED.pickMode?'✕ 退出选择':'⬇ 从素材文件夹导入';
   edRenderPool();
 };
 $('edPickGo').onclick=async function(){
@@ -3413,13 +3413,13 @@ $('edPickGo').onclick=async function(){
     catch(e){}
   }
   ED.pickMode=false;ED.pickSet={};
-  $('edImportAll').textContent='⬇ Import 导入素材';
+  $('edImportAll').textContent='⬇ 从素材文件夹导入';
   edRenderPool();
   uiToast('已导入 '+ok+' 段到项目素材箱（点卡片 + 加到时间轴）');
 };
 $('edPickCancel').onclick=function(){
   ED.pickMode=false;ED.pickSet={};
-  $('edImportAll').textContent='⬇ Import 导入素材';
+  $('edImportAll').textContent='⬇ 从素材文件夹导入';
   edRenderPool();
 };
 document.querySelector('.cc-rail').addEventListener('click',function(e){
