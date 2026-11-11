@@ -361,6 +361,13 @@ td.muted{color:var(--muted);font-size:12.5px}
 .cc-progbar i{display:block;height:100%;background:#7c5cff;width:0}
 .cc-tlerr{color:#ff6b6b;font-size:11px;padding:4px 2px}
 .cc-acstatus{color:#8a8a92;font-size:11px;padding:4px 2px}
+.pool-card{position:relative}
+.pool-card.picked{outline:2px solid #7c5cff}
+.pool-card .pickmark{position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:#221f33;color:#c9c2ff;display:none;align-items:center;justify-content:center;font-size:12px;z-index:2}
+.pool-card.pick .pickmark{display:flex}
+.pool-card.picked .pickmark{background:#7c5cff;color:#fff}
+.pool-card .inbin{position:absolute;left:6px;top:6px;background:#173a26;color:#57d98a;font-size:9px;padding:1px 5px;border-radius:4px;z-index:2}
+
 
 /* 视频片段胶片缩略图（12 帧雪碧图横向平铺） */
 .cc-lanebody .cblock .film{position:absolute;inset:0;background-size:auto 100%;background-repeat:repeat-x;opacity:.9}
@@ -659,6 +666,11 @@ td.muted{color:var(--muted);font-size:12.5px}
             </div>
             <button id="edImportAll" class="cc-import">⬇ Import 导入素材</button>
             <div class="cc-btpane" data-bp="media"><div id="ccPool" class="cc-grid"></div></div>
+            <div id="edPickBar" style="display:none;gap:6px;align-items:center">
+              <span style="font-size:11px;color:#a1a1a6">已选 <b id="edPickCount">0</b> 段</span>
+              <button id="edPickGo" class="cc-purple" style="flex:1;padding:6px">导入到项目</button>
+              <button id="edPickCancel" class="cc-import" style="width:auto">取消</button>
+            </div>
             <div class="cc-btpane" data-bp="text" style="display:none">
               <button id="edAddTitlePane" class="cc-import">＋ 添加标题片段</button>
               <div style="color:#a1a1a6;font-size:11px;padding:6px 2px">点时间轴选中文字片段后，在右侧 Typography 编辑字体/字号/颜色/描边/阴影/背景</div>
@@ -2811,7 +2823,7 @@ var cs2=$('cutStart');if(cs2)cs2.onclick=async function(){var vids=localVisible(
 var cc3=$('cutClose');if(cc3)cc3.onclick=function(){$('cutOv').classList.remove('open')};
 var co3=$('cutOv');if(co3)co3.onclick=function(e){if(e.target===$('cutOv')){var f=$('cutClose');if(f)f.onclick()}};
 /* ================= 剪辑工作台（Concat 风格深色编辑器） ================= */
-var ED = {open:false, clips:[], duration:0, media:[], play:0, sel:null, proj:'', fps:30};
+var ED = {open:false, clips:[], duration:0, media:[], play:0, sel:null, proj:'', fps:30, pickMode:false, pickSet:{}};
 var ED_FX = [];
 function edFmt(s){return (parseFloat(s)||0).toFixed(1)+'s'}
 function edTC(s){s=Math.max(0,parseFloat(s)||0);var h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=Math.floor(s%60),f=Math.round((s%1)*30);return ('0'+h).slice(-2)+':'+('0'+m).slice(-2)+':'+('0'+sec).slice(-2)+':'+('0'+f).slice(-2)}
@@ -2903,9 +2915,25 @@ function edRenderTimeline(){
 function edRenderPool(){
   var box=$('ccPool');if(!box)return;
   var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'});
+  var bar=$('edPickBar');
+  if(ED.pickMode){
+    box.innerHTML=vids.map(function(x){var k=pickKey(x);
+      var on=ED.pickSet[k]?' picked':'';
+      return '<div class="pool-card pick'+on+'" data-pickkey="'+esc2(k)+'" title="'+esc2(k)+'">'
+        +'<img src="/thumb/'+encodeURIComponent(k)+'" alt="">'
+        +'<span class="pickmark">✓</span><span class="nm">'+esc2(k.split('/').pop())+'</span></div>';
+    }).join('')||'<div class="muted">库里还没有视频</div>';
+    if(bar){bar.style.display='flex';
+      var n=Object.keys(ED.pickSet).length;
+      $('edPickCount').textContent=n;$('edPickGo').disabled=!n;}
+    return;
+  }
+  if(bar)bar.style.display='none';
   box.innerHTML=vids.map(function(x){var k=pickKey(x);
-    return '<div class="pool-card" data-edadd="'+esc2(k)+'" title="'+esc2(k)+'">'
+    var inm=ED.media.some(function(m){return (m.name||'')===k.split('/').pop()});
+    return '<div class="pool-card" data-edadd="'+esc2(k)+'" title="'+esc2(k)+'（点 + 加到时间轴）">'
       +'<img src="/thumb/'+encodeURIComponent(k)+'" alt="">'
+      +(inm?'<span class="inbin">已导入</span>':'')
       +'<span class="add">+</span><span class="nm">'+esc2(k.split('/').pop())+'</span></div>';
   }).join('')||'<div class="muted">库里还没有视频</div>';
 }
@@ -2936,6 +2964,13 @@ async function edAddToTimeline(rel){
   if(st.ok)edRenderState(st);
 }
 $('ccPool').addEventListener('click',async function(e){
+  var pk=e.target.closest('[data-pickkey]');
+  if(pk){var k=pk.dataset.pickkey;
+    if(ED.pickSet[k])delete ED.pickSet[k];else ED.pickSet[k]=1;
+    pk.classList.toggle('picked',!!ED.pickSet[k]);
+    var n=Object.keys(ED.pickSet).length;
+    $('edPickCount').textContent=n;$('edPickGo').disabled=!n;
+    return;}
   var c=e.target.closest('[data-edadd]');if(!c)return;
   try{await edAddToTimeline(c.dataset.edadd)}
   catch(err){uiToast('加入失败：'+err.message,'warn')}
@@ -3317,7 +3352,8 @@ function edOpenWorkbench(){
   }).catch(function(){});
 }
 $('edProjNew').onclick=async function(){
-  var name=prompt('新项目名称：');if(!name)return;
+  var name=await uiPrompt('新项目名称', 'project-'+(Date.now()%100000), '新建剪辑项目');
+  if(!name)return;
   try{
     var d=await edSession('new', name);
     edRenderProjects(d.projects||[], d.project);
@@ -3329,17 +3365,37 @@ $('edProjSel').addEventListener('change',async function(){
   try{var d=await edSession('open', this.value);edRenderState(d);uiToast('项目已打开：'+this.value)}
   catch(e){uiToast('打开失败：'+e.message,'warn')}
 });
-$('edImportAll').onclick=async function(){
+$('edImportAll').onclick=function(){
   if(!ED.open)return uiToast('先新建或打开一个项目','warn');
   var vids=localFiles().filter(function(x){return isVid(x.kind)&&x.kind!=='LRV'&&!/^(剪辑|拼接|自动剪辑)\//.test(x.id||x)});
   if(!vids.length)return uiToast('素材库没有视频','warn');
-  var added=0;
-  for(var i=0;i<vids.length;i++){
-    try{ await edAddToTimeline(pickKey(vids[i])); added++; }
-    catch(e){/* skip */}
-  }
-  uiToast('已导入 '+added+' 段到时间轴');
+  ED.pickMode=!ED.pickMode;ED.pickSet={};
+  $('edImportAll').textContent=ED.pickMode?'✕ 退出选择':'⬇ Import 导入素材';
+  edRenderPool();
 };
+$('edPickGo').onclick=async function(){
+  var keys=Object.keys(ED.pickSet||{});
+  if(!keys.length)return;
+  var ok=0;
+  for(var i=0;i<keys.length;i++){
+    try{ await edCmd({op:'addMedia', item:{path:keys[i]}}); ok++; }
+    catch(e){}
+  }
+  ED.pickMode=false;ED.pickSet={};
+  $('edImportAll').textContent='⬇ Import 导入素材';
+  edRenderPool();
+  uiToast('已导入 '+ok+' 段到项目素材箱（点卡片 + 加到时间轴）');
+};
+$('edPickCancel').onclick=function(){
+  ED.pickMode=false;ED.pickSet={};
+  $('edImportAll').textContent='⬇ Import 导入素材';
+  edRenderPool();
+};
+async function edSession(action, name){
+  var d = await edApi('/api/editor/session', {method:'POST', body: JSON.stringify({action:action, name:name})});
+  edRenderState(d);
+  return d;
+}
 function edRenderProjects(projects, current){
   var sel=$('edProjSel');if(!sel)return;
   var base=current?String(current).split('/').pop():'';
@@ -3350,8 +3406,6 @@ function edRenderProjects(projects, current){
 var KF_PROPS = {scale:'edScale', offsetX:'edOffsetX', offsetY:'edOffsetY', rotation:'edRotation', opacity:'edOpacity'};
 $('bConcat').addEventListener('click',edOpenWorkbench);
 $('lvEdit').onclick=function(){switchTab('edit');edOpenWorkbench()};
-$('lvEdit').onclick=function(){switchTab('edit');edOpenWorkbench()};
-$('lvEdit').onclick=function(){switchTab('edit')};
 var dv2=$('cutDuration');if(dv2)dv2.value='30';
 applyLang();bindSort();markSort();poll();checkConsent();setInterval(function(){if(!document.hidden)poll()},1500);
 </script>
