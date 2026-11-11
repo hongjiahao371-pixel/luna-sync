@@ -379,6 +379,10 @@ td.muted{color:var(--muted);font-size:12.5px}
 .cc-bincount{color:#6e6e73;font-size:10px;font-weight:400}
 .cc-lanehead .ic{display:none}
 .cc-pv{flex:1;min-height:150px}
+.cc-pv{position:relative}
+.cc-pv.pv-loading::after{content:'渲染中…';position:absolute;right:10px;bottom:10px;background:rgba(20,20,26,.85);color:#c9c2ff;font-size:11px;padding:3px 10px;border-radius:99px;animation:pvpulse 1.2s ease-in-out infinite}
+@keyframes pvpulse{0%,100%{opacity:.55}50%{opacity:1}}
+
 
 #editWrap{--lane-gutter:92px}
 #edRuler{margin-left:var(--lane-gutter)}
@@ -2976,7 +2980,10 @@ function edSeek(t){
 }
 async function edPreview(){
   if(!ED.open)return;
-  var img=$('edPreview');
+  var img=$('edPreview'), box=img.parentElement;
+  if(box)box.classList.add('pv-loading');
+  img.onload=function(){ if(box)box.classList.remove('pv-loading'); };
+  img.onerror=function(){ if(box)box.classList.remove('pv-loading'); };
   img.src='/api/editor/preview?time='+ED.play.toFixed(2)+'&t='+Date.now();
 }
 async function edAddToTimeline(rel){
@@ -3258,15 +3265,34 @@ $('edUndo').onclick=async function(){
 };
 $('edExport').onclick=async function(){
   if(!ED.clips.length)return;
-  $('edProg').style.display='flex';$('ccBar').style.width='5%';
+  if(ED.exporting)return uiToast('已有导出在进行','warn');
+  ED.exporting=true;
+  $('edExport').disabled=true;
+  $('edProg').style.display='flex';$('ccBar').style.width='2%';$('ccPhase').textContent='排队中…';
   try{
     var opts={codec:($('edCodec')||{}).value||'h264'};
     if(($('edHeight')||{}).value)opts.height=parseInt($('edHeight').value,10);
-    var d=await edApi('/api/editor/export',{method:'POST',body:JSON.stringify(opts)});
-    $('ccBar').style.width='100%';$('ccPhase').textContent='成片已生成：'+d.output;
-    uiToast('成片已生成：'+d.output);
+    await edApi('/api/editor/export',{method:'POST',body:JSON.stringify(opts)});
+    for(var i=0;i<1800;i++){
+      var st=await (await fetch('/api/editor/export/status')).json();
+      $('ccBar').style.width=Math.max(2,st.pct||0)+'%';
+      $('ccPhase').textContent=(st.phase||'')+(st.pct?' '+st.pct+'%':'');
+      if(!st.running){
+        if(st.phase==='done'&&st.output){
+          $('ccBar').style.width='100%';$('ccPhase').textContent='成片已生成：'+st.output;
+          uiToast('成片已生成：'+st.output);
+        }else{
+          $('ccPhase').textContent='导出失败：'+(st.error||'未知');
+          uiToast('导出失败：'+(st.error||'未知'),'warn');
+        }
+        break;
+      }
+      await new Promise(function(r){setTimeout(r,1000)});
+    }
   }catch(err){
     $('ccPhase').textContent='导出失败：'+err.message;uiToast('导出失败：'+err.message,'warn');
+  }finally{
+    ED.exporting=false;$('edExport').disabled=!ED.clips.length;
   }
 };
 async function edLoadEffects(){

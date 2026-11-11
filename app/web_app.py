@@ -3934,39 +3934,70 @@ def api_editor_preview():
         resp.headers['Cache-Control'] = 'no-store'
         return resp
 
+EXTASK = {'running': False, 'phase': '', 'pct': 0, 'error': '', 'output': ''}
+extask_lk = threading.Lock()
+
+def _export_worker(eng, proj, args, out):
+    # 引擎导出线程：export_start -> export_status 轮询真实进度 -> 落盘剪辑/
+    try:
+        with extask_lk:
+            EXTASK.update({'running': True, 'phase': '渲染中', 'pct': 0, 'error': '', 'output': ''})
+        r = eng.tool('export_start', args, 60)
+        job = (r['json'] or {}).get('job')
+        if not job:
+            raise RuntimeError((r['text'] or 'export_failed')[:160])
+        st = {}
+        for _ in range(480):
+            st = eng.tool('export_status', {'job': job}, 60)['json'] or {}
+            frac = st.get('fraction') or 0
+            with extask_lk:
+                EXTASK['pct'] = int(min(99, float(frac) * 100))
+            if st.get('state') in ('done', 'failed', 'cancelled'):
+                break
+            time.sleep(1)
+        if st.get('state') != 'done':
+            raise RuntimeError('export_' + str(st.get('state')))
+        out_dir = safe_path(DLDIR, '剪辑')
+        os.makedirs(out_dir, exist_ok=True)
+        final = safe_path(out_dir, '剪辑-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
+        shutil.move(out, final)
+        addlog('剪辑工作台导出：' + os.path.basename(final))
+        with extask_lk:
+            EXTASK.update({'running': False, 'phase': 'done', 'pct': 100,
+                           'output': '剪辑/' + os.path.basename(final)})
+    except Exception as e:
+        log.warning('editor export: ' + str(e)[:160])
+        with extask_lk:
+            EXTASK.update({'running': False, 'phase': 'error', 'error': str(e)[:200]})
+
 @app.route('/api/editor/export', methods=['POST'])
 def api_editor_export():
     with EDIT_SESSION['lock']:
         if EDIT_SESSION['engine'] is None:
             return jsonify({'ok': False, 'error': 'no_session'}), 400
-        eng, proj = _edit_engine()
-        opts = request.json or {}
-        codec = str(opts.get('codec') or 'h264').lower()
-        if codec not in ('h264', 'hevc', 'av1'):
-            return jsonify({'ok': False, 'error': 'invalid_codec'}), 400
-        root = os.path.join(STATE_DIR, 'editor')
-        out = os.path.join(root, 'exports', 'edit-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
-        args = {'path': proj, 'output': out, 'codec': codec}
-        if opts.get('height'):
-            args['height'] = max(360, min(2160, int(opts['height'])))
-        r = eng.tool('export_start', args, 60)
-        job = (r['json'] or {}).get('job')
-        if not job:
-            return jsonify({'ok': False, 'error': (r['text'] or 'export_failed')[:160]}), 500
-    # 导出在引擎线程自跑，轮询放锁外（预览仍可用）
-    for _ in range(240):
-        st = eng.tool('export_wait', {'job': job, 'timeoutSeconds': 30}, 90)['json'] or {}
-        if st.get('state') in ('done', 'failed', 'cancelled'):
-            break
-        time.sleep(1)
-    if st.get('state') != 'done':
-        return jsonify({'ok': False, 'error': 'export_' + str(st.get('state'))}), 500
-    out_dir = safe_path(DLDIR, '剪辑')
-    os.makedirs(out_dir, exist_ok=True)
-    final = safe_path(out_dir, '剪辑-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
-    shutil.move(out, final)
-    addlog('剪辑工作台导出：' + os.path.basename(final))
-    return jsonify({'ok': True, 'output': '剪辑/' + os.path.basename(final)})
+    with extask_lk:
+        if EXTASK['running']:
+            return jsonify({'ok': False, 'error': 'already_running'}), 409
+        EXTASK.update({'running': True, 'phase': 'queued', 'pct': 0, 'error': '', 'output': ''})
+    eng, proj = _edit_engine()
+    opts = request.json or {}
+    codec = str(opts.get('codec') or 'h264').lower()
+    if codec not in ('h264', 'hevc', 'av1'):
+        with extask_lk:
+            EXTASK.update({'running': False, 'phase': 'error', 'error': 'invalid_codec'})
+        return jsonify({'ok': False, 'error': 'invalid_codec'}), 400
+    root = os.path.join(STATE_DIR, 'editor')
+    out = os.path.join(root, 'exports', 'edit-%s.mp4' % time.strftime('%Y%m%d-%H%M%S'))
+    args = {'path': proj, 'output': out, 'codec': codec}
+    if opts.get('height'):
+        args['height'] = max(360, min(2160, int(opts['height'])))
+    threading.Thread(target=_export_worker, args=(eng, proj, args, out), daemon=True).start()
+    return jsonify({'ok': True, 'started': True})
+
+@app.route('/api/editor/export/status')
+def api_editor_export_status():
+    with extask_lk:
+        return jsonify(dict(EXTASK))
 
 @app.route('/api/editor/effects')
 def api_editor_effects():
