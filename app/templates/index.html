@@ -313,6 +313,61 @@ td.muted{color:var(--muted);font-size:12.5px}
 .cc-lanebody .cblock.sel{outline:2px solid #ffffff}
 .cc-playhead{position:absolute;top:0;bottom:0;width:2px;background:#7c5cff;z-index:6;cursor:ew-resize}
 .cc-playhead::before{content:'';position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:#7c5cff}
+/* 标尺与轨道槽位对齐（lanehead 88px + gap 4px） */
+#edRuler{margin-left:92px}
+#ccList.cc-lanes{position:relative;display:flex;flex-direction:column;gap:4px;margin-left:92px;margin-top:4px;min-height:66px}
+
+/* ===== 剪辑工作台骨架布局（v3 类名配套，Concat 深色板） ===== */
+#editWrap.cc{flex-direction:column;flex:1;min-height:0;background:#131318;color:#e8e8f0;border-radius:12px;overflow:hidden}
+.cc-top{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#17171f;border-bottom:1px solid #ffffff14}
+.cc-projsel{background:#1e1e28;color:#e8e8f0;border:1px solid #2b2b36;border-radius:8px;padding:6px 10px;font-size:12px;max-width:220px}
+.cc-newbtn{background:#221f33;color:#c9c2ff;border:none;border-radius:7px;width:26px;height:26px;cursor:pointer}
+.cc-projname{font-weight:600;font-size:13px}
+.cc-saved{color:#8a8a92;font-size:11px}
+#edUndo,#edRedo{background:#1e1e28;color:#c9c9ce;border:1px solid #2b2b36;border-radius:7px;width:28px;height:28px;cursor:pointer}
+.cc-purple{background:#7c5cff;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-weight:600;cursor:pointer;font-size:12px}
+.cc-purple:disabled{opacity:.4;cursor:default}
+.cc-main{display:flex;gap:10px;padding:10px;flex:1;min-height:0}
+.cc-bin{width:252px;flex-shrink:0;background:#17171f;border-radius:10px;padding:8px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.cc-tabs{display:flex;gap:2px;flex-wrap:wrap}
+.cc-tabs button{background:transparent;border:none;color:#a1a1a6;font-size:11px;padding:5px 8px;border-radius:6px;cursor:pointer}
+.cc-tabs button.on{background:#221f33;color:#c9c2ff}
+.cc-import{background:#1e1e28;color:#c9c9ce;border:1px solid #2b2b36;border-radius:7px;padding:6px 9px;font-size:11px;cursor:pointer}
+.cc-btpane{display:flex;flex-direction:column;gap:6px;min-height:0}
+.cc-fxlist{display:flex;flex-direction:column;gap:4px;overflow:auto}
+.cc-previewcol{flex:1.5;min-width:0;min-height:0;display:flex;flex-direction:column;background:#17171f;border-radius:10px;padding:8px;gap:6px}
+.cc-pmeta{display:flex;justify-content:space-between;color:#8a8a92;font-size:11px}
+.cc-pv{background:#0c0c12;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:1;min-height:180px;overflow:hidden}
+.cc-pv img{max-width:100%;max-height:100%;object-fit:contain}
+.cc-insp{width:302px;flex-shrink:0;background:#17171f;border-radius:10px;padding:8px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.cc-ip{display:flex;flex-direction:column;gap:6px}
+.cc-frow{display:flex;gap:6px;align-items:center;font-size:11px;color:#a1a1a6;flex-wrap:wrap}
+.cc-frow label{min-width:50px}
+.cc-frow input,.cc-frow select{background:#101018;border:1px solid #2b2b36;color:#e8e8f0;border-radius:6px;padding:4px 6px;font-size:11px;min-width:0;flex:1}
+.cc-frow input[type=color]{padding:1px;height:26px;width:36px;flex:none}
+.cc-frow button{background:#1e1e28;color:#c9c9ce;border:1px solid #2b2b36;border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer}
+.cc-chk{display:flex;gap:3px;align-items:center}
+.cc-kfhead{font-size:10px;color:#6e6e73;margin-top:4px}
+.cc-kfrow{display:flex;gap:4px;flex-wrap:wrap}
+.cc-kfrow button{background:#221f33;color:#c9c2ff;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer}
+.cc-airow{display:flex;gap:6px;margin-top:4px}
+.cc-airow button{flex:1;background:#1e1e28;color:#c9c9ce;border:1px solid #2b2b36;border-radius:7px;padding:6px;font-size:11px;cursor:pointer}
+.cc-apply{background:#7c5cff;color:#fff;border:none;border-radius:8px;padding:8px;font-weight:600;cursor:pointer;margin-top:6px;font-size:12px}
+.cc-tltop{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.cc-tltop button{background:#1e1e28;color:#c9c9ce;border:1px solid #2b2b36;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer}
+.cc-tltop button:disabled{opacity:.4;cursor:default}
+.cc-sum{color:#8a8a92;font-size:11px;margin-left:8px}
+.cc-progbar{height:4px;background:#101018;border-radius:2px;margin-top:6px;overflow:hidden}
+.cc-progbar i{display:block;height:100%;background:#7c5cff;width:0}
+.cc-tlerr{color:#ff6b6b;font-size:11px;padding:4px 2px}
+.cc-acstatus{color:#8a8a92;font-size:11px;padding:4px 2px}
+
+/* 视频片段胶片缩略图（12 帧雪碧图横向平铺） */
+.cc-lanebody .cblock .film{position:absolute;inset:0;background-size:auto 100%;background-repeat:repeat-x;opacity:.9}
+.cc-lanebody .cblock .nm{z-index:1}
+.cc-lanebody .cblock.audio{background-image:repeating-linear-gradient(90deg,rgba(52,196,111,.45) 0 2px,transparent 2px 6px)}
+.cc-lanebody .cblock .fxbadge{position:absolute;right:3px;top:3px;background:#7c5cff;color:#fff;font-size:9px;line-height:1.5;padding:0 5px;border-radius:4px;z-index:2}
+.cc-lanebody .cblock.sel{outline:2px solid #b39cff;border-color:transparent}
 .cne-empty{color:#6e6e73;padding:10px;font-size:12px}
 .ed-playhead{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;box-shadow:0 0 6px rgba(255,82,82,.9);z-index:3}
 .edit-inspector{display:flex;gap:14px;flex-wrap:wrap}
@@ -583,7 +638,7 @@ td.muted{color:var(--muted);font-size:12.5px}
         <div class="cc-top">
           <select id="edProjSel" class="cc-projsel" title="项目"></select>
           <button id="edProjNew" class="cc-newbtn" title="新建项目">＋</button>
-          <span class="cc-projname" id="edProjName">ProjectOne</span><span class="cc-saved" id="edSaved">saved</span>
+          <span class="cc-projname" id="edProjName">ProjectOne</span><span class="cc-saved" id="edSaved">saved</span><span id="edState" class="cc-saved"></span>
           <span style="flex:1"></span>
           <button id="edUndo" title="撤销">↩</button>
           <button id="edRedo" title="重做">↪</button>
@@ -608,6 +663,9 @@ td.muted{color:var(--muted);font-size:12.5px}
               <button id="edAddTitlePane" class="cc-import">＋ 添加标题片段</button>
               <div style="color:#a1a1a6;font-size:11px;padding:6px 2px">点时间轴选中文字片段后，在右侧 Typography 编辑字体/字号/颜色/描边/阴影/背景</div>
               <button id="edAutoCaptionSel" class="cc-import">🎙 对选中片段 AI 语音转字幕</button>
+              <div class="cc-frow" style="padding:4px 2px"><label>模型</label><select id="edWhisperModel" style="flex:1"><option value="base">base（快）</option><option value="tiny">tiny（最快）</option><option value="small">small（更准）</option></select><label>语言</label><select id="edWhisperLang" style="flex:1"><option value="">自动</option><option value="zh">中文</option><option value="en">英语</option><option value="ja">日语</option></select></div>
+              <textarea id="edCaptions" rows="3" style="width:100%;background:#101018;border:1px solid #2b2b33;color:#e8e8f0;border-radius:6px;padding:6px;font-size:11px" placeholder="手动字幕 每行: 开始 结束 文本（秒）"></textarea>
+              <button id="edCaptionsAdd" class="cc-import">＋ 添加字幕</button>
             </div>
             <div class="cc-btpane" data-bp="trans" style="display:none"><div id="edTransList" class="cc-fxlist"></div></div>
             <div class="cc-btpane" data-bp="fx" style="display:none"><div id="edFxList" class="cc-fxlist"></div></div>
@@ -626,8 +684,8 @@ td.muted{color:var(--muted);font-size:12.5px}
               <span class="cc-quality">Half</span>
             </div>
           </div>
-          <div class="cc-insp">
-            <div class="cc-itabs"><button class="on" data-it="props">属性 Properties</button><button data-it="typo">Text 排版</button></div>
+          <div class="cc-insp" id="edInsp">
+            <div class="cc-itabs"><button class="on" data-it="props">属性 Properties</button><button data-it="typo" data-itab="typo">Text 排版</button></div>
             <div class="cc-ip" data-ip="props">
               <div class="cc-frow"><label>变速</label><input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0"></div>
               <div class="cc-frow"><label>音量</label><input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0"><label class="cc-chk"><input type="checkbox" id="edMuteChk"> 静音</label></div>
@@ -637,6 +695,7 @@ td.muted{color:var(--muted);font-size:12.5px}
               <div class="cc-frow"><label>淡化</label>入<input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0"> 出<input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0">
                 混合<select id="edBlend"><option value="">正常</option><option value="screen">滤色</option><option value="add">叠加</option><option value="multiply">正片叠底</option><option value="overlay">覆盖</option></select></div>
               <div class="cc-frow"><label class="cc-chk"><input type="checkbox" id="edFlipH"> 水平镜像</label><label class="cc-chk"><input type="checkbox" id="edFlipV"> 垂直镜像</label></div>
+              <div class="cc-frow"><label>背景色</label><input id="edBackground" type="color" value="#000000" title="时间线背景色"><label>音频滤镜</label><select id="edAudioFilterSel" style="flex:1"><option value="">无</option></select><button id="edAudioFilterApply">应用</button></div>
               <div class="cc-kfhead">关键帧（播放头处记录当前值）</div>
               <div class="cc-kfrow">
                 <button data-kf="scale">⏺ 缩放</button><button data-kf="offsetX">⏺ 位置X</button>
@@ -647,15 +706,17 @@ td.muted{color:var(--muted);font-size:12.5px}
                 <button id="edStabilize">🧲 画面稳定</button>
                 <button id="edCutout">🧍 AI 抠像</button>
               </div>
+              <div class="cc-frow"><label>导出</label><select id="edCodec"><option value="h264">H.264</option><option value="hevc">HEVC</option></select><select id="edHeight"><option value="">跟随时间线</option><option value="2160">4K</option><option value="1080">1080p</option><option value="720">720p</option></select></div>
               <button id="edApplyProps" class="cc-apply">应用属性</button>
             </div>
-            <div class="cc-ip" data-ip="typo" style="display:none">
+            <div class="cc-ip" data-ip="typo" id="edTypoCol" style="display:none">
               <div class="cc-frow"><label>文字</label><textarea id="edTextContent" rows="2"></textarea></div>
               <div class="cc-frow"><label>字体</label><input id="edFontFamily" type="text" value="PingFang SC"></div>
               <div class="cc-frow"><label>字号%</label><input id="edFontSize" type="number" step="0.01" min="0.02" max="0.3" value="8"><label>字重</label><select id="edFontWeight"><option>400</option><option>500</option><option>700</option><option>900</option></select><label class="cc-chk"><input type="checkbox" id="edItalic"> 斜体</label></div>
               <div class="cc-frow"><label>颜色</label><input id="edColor" type="color" value="#ffffff"><label>对齐</label><select id="edAlign"><option value="center">居中</option><option value="left">左</option><option value="right">右</option></select></div>
               <div class="cc-frow"><label>描边色</label><input id="edStrokeColor" type="color" value="#000000"><label>描边宽</label><input id="edStrokeWidth" type="number" step="0.005" min="0" max="0.05" value="0.005"><label class="cc-chk"><input type="checkbox" id="edShadow" checked> 阴影</label></div>
               <div class="cc-frow"><label class="cc-chk"><input type="checkbox" id="edBgOn"> 背景条</label></div>
+              <div class="cc-frow"><label>垂直偏移</label><input id="edTitleOffsetY" type="number" step="0.05" placeholder="0"></div>
               <button id="edApplyTypo" class="cc-apply">应用排版</button>
             </div>
           </div>
@@ -667,9 +728,10 @@ td.muted{color:var(--muted);font-size:12.5px}
             <button id="edTrimHead" title="掐头到播放头" disabled>⇤ 掐头</button>
             <button id="edTrimTail" title="去尾到播放头" disabled>⇥ 去尾</button>
             <button id="edFreeze" title="定格" disabled>📸</button>
+            <button id="edPiP" title="画中画（选中片段叠到上层小窗）" disabled>🖼</button>
             <button id="edDetachAudio" title="音轨分离" disabled>🎵</button>
             <span style="flex:1"></span>
-            <span id="ccSummary" class="cc-sum"></span>
+            <span id="ccPhase" class="cc-sum"></span><span id="ccSummary" class="cc-sum"></span>
           </div>
           <div class="cc-ruler" id="edRuler"></div>
           <div id="ccList" class="cc-lanes"></div>
@@ -678,74 +740,6 @@ td.muted{color:var(--muted);font-size:12.5px}
           <div id="edAutoCapStatus" class="cc-acstatus" style="display:none"></div>
         </div>
       </div>
-      </div>
-        <div id="ccList" class="timeline-strip"></div>
-        <div class="edit-inspector">
-          <div class="insp-col">
-            <h4>选中片段 · 属性</h4>
-            <label>变速 <input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0" style="width:56px;height:28px">x
-                 音量 <input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0" style="width:52px;height:28px"></label>
-            <label>透明度 <input id="edOpacity" type="number" step="0.1" min="0" max="1" placeholder="1.0" style="width:52px;height:28px">
-                 缩放 <input id="edScale" type="number" step="0.1" min="0.1" max="3" placeholder="1.0" style="width:52px;height:28px"></label>
-            <label>旋转 <input id="edRotation" type="number" step="5" placeholder="0" style="width:56px;height:28px">°
-                 位置X <input id="edOffsetX" type="number" step="0.05" placeholder="0" style="width:52px;height:28px">
-                 Y <input id="edOffsetY" type="number" step="0.05" placeholder="0" style="width:52px;height:28px"></label>
-            <label>裁剪 <input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="左" style="width:44px;height:28px">
-                 <input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="右" style="width:44px;height:28px">
-                 <input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="上" style="width:44px;height:28px">
-                 <input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="下" style="width:44px;height:28px"></label>
-            <label>淡入 <input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
-                 淡出 <input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0" style="width:48px;height:28px">s
-                 混合 <select id="edBlend" style="height:28px"><option value="">正常</option><option value="screen">screen</option><option value="add">add</option><option value="multiply">multiply</option><option value="overlay">overlay</option></select></label>
-            <label><label class="chk" style="margin:0"><input type="checkbox" id="edFlipH"> 水平镜像</label>
-                 <label class="chk" style="margin:0"><input type="checkbox" id="edFlipV"> 垂直镜像</label></label>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-              <button id="edApplyProps" class="tonal">应用属性</button>
-              <button id="edMute" class="ghost">静音</button>
-              <button id="edStabilize" class="ghost">画面稳定</button>
-              <button id="edCutout" class="ghost">AI 抠像</button>
-            </div>
-            <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(31,44,67,.15)">
-              <div class="muted" style="font-size:11px;margin-bottom:4px">关键帧（在播放头处记录当前值，形成动画）：</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <button class="ghost" data-kf="scale" title="缩放关键帧">⏺缩放</button>
-                <button class="ghost" data-kf="offsetX" title="位置X关键帧">⏺位置X</button>
-                <button class="ghost" data-kf="offsetY" title="位置Y关键帧">⏺位置Y</button>
-                <button class="ghost" data-kf="rotation" title="旋转关键帧">⏺旋转</button>
-                <button class="ghost" data-kf="opacity" title="透明度关键帧">⏺透明度</button>
-                <button class="ghost" data-kf="__clear__" title="清除全部关键帧">✕清关键帧</button>
-              </div>
-            </div>
-          </div>
-          <div class="insp-col">
-            <h4>特效 / 滤镜 <span class="muted" style="font-size:11px" id="edEffCount"></span></h4>
-            <select id="edEffectSel" style="max-width:220px;height:30px"></select>
-            <label>强度 <input id="edEffectIntensity" type="number" step="0.1" min="0" max="2" value="1" style="width:56px;height:28px"></label>
-            <button id="edEffectApply" class="tonal">套用到选中片段</button>
-          </div>
-          <div class="insp-col">
-            <h4>字幕 <span class="muted" style="font-size:11px">每行: 开始 结束 文本（秒）</span></h4>
-            <textarea id="edCaptions" rows="3" style="width:100%;font-size:12px" placeholder="1.0 2.5 第一句&#10;3.0 4.5 第二句"></textarea>
-            <button id="edCaptionsAdd" class="tonal">添加字幕</button>
-            <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(31,44,67,.08)">
-              <label>模型 <select id="edWhisperModel" style="height:28px"><option value="base">base（快）</option><option value="tiny">tiny（最快）</option><option value="small">small（更准）</option></select>
-                   语言 <select id="edWhisperLang" style="height:28px"><option value="">自动</option><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option></select></label>
-              <button id="edAutoCaption" class="primary" style="margin-top:6px;width:100%">🎙 AI 自动识别语音字幕</button>
-              <div id="edAutoCapStatus" class="muted" style="font-size:11px;margin-top:4px"></div>
-            </div>
-          </div>
-        </div>
-        <div class="edit-topbar">
-          <strong>导出</strong>
-          <label>编码 <select id="edCodec" style="height:30px"><option value="h264">H.264</option><option value="hevc">HEVC</option><option value="av1">AV1</option></select></label>
-          <label>高度 <select id="edHeight" style="height:30px"><option value="">跟随时间线</option><option value="2160">4K</option><option value="1080">1080p</option><option value="720">720p</option></select></label>
-        </div>
-        <div id="edProg" style="display:none;margin-top:10px">
-          <div style="display:flex;gap:10px;align-items:center">
-            <span id="ccPhase" class="cull-pos" style="color:var(--ink)">导出中</span>
-            <div class="bar" style="flex:1;margin-top:0"><i id="ccBar"></i></div>
-          </div>
-        </div>
       </div>
     </div>
     <!-- Local downloads view -->
@@ -2835,6 +2829,7 @@ async function edCmd(command){
 }
 function edRenderState(d){
   ED.open=true;ED.clips=d.clips||[];ED.duration=d.duration||0;ED.media=d.media||[];ED.proj=d.project||'';
+  ED_BASE2KEY=null;
   ED.clips.forEach(function(c){ if(!c.media) c.kind='text'; });
   ED.clips.forEach(function(c){var m=ED.media.find(function(x){return x.id===c.media});if(m&&!c.dur0)c.dur0=m.duration});
   $('edState').textContent='会话中 · '+(typeof ED.proj==='string'?ED.proj.split('/').pop():'');
@@ -2845,45 +2840,64 @@ function edRenderState(d){
 }
 function edClipsSorted(){return ED.clips.slice().sort(function(a,b){return a.start-b.start})}
 function edClipAt(t){var cs=edClipsSorted();for(var i=0;i<cs.length;i++){if(t>=cs[i].start&&t<cs[i].start+cs[i].duration)return cs[i]}return null}
-function edLaneOf(c){ if(c.kind==='text')return '字幕/标题'; if(c.kind==='audio')return '音频'; return '视频'; }
+var ED_BASE2KEY=null;
+function edBaseKeyMap(){
+  if(ED_BASE2KEY)return ED_BASE2KEY;
+  var m={};
+  try{localFiles().forEach(function(x){var k=pickKey(x);if(k)m[k.split('/').pop().toLowerCase()]=k});}catch(e){}
+  ED_BASE2KEY=m;return m;
+}
+function edRelOfMedia(c){
+  var m=ED.media.find(function(x){return x.id===c.media});
+  if(!m)return '';
+  return edBaseKeyMap()[(m.name||'').toLowerCase()]||'';
+}
+function edIsVid(c){return c.kind!=='text'&&c.kind!=='audio'}
 function edRenderTimeline(){
   var box=$('ccList');
   var total=Math.max(ED.duration,0.001);
-  // 标尺（每 5s 一格）
+  // 标尺（每 5s 一格，HH:MM:SS:FF 帧精度，与 Concat 一致）
   var ruler=$('edRuler');
   var marks='';var step=5;
-  for(var t=0;t<=Math.ceil(total/step)*step;t+=step){var pct=t/total*100;marks+='<span style="position:absolute;left:'+pct+'%">'+edTC(t).slice(3)+'</span>'}
+  for(var t=0;t<=Math.ceil(total/step)*step;t+=step){var pct=t/total*100;marks+='<span style="position:absolute;left:'+pct+'%">'+edTC(t)+'</span>'}
   ruler.innerHTML=marks;
-  // 轨道分组：文字片段→标题轨，视频→视频轨
-  var lanes=[{tag:'字幕/标题',pred:function(c){return c.kind==='text'}},{tag:'视频',pred:function(c){return c.kind!=='text'}}];
-  var html='';
-  lanes.forEach(function(lane){
-    var items=ED.clips.filter(lane.pred).sort(function(a,b){return a.start-b.start});
-    html+='<div class="ed-lane"><span class="lane-tag">'+lane.tag+'</span>';
-    if(!items.length){html+='<span class="lane-empty"></span>'}
-    items.forEach(function(c){
-      var w=Math.max(2.5, c.duration/total*100);
-      var left=(c.start/total*100).toFixed(2);
-      var sel=ED.sel===c.id?' sel':'';
-      var cls=lane.tag==='视频'?' video':' text';
-      html+='<div class="ed-clip'+cls+sel+'" data-id="'+c.id+'" style="width:'+w+'%;margin-left:'+left+'%" title="'+esc2(c.name||'')+'">'
-        +(lane.tag==='视频'&&c.id?'<img src="/thumb/'+encodeURIComponent(c.id)+'" alt="">':'<span class="ed-txt">'+esc2((c.text&&c.text.content)||c.name||'文字')+'</span>')
-        +'<span class="ed-dur">'+edFmt(c.duration)+'</span></div>';
-    });
-    html+='</div>';
-  });
-  // 音频轨（有音频的视频派生显示）
-  html+='<div class="ed-lane"><span class="lane-tag">音频</span>';
-  ED.clips.filter(function(c){return c.kind!=='text'}).forEach(function(c){
-    var w=Math.max(2.5, c.duration/total*100);
+  function drawClip(c,audio){
+    var w=Math.max(1.2, c.duration/total*100);
     var left=(c.start/total*100).toFixed(2);
-    html+='<div class="ed-clip audio" data-id="'+c.id+'" style="width:'+w+'%;margin-left:'+left+'%"><span class="ed-dur">'+edFmt(c.duration)+'</span></div>';
+    var sel=ED.sel===c.id?' sel':'';
+    var cls=audio?'audio':(c.kind==='text'?'text':'video');
+    var inner='<div class="strip"></div>';
+    if(cls==='video'){
+      var rel=edRelOfMedia(c);
+      if(rel)inner+='<div class="film" style="background-image:url(/sprite/'+encodeURIComponent(rel)+')"></div>';
+      inner+='<span class="nm">'+esc2(c.name||'')+'</span>';
+      if(c.videoEffects&&c.videoEffects.length)inner+='<span class="fxbadge">fx '+c.videoEffects.length+'</span>';
+    }else if(cls==='text'){
+      inner+='<span class="nm">T '+esc2((c.text&&c.text.content)||c.name||'文字')+'</span>';
+    }else{
+      inner+='<span class="nm">'+esc2(c.name||'音频')+'</span>';
+    }
+    inner+='<span class="ed-dur">'+edFmt(c.duration)+'</span>';
+    return '<div class="cblock '+cls+sel+'" data-id="'+c.id+'" style="left:'+left+'%;width:'+w+'%" title="'+esc2(c.name||'')+'">'+inner+'</div>';
+  }
+  var html='';
+  [{tag:'字幕/标题',f:function(c){return c.kind==='text'}},
+   {tag:'视频',f:edIsVid},
+   {tag:'音频',f:function(c){return c.kind==='audio'}}].forEach(function(lane){
+    var items=ED.clips.filter(lane.f).sort(function(a,b){return a.start-b.start});
+    html+='<div class="cc-lanerow"><div class="cc-lanehead"><span class="nm">'+lane.tag+'</span><span class="ic">☰ ⧉ 👁 🔇</span></div><div class="cc-lanebody">';
+    if(!items.length)html+='<div class="cne-empty">无片段</div>';
+    items.forEach(function(c){html+=drawClip(c,lane.tag==='音频')});
+    // 音频轨派生：引擎没有独立音轨片段时，按视频片段位置画派生音条
+    if(lane.tag==='音频'&&!items.length){
+      ED.clips.filter(edIsVid).forEach(function(c){html+=drawClip(c,true)});
+    }
+    html+='</div></div>';
   });
-  html+='</div>';
   box.innerHTML=html;
-  var ph=box.querySelector('.ed-playhead');
-  if(!ph){ph=document.createElement('div');ph.className='ed-playhead';box.appendChild(ph)}
-  ph.style.left=Math.min(99.6, ED.play/total*100)+'%';
+  var ph=box.querySelector('.cc-playhead');
+  if(!ph){ph=document.createElement('div');ph.className='cc-playhead';box.appendChild(ph)}
+  ph.style.left=(Math.min(1,ED.play/total)*100).toFixed(3)+'%';
   $('ccSummary').textContent=ED.clips.length+' 段 · '+edFmt(ED.duration);
 }
 function edRenderPool(){
@@ -2927,7 +2941,7 @@ $('ccPool').addEventListener('click',async function(e){
   catch(err){uiToast('加入失败：'+err.message,'warn')}
 });
 $('ccList').addEventListener('click',function(e){
-  var block=e.target.closest('.ed-clip');if(!block)return;
+  var block=e.target.closest('.cblock');if(!block)return;
   var c=ED.clips.find(function(x){return x.id===block.dataset.id});
   if(!c)return;
   ED.sel=c.id;
@@ -3146,9 +3160,9 @@ $('edCaptionsAdd').onclick=async function(){
     uiToast('已添加 '+caps.length+' 条字幕');
   }catch(err){uiToast('字幕失败：'+err.message,'warn')}
 };
-$('edAutoCaption').onclick=async function(){
+$('edAutoCaptionSel').onclick=async function(){
   var c=edSelClip();if(!c)return uiToast('先点时间轴选中一个片段','warn');
-  var btn=$('edAutoCaption');btn.disabled=true;
+  var btn=$('edAutoCaptionSel');btn.disabled=true;
   $('edAutoCapStatus').textContent='提取音频并转写中…（首次需下载模型）';
   try{
     await edApi('/api/editor/transcribe/start',{method:'POST',body:JSON.stringify({
@@ -3268,6 +3282,7 @@ $('edAudioFilterApply').onclick=async function(){
   catch(err){uiToast('音频滤镜失败：'+err.message,'warn')}
 };
 function edOpenWorkbench(){
+  $('editWrap').style.display='flex';
   closeMenus();
   switchTab('edit');
   fetch('/api/concat/engine').then(function(r){return r.json()}).then(function(d){
