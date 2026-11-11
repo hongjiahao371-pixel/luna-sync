@@ -51,6 +51,30 @@ label{display:inline-flex;align-items:center;gap:7px;color:inherit;cursor:pointe
 .actions .vdiv{margin:0 4px}
 /* ---------- layout ---------- */
 .main{display:grid;grid-template-columns:clamp(280px,22vw,316px) minmax(0,1fr);gap:14px;min-height:0;padding:14px 14px 0}
+.main.ed-focus{grid-template-columns:minmax(0,1fr)}
+.main.ed-focus aside.panel{display:none}
+/* ===== 剪辑工作台响应式（15 寸/小窗不拥挤） ===== */
+#editWrap{--lane-gutter:92px}
+#edRuler{margin-left:var(--lane-gutter)}
+#ccList.cc-lanes{margin-left:var(--lane-gutter)}
+.cc-lanehead{width:calc(var(--lane-gutter) - 4px)}
+.cc-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.cc-tabs::-webkit-scrollbar{display:none}
+.cc-tabs button{white-space:nowrap}
+.cc-frow label{white-space:nowrap}
+@media (max-width:1500px){
+  .cc-bin{width:222px}
+  .cc-insp{width:272px}
+}
+@media (max-width:1280px){
+  #editWrap{--lane-gutter:78px}
+  .cc-tabs{flex-wrap:wrap;overflow:visible}
+  .cc-tabs button{padding:4px 6px;font-size:10px}
+  .cc-bin{width:198px}
+  .cc-insp{width:248px}
+  .cc-frow label{min-width:44px}
+  .cc-frow{gap:4px}
+}
 .panel{min-width:0;height:100%;overflow:hidden;background:rgba(255,255,255,.88);border:1px solid rgba(255,255,255,.8);border-radius:16px;box-shadow:0 16px 40px -18px rgba(31,44,67,.2),inset 0 1px 0 rgba(255,255,255,.85)}
 aside.panel{display:flex;flex-direction:column;overflow:auto}
 aside.panel h2{margin:0;padding:15px 16px 8px;border:0;font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);background:transparent}
@@ -297,7 +321,7 @@ td.muted{color:var(--muted);font-size:12.5px}
 .cc-ruler span{position:absolute;top:4px;border-left:1px solid #2b2b2e;padding-left:4px;height:100%}
 .cc-lanewrap{position:relative}
 .cc-lanerow{display:flex;align-items:stretch;gap:0;margin-top:4px}
-.cc-lanehead{width:88px;flex-shrink:0;background:#19191b;border-radius:4px;padding:4px 6px;font-size:10px;color:#a1a1a6;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.cc-lanehead{flex-shrink:0;background:#19191b;border-radius:4px;padding:4px 6px;font-size:10px;color:#a1a1a6;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .cc-lanehead .nm{color:#e8e8f0;font-size:11px}
 .cc-lanehead .ic{display:flex;gap:6px;color:#6e6e73}
 .cc-lanebody{flex:1;background:#1a1a1c;border-radius:4px;position:relative;height:46px;overflow:hidden}
@@ -315,7 +339,7 @@ td.muted{color:var(--muted);font-size:12.5px}
 .cc-playhead::before{content:'';position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:#7c5cff}
 /* 标尺与轨道槽位对齐（lanehead 88px + gap 4px） */
 #edRuler{margin-left:92px}
-#ccList.cc-lanes{position:relative;display:flex;flex-direction:column;gap:4px;margin-left:92px;margin-top:4px;min-height:66px}
+#ccList.cc-lanes{position:relative;display:flex;flex-direction:column;gap:4px;margin-top:4px;min-height:66px}
 
 /* ===== 剪辑工作台骨架布局（v3 类名配套，Concat 深色板） ===== */
 #editWrap.cc{flex-direction:column;flex:1;min-height:0;background:#131318;color:#e8e8f0;border-radius:12px;overflow:hidden}
@@ -1800,7 +1824,7 @@ function renderLocalTable(list){
   });
 }
 async function delLocal(name){if(confirm(tr('deleteLocalConfirm'))){await fetch('/api/file/'+encodeURIComponent(name),{method:'DELETE'});SEL.delete(name);scan()}}
-function switchTab(t){TAB=t;$('tabCam').classList.toggle('active',t==='cam');$('tabLocal').classList.toggle('active',t==='local');$('tabEdit').classList.toggle('active',t==='edit');$('viewCam').style.display=t==='cam'?'flex':'none';$('viewLocal').style.display=t==='local'?'flex':'none';$('viewEdit').style.display=t==='edit'?'flex':'none';if(t!=='edit'&&LMODE==='edit'){LMODE='grid';var gb=$('lvGrid');if(gb)gb.classList.add('on')}renderLocal()}
+function switchTab(t){TAB=t;var mn=document.querySelector('.main');if(mn)mn.classList.toggle('ed-focus',t==='edit');$('tabCam').classList.toggle('active',t==='cam');$('tabLocal').classList.toggle('active',t==='local');$('tabEdit').classList.toggle('active',t==='edit');$('viewCam').style.display=t==='cam'?'flex':'none';$('viewLocal').style.display=t==='local'?'flex':'none';$('viewEdit').style.display=t==='edit'?'flex':'none';if(t!=='edit'&&LMODE==='edit'){LMODE='grid';var gb=$('lvGrid');if(gb)gb.classList.add('on')}renderLocal()}
 async function scan(){
   $('bScan').disabled=true;$('bScan').textContent=tr('scanning');
   try{
