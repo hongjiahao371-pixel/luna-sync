@@ -371,6 +371,15 @@ td.muted{color:var(--muted);font-size:12.5px}
 .pool-card.pick .pickmark{display:flex}
 .pool-card.picked .pickmark{background:#7c5cff;color:#fff}
 .pool-card .inbin{position:absolute;left:6px;top:6px;background:#173a26;color:#57d98a;font-size:9px;padding:1px 5px;border-radius:4px;z-index:2}
+.cc-rail{width:44px;flex-shrink:0;background:#141419;border-radius:10px;padding:6px 4px;display:flex;flex-direction:column;gap:4px;align-items:center}
+.cc-rail button{width:34px;height:34px;border:none;border-radius:8px;background:transparent;color:#a1a1a6;font-size:14px;cursor:pointer}
+.cc-rail button:hover{background:#1e1e28;color:#c9c9ce}
+.cc-rail button.on{background:#221f33;color:#c9c2ff;font-weight:600}
+.cc-binhead{display:flex;justify-content:space-between;align-items:center;color:#e8e8f0;font-size:12px;font-weight:600;padding:2px 2px 0}
+.cc-bincount{color:#6e6e73;font-size:10px;font-weight:400}
+.cc-lanehead .ic{display:none}
+.cc-pv{flex:1;min-height:150px}
+
 #editWrap{--lane-gutter:92px}
 #edRuler{margin-left:var(--lane-gutter)}
 #ccList.cc-lanes{margin-left:var(--lane-gutter)}
@@ -668,27 +677,25 @@ td.muted{color:var(--muted);font-size:12.5px}
         <div class="cc-top">
           <select id="edProjSel" class="cc-projsel" title="项目"></select>
           <button id="edProjNew" class="cc-newbtn" title="新建项目">＋</button>
-          <span class="cc-projname" id="edProjName">ProjectOne</span><span class="cc-saved" id="edSaved">saved</span><span id="edState" class="cc-saved"></span>
+          <span class="cc-projname" id="edProjName">ProjectOne</span><span class="cc-saved" id="edSaved">已保存</span><span id="edState" class="cc-saved"></span>
           <span style="flex:1"></span>
           <button id="edUndo" title="撤销">↩</button>
           <button id="edRedo" title="重做">↪</button>
-          <button id="edExport" class="cc-purple" disabled>⬆ Export 导出</button>
+          <button id="edExport" class="cc-purple" disabled>⬆ 导出成片</button>
         </div>
         <div class="cc-main">
+          <div class="cc-rail">
+            <button class="on" data-bt="media" title="媒体">媒</button>
+            <button data-bt="text" title="文字 / 字幕">字</button>
+            <button data-bt="trans" title="转场">转</button>
+            <button data-bt="fx" title="特效">效</button>
+            <button data-bt="filters" title="滤镜">滤</button>
+            <button data-bt="templates" title="模板">模</button>
+          </div>
           <div class="cc-bin">
-            <div class="cc-tabs">
-              <button class="on" data-bt="media">Media 媒体</button>
-              <button data-bt="text">Text 文字</button>
-              <button data-bt="trans">Trans 转场</button>
-              <button data-bt="fx">Effects 特效</button>
-              <button data-bt="filters">Filters 滤镜</button>
-              <button data-bt="templates">Templates 模板</button>
-            </div>
-            <div class="cc-chips" id="edChips">
-              <button class="on">All</button><button>Video</button><button>Audio</button><button>Images</button>
-            </div>
-            <button id="edImportAll" class="cc-import">⬇ Import 导入素材</button>
-            <div class="cc-btpane" data-bp="media"><div id="ccPool" class="cc-grid"></div></div>
+            <div class="cc-binhead"><span id="edBinTitle">媒体</span><span id="edBinCount" class="cc-bincount"></span></div>
+            <button id="edImportAll" class="cc-import">⬇ 从素材文件夹导入</button>
+            <div class="cc-btpane" data-bp="media" style="display:flex"><div id="ccPool" class="cc-grid"></div></div>
             <div id="edPickBar" style="display:none;gap:6px;align-items:center">
               <span style="font-size:11px;color:#a1a1a6">已选 <b id="edPickCount">0</b> 段</span>
               <button id="edPickGo" class="cc-purple" style="flex:1;padding:6px">导入到项目</button>
@@ -708,7 +715,7 @@ td.muted{color:var(--muted);font-size:12.5px}
             <div class="cc-btpane" data-bp="templates" style="display:none"><div id="edTplList" class="cc-fxlist"><div style="color:#6e6e73;font-size:11px">本机暂无模板</div></div></div>
           </div>
           <div class="cc-previewcol">
-            <div class="cc-pmeta"><span>Preview</span><span id="edResMeta">—</span></div>
+            <div class="cc-pmeta"><span>预览</span><span id="edResMeta">—</span></div>
             <div class="cc-pv"><img id="edPreview" alt="preview"></div>
             <div class="cc-transport">
               <button id="edSeekStart" title="回开头">⏮</button>
@@ -716,11 +723,11 @@ td.muted{color:var(--muted);font-size:12.5px}
               <button id="edNext" title="下一帧">▶</button>
               <span class="cc-tc"><span id="edTime">00:00:00:00</span> <span class="total">/ <span id="edTotal">00:00:00:00</span></span></span>
               <span style="flex:1"></span>
-              <span class="cc-quality">Half</span>
+              <span class="cc-quality">半分辨率</span>
             </div>
           </div>
           <div class="cc-insp" id="edInsp">
-            <div class="cc-itabs"><button class="on" data-it="props">属性 Properties</button><button data-it="typo" data-itab="typo">Text 排版</button></div>
+            <div class="cc-itabs"><button class="on" data-it="props">属性</button><button data-it="typo" data-itab="typo">排版</button></div>
             <div class="cc-ip" data-ip="props">
               <div class="cc-frow"><label>变速</label><input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0"></div>
               <div class="cc-frow"><label>音量</label><input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0"><label class="cc-chk"><input type="checkbox" id="edMuteChk"> 静音</label></div>
@@ -2920,7 +2927,7 @@ function edRenderTimeline(){
    {tag:'视频',f:edIsVid},
    {tag:'音频',f:function(c){return c.kind==='audio'}}].forEach(function(lane){
     var items=ED.clips.filter(lane.f).sort(function(a,b){return a.start-b.start});
-    html+='<div class="cc-lanerow"><div class="cc-lanehead"><span class="nm">'+lane.tag+'</span><span class="ic">☰ ⧉ 👁 🔇</span></div><div class="cc-lanebody">';
+    html+='<div class="cc-lanerow"><div class="cc-lanehead"><span class="nm">'+lane.tag+'</span></div><div class="cc-lanebody">';
     if(!items.length)html+='<div class="cne-empty">无片段</div>';
     items.forEach(function(c){html+=drawClip(c,lane.tag==='音频')});
     // 音频轨派生：引擎没有独立音轨片段时，按视频片段位置画派生音条
@@ -2952,6 +2959,7 @@ function edRenderPool(){
     return;
   }
   if(bar)bar.style.display='none';
+  var bc=$('edBinCount');if(bc)bc.textContent=vids.length+' 个';
   box.innerHTML=vids.map(function(x){var k=pickKey(x);
     var inm=ED.media.some(function(m){return (m.name||'')===k.split('/').pop()});
     return '<div class="pool-card" data-edadd="'+esc2(k)+'" title="'+esc2(k)+'（点 + 加到时间轴）">'
@@ -3414,6 +3422,14 @@ $('edPickCancel').onclick=function(){
   $('edImportAll').textContent='⬇ Import 导入素材';
   edRenderPool();
 };
+document.querySelector('.cc-rail').addEventListener('click',function(e){
+  var b=e.target.closest('[data-bt]');if(!b)return;
+  document.querySelectorAll('.cc-rail button').forEach(function(x){x.classList.toggle('on',x===b)});
+  document.querySelectorAll('.cc-btpane').forEach(function(p){p.style.display=p.dataset.bp===b.dataset.bt?'flex':'none'});
+  var names={media:'媒体',text:'文字',trans:'转场',fx:'特效',filters:'滤镜',templates:'模板'};
+  $('edBinTitle').textContent=names[b.dataset.bt]||'媒体';
+  if(b.dataset.bt==='media')edRenderPool();
+});
 async function edSession(action, name){
   var d = await edApi('/api/editor/session', {method:'POST', body: JSON.stringify({action:action, name:name})});
   edRenderState(d);
