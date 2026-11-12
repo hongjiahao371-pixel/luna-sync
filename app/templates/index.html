@@ -1252,7 +1252,7 @@ var TEXT={
     mediaLibrary:'媒体库',waitingScan:'等待扫描',incrementalBackup:'增量备份',cameraFiles:'相机文件',localDownloads:'本地已下载',
     selectAll:'全选/反选',selectMissing:'选择未下载',downloadVisible:'下载可见未下载',type:'类型',status:'状态',all:'全部',downloaded:'已下载',notDownloaded:'未下载',
     searchFiles:'搜索文件名',preview:'预览',fileName:'文件名',storage:'来源',internalStorage:'内置存储',memoryCard:'存储卡',date:'拍摄日期',size:'大小',actions:'操作',waitingCameraFiles:'等待扫描相机文件',
-    photos:'照片',videos:'视频',gridView:'网格墙',tableView:'表格',searchLocal:'搜索本地文件名',clearCache:'清除缓存',cacheTitle:'清空缩略图和转码预览缓存（不影响已下载文件）',
+    photos:'照片',videos:'视频',audioK:'音频',fileK:'文件',gridView:'网格墙',tableView:'表格',searchLocal:'搜索本地文件名',clearCache:'清除缓存',cacheTitle:'清空缩略图和转码预览缓存（不影响已下载文件）',
     noLocalFiles:'本地还没有已下载的文件',idle:'空闲',closePreview:'关闭预览',visibleMeta:'{visible} 个可见 · {tail}',lastAuto:'上次自动 {time}',autoStandby:'自动同步待命',
     libMeta:'{visible} 个可见 · {selected} 个已选',localStat:'{total} 个 · 照片 {photos} / 视频 {videos} · {size}',queuedFiles:'已加入下载队列 {count} 个',
     deleteLocal:'删除本地',deleteLocalConfirm:'删除本地副本和预览缓存?',noMatchedFiles:'没有匹配的文件',localHint:'从「相机文件」勾选并下载，已完成的会出现在这里',
@@ -1298,7 +1298,7 @@ var TEXT={
     mediaLibrary:'Media Library',waitingScan:'Waiting to scan',incrementalBackup:'Incremental backup',cameraFiles:'Camera files',localDownloads:'Local downloads',
     selectAll:'Select/invert',selectMissing:'Select missing',downloadVisible:'Download visible missing',type:'Type',status:'Status',all:'All',downloaded:'Downloaded',notDownloaded:'Not downloaded',
     searchFiles:'Search file name',preview:'Preview',fileName:'File name',storage:'Source',internalStorage:'Internal',memoryCard:'Memory card',date:'Shot date',size:'Size',actions:'Actions',waitingCameraFiles:'Waiting to scan camera files',
-    photos:'Photos',videos:'Videos',gridView:'Grid',tableView:'Table',searchLocal:'Search local files',clearCache:'Clear cache',cacheTitle:'Clear thumbnails and transcoded previews; downloaded files stay intact',
+    photos:'Photos',videos:'Videos',audioK:'Audio',fileK:'File',gridView:'Grid',tableView:'Table',searchLocal:'Search local files',clearCache:'Clear cache',cacheTitle:'Clear thumbnails and transcoded previews; downloaded files stay intact',
     noLocalFiles:'No downloaded files yet',idle:'Idle',closePreview:'Close preview',visibleMeta:'{visible} visible · {tail}',lastAuto:'last auto {time}',autoStandby:'auto sync standby',
     libMeta:'{visible} visible · {selected} selected',localStat:'{total} items · photos {photos} / videos {videos} · {size}',queuedFiles:'Added {count} files to the download queue',
     deleteLocal:'Delete local',deleteLocalConfirm:'Delete the local copy and preview cache?',noMatchedFiles:'No matching files',localHint:'Select and download items from Camera files; completed downloads will appear here',
@@ -1628,7 +1628,7 @@ function timelineCardHTML(it){
   var key=keyOf(it);
   var hasThumb=isImg(it.kind)||isVid(it.kind);
   var img=hasThumb?('<img src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" decoding="async" alt="">'):('<div class="ph">'+(isVid(it.kind)?'▶':esc(it.kind))+'</div>');
-  var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):tr('photos')))+'</span>';
+  var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):(it.kind==='AUDIO'?tr('audioK'):(isImg(it.kind)?tr('photos'):tr('fileK')))))+'</span>';
   var play=(isVid(it.kind)||it.kind==='LIV')?'<div class="play"><i>▶</i></div>':'';
   var pk=pickBadge(key);
   var tm=tagMarksHTML(it);
@@ -1799,7 +1799,7 @@ function renderWall(list){
     var hasThumb=isImg(it.kind)||isVid(it.kind);
     var img=hasThumb?('<img src="/thumb/'+encodeURIComponent(key)+'" loading="lazy" decoding="async" alt="">'):('<div class="ph">'+(isVid(it.kind)?'▶':esc(it.kind))+'</div>');
     var spr=(isVid(it.kind)&&!PICKMODE)?('<img class="sprite-pre" data-sprite="/sprite/'+encodeURIComponent(key)+'" alt="">'):'';
-    var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):tr('photos')))+'</span>';
+    var badge='<span class="badge">'+(isVid(it.kind)?tr('videos'):(it.kind==='LIV'?tr('livePhoto'):(it.kind==='AUDIO'?tr('audioK'):(isImg(it.kind)?tr('photos'):tr('fileK')))))+'</span>';
     var play=(isVid(it.kind)||it.kind==='LIV')?'<div class="play"><i>▶</i></div>':'';
     var deleteTip=esc(tr('deleteLocal'));var del='<button type="button" class="icon-btn danger-icon del" title="'+deleteTip+'" data-tip="'+deleteTip+'" aria-label="'+deleteTip+'">'+icon('trash')+'</button>';
     var pk=pickBadge(key);

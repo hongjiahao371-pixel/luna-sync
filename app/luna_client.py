@@ -43,6 +43,8 @@ def file_kind(name):
     if name.upper().startswith('LIV_'):
         return 'LIV'
     s = name.rsplit('.', 1)[-1].upper() if '.' in name else ''
+    if s in ('MP3', 'M4A', 'AAC', 'WAV', 'FLAC', 'OGG'):
+        return 'AUDIO'
     if s in ('MP4', 'LRV', 'MOV', 'JPG', 'JPEG', 'PNG', 'WEBP', 'GIF', 'LIV', 'INSP'):
         return s
     return s or 'FILE'
