@@ -395,6 +395,27 @@ td.muted{color:var(--muted);font-size:12.5px}
   .cc-bin{width:222px}
   .cc-insp{width:272px}
 }
+/* ===== 按钮符号居中 + 面板输入框布局修复 ===== */
+.cc-tltop button, .cc-top button, .cc-transport button, .cc-airow button,
+.cc-kfrow button, .cc-frow button, .cc-import, .cc-purple{
+  display:inline-flex; align-items:center; justify-content:center;
+  line-height:1; vertical-align:middle; white-space:nowrap;
+}
+.cc-tltop button svg, .cc-top button svg{flex-shrink:0}
+.cc-frow label{flex-shrink:0; white-space:nowrap}
+.cc-frow input[type="number"]{flex:0 0 58px; width:58px; min-width:58px; text-align:center}
+.crop-tag{flex:0 0 auto;min-width:0;color:#8a8a92;font-size:11px}
+.cc-frow input[type="color"]{flex:0 0 36px; width:36px}
+.cc-frow select{flex:0 1 auto; min-width:64px}
+.cc-frow .cc-chk{flex-shrink:0}
+.cc-frow{row-gap:6px}
+/* 裁剪行：L/R/T/B 小标签 + 等宽窄框 */
+.cc-frow .crop-l{flex:0 0 auto; min-width:0; color:#8a8a92; font-size:11px}
+/* 走带按钮符号居中 */
+.cc-transport button{width:34px; height:30px; padding:0}
+/* emoji 字形统一块级居中（定格/画中画/音轨） */
+.cc-tltop button{min-width:0}
+
 @media (max-width:700px){
   .cc-top{flex-wrap:wrap;row-gap:6px}
   .cc-projsel{max-width:60vw}
@@ -747,8 +768,10 @@ td.muted{color:var(--muted);font-size:12.5px}
               <div class="cc-frow"><label>变速</label><input id="edSpeed" type="number" step="0.25" min="0.25" max="4" placeholder="1.0"></div>
               <div class="cc-frow"><label>音量</label><input id="edVolume" type="number" step="0.1" min="0" max="2" placeholder="1.0"><label class="cc-chk"><input type="checkbox" id="edMuteChk"> 静音</label></div>
               <div class="cc-frow"><label>透明度</label><input id="edOpacity" type="number" step="0.1" min="0" max="1" placeholder="1.0"><label>缩放</label><input id="edScale" type="number" step="0.1" min="0.1" max="3" placeholder="1.0"></div>
-              <div class="cc-frow"><label>旋转</label><input id="edRotation" type="number" step="5" placeholder="0"><label>位置X</label><input id="edOffsetX" type="number" step="0.05" placeholder="0"><label>Y</label><input id="edOffsetY" type="number" step="0.05" placeholder="0"></div>
-              <div class="cc-frow"><label>裁剪</label>L<input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="0"> R<input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="0"> T<input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="0"> B<input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="0"></div>
+              <div class="cc-frow"><label>旋转</label><input id="edRotation" type="number" step="5" placeholder="0"></div>
+              <div class="cc-frow"><label>位置X</label><input id="edOffsetX" type="number" step="0.05" placeholder="0"><label>Y</label><input id="edOffsetY" type="number" step="0.05" placeholder="0"></div>
+              <div class="cc-frow"><label>裁剪</label><span class="crop-tag">L</span><input id="edCropL" type="number" step="0.05" min="0" max="0.9" placeholder="0"><span class="crop-tag">R</span><input id="edCropR" type="number" step="0.05" min="0" max="0.9" placeholder="0"></div>
+              <div class="cc-frow"><label>　</label><span class="crop-tag">T</span><input id="edCropT" type="number" step="0.05" min="0" max="0.9" placeholder="0"><span class="crop-tag">B</span><input id="edCropB" type="number" step="0.05" min="0" max="0.9" placeholder="0"></div>
               <div class="cc-frow"><label>淡化</label>入<input id="edFadeIn" type="number" step="0.2" min="0" placeholder="0"> 出<input id="edFadeOut" type="number" step="0.2" min="0" placeholder="0">
                 混合<select id="edBlend"><option value="">正常</option><option value="screen">滤色</option><option value="add">叠加</option><option value="multiply">正片叠底</option><option value="overlay">覆盖</option></select></div>
               <div class="cc-frow"><label class="cc-chk"><input type="checkbox" id="edFlipH"> 水平镜像</label><label class="cc-chk"><input type="checkbox" id="edFlipV"> 垂直镜像</label></div>
@@ -784,9 +807,9 @@ td.muted{color:var(--muted);font-size:12.5px}
             <button id="edDelSeg" title="删除播放头下片段" disabled>🗑 删除</button>
             <button id="edTrimHead" title="掐头到播放头" disabled>⇤ 掐头</button>
             <button id="edTrimTail" title="去尾到播放头" disabled>⇥ 去尾</button>
-            <button id="edFreeze" title="定格" disabled>📸</button>
-            <button id="edPiP" title="画中画（选中片段叠到上层小窗）" disabled>🖼</button>
-            <button id="edDetachAudio" title="音轨分离" disabled>🎵</button>
+            <button id="edFreeze" title="定格" disabled>◎ 定格</button>
+            <button id="edPiP" title="画中画（选中片段叠到上层小窗）" disabled>⊞ 画中画</button>
+            <button id="edDetachAudio" title="音轨分离" disabled>♪ 音轨</button>
             <span style="flex:1"></span>
             <span id="ccPhase" class="cc-sum"></span><span id="ccSummary" class="cc-sum"></span>
           </div>
