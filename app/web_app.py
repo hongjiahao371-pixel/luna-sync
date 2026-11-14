@@ -3943,7 +3943,7 @@ def api_editor_preview():
         resp.headers['Cache-Control'] = 'no-store'
         return resp
 
-EXTASK = {'running': False, 'phase': '', 'pct': 0, 'error': '', 'output': ''}
+EXTASK = {'running': False, 'phase': '', 'pct': 0, 'error': '', 'output': '', 'engine_error': ''}
 extask_lk = threading.Lock()
 
 def _export_worker(eng, proj, args, out):
