@@ -2969,17 +2969,26 @@ def _sem_caption_for(rel):
             os.remove(SEM_TMP_IMG)
     b64 = base64.b64encode(buf.getvalue()).decode()
     enabled, v_url, v_model, e_url, e_model = _sem_cfg()
-    j = run(['curl', '-s', '--max-time', '60', '-X', 'POST', v_url.rstrip('/') + '/v1/chat/completions',
+    # base64 载荷走临时文件（作为 curl 命令行参数会超 Linux 单参数 128KB 上限 → E2BIG 静默失败）
+    payload = json.dumps({
+        'model': v_model, 'temperature': 0, 'max_tokens': 120,
+        'messages': [
+            {'role': 'system', 'content': '用一句中文描述照片或视频画面的内容（场景/主体/动作/光线），不超过40字，直接给出描述。'},
+            {'role': 'user', 'content': [
+                {'type': 'text', 'text': '描述这张图片'},
+                {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + b64}},
+            ]},
+        ]})
+    req_path = os.path.join(SEM_DIR, 'sem_req.json')
+    with open(req_path, 'w') as pf:
+        pf.write(payload)
+    j = run(['curl', '-s', '--max-time', '120', '-X', 'POST', v_url.rstrip('/') + '/v1/chat/completions',
              '-H', 'Content-Type: application/json',
-             '-d', json.dumps({
-                 'model': v_model, 'temperature': 0, 'max_tokens': 120,
-                 'messages': [
-                     {'role': 'system', 'content': '用一句中文描述照片或视频画面的内容（场景/主体/动作/光线），不超过40字，直接给出描述。'},
-                     {'role': 'user', 'content': [
-                         {'type': 'text', 'text': '描述这张图片'},
-                         {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + b64}},
-                     ]},
-                 ]})], 90)
+             '-d', '@' + req_path], 150)
+    try:
+        os.remove(req_path)
+    except OSError:
+        pass
     try:
         data = json.loads(j.stdout)
         caption = data['choices'][0]['message']['content'].strip()
