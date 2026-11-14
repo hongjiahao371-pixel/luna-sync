@@ -361,7 +361,10 @@ td.muted{color:var(--muted);font-size:12.5px}
 .cc-tltop button{background:#1e1e28;color:#c9c9ce;border:1px solid #2b2b36;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer}
 .cc-tltop button:disabled{opacity:.4;cursor:default}
 .cc-sum{color:#8a8a92;font-size:11px;margin-left:8px}
-.cc-progbar{height:4px;background:#101018;border-radius:2px;margin-top:6px;overflow:hidden}
+/* 导出进行中醒目反馈 */
+.cc-progbar{height:10px;background:#101018;border-radius:5px;margin-top:8px;overflow:hidden;border:1px solid #2b2b36}
+.cc-progbar i{display:block;height:100%;background:linear-gradient(90deg,#7c5cff,#9d85ff);width:0;transition:width .8s}
+.cc-phase-busy{background:#221f33;color:#c9c2ff;border:1px solid #7c5cff55;border-radius:6px;padding:4px 12px;font-size:12px}
 .cc-progbar i{display:block;height:100%;background:#7c5cff;width:0}
 .cc-tlerr{color:#ff6b6b;font-size:11px;padding:4px 2px}
 .cc-acstatus{color:#8a8a92;font-size:11px;padding:4px 2px}
@@ -751,7 +754,7 @@ td.muted{color:var(--muted);font-size:12.5px}
             <div class="cc-btpane" data-bp="templates" style="display:none"><div id="edTplList" class="cc-fxlist"><div style="color:#6e6e73;font-size:11px">本机暂无模板</div></div></div>
           </div>
           <div class="cc-previewcol">
-            <div class="cc-pmeta"><span>预览</span><span id="edResMeta">—</span></div>
+            <div class="cc-pmeta"><span>预览</span><span id="ccPhase" class="cc-phase-busy" style="display:none"></span><span id="edResMeta">—</span></div>
             <div class="cc-pv"><img id="edPreview" alt="preview"></div>
             <div class="cc-transport">
               <button id="edSeekStart" title="回开头">⏮</button>
@@ -761,6 +764,7 @@ td.muted{color:var(--muted);font-size:12.5px}
               <span style="flex:1"></span>
               <span class="cc-quality">半分辨率</span>
             </div>
+            <div id="edProg" class="cc-progbar" style="display:none"><i id="ccBar"></i></div>
           </div>
           <div class="cc-insp" id="edInsp">
             <div class="cc-itabs"><button class="on" data-it="props">属性</button><button data-it="typo" data-itab="typo">排版</button></div>
@@ -811,11 +815,10 @@ td.muted{color:var(--muted);font-size:12.5px}
             <button id="edPiP" title="画中画（选中片段叠到上层小窗）" disabled>⊞ 画中画</button>
             <button id="edDetachAudio" title="音轨分离" disabled>♪ 音轨</button>
             <span style="flex:1"></span>
-            <span id="ccPhase" class="cc-sum"></span><span id="ccSummary" class="cc-sum"></span>
+            <span id="ccSummary" class="cc-sum"></span>
           </div>
           <div class="cc-ruler" id="edRuler"></div>
           <div id="ccList" class="cc-lanes"></div>
-          <div id="edProg" class="cc-progbar" style="display:none"><i id="ccBar"></i></div>
           <div id="ccErrMsg" class="cc-tlerr" style="display:none"></div>
           <div id="edAutoCapStatus" class="cc-acstatus" style="display:none"></div>
         </div>
@@ -3302,6 +3305,7 @@ $('edExport').onclick=async function(){
   if(ED.exporting)return uiToast('已有导出在进行','warn');
   ED.exporting=true;
   $('edExport').disabled=true;
+  $('edExport').textContent='⏳ 渲染中…';
   $('edProg').style.display='flex';$('ccBar').style.width='2%';$('ccPhase').textContent='排队中…';
   try{
     var opts={codec:($('edCodec')||{}).value||'h264'};
@@ -3326,7 +3330,7 @@ $('edExport').onclick=async function(){
   }catch(err){
     $('ccPhase').textContent='导出失败：'+err.message;uiToast('导出失败：'+err.message,'warn');
   }finally{
-    ED.exporting=false;$('edExport').disabled=!ED.clips.length;
+    ED.exporting=false;$('edExport').disabled=!ED.clips.length;$('edExport').textContent='⬆ 导出成片';
   }
 };
 async function edLoadEffects(){
