@@ -7,7 +7,7 @@ from werkzeug.exceptions import HTTPException
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import luna_client
 from concat_engine import ConcatEngine, detect_engine, run_concat_job
-from luna_client import LunaClient, file_kind, _timestamp_from_name
+from luna_client import LunaClient, file_kind
 from downloader import download_file
 import wifi
 try:
@@ -576,19 +576,6 @@ def try_connect(ssid, pw):
         addlog('连接 ' + ssid + ' 失败' + detail)
     return ok
 
-def _restore_capture_mtime(dest, name=None):
-    """下载完成后把文件名里的拍摄时间写回 mtime/atime，
-    让文件管理器与外部工具按修改时间排序时等于拍摄时间。
-    文件名无时间戳（如重命名过的文件）则不动。"""
-    try:
-        base = os.path.basename(dest) if not name else name
-        cap = _timestamp_from_name(base)
-        if cap:
-            ts = time.mktime(cap.timetuple())
-            os.utime(dest, (ts, ts))
-    except OSError:
-        pass
-
 def trigger_auto_sync_check(reason):
     if not privacy_accepted():
         return
@@ -960,7 +947,6 @@ def dl_worker():
             expected_size = f.get('bytes') if f.get('bytes_exact') else None
             download_file(f['url'], dest, on_progress=prog, cancel=cancel,
                           expected_size=expected_size)
-            _restore_capture_mtime(dest, name)
             with lk:
                 ST['completed'] += 1
             addlog('完成 ' + name)
@@ -994,7 +980,6 @@ def transcode_worker(name):
             item = file_info(name)
             expected_size = item.get('bytes') if item and item.get('bytes_exact') else None
             download_file(url, src_file, expected_size=expected_size)
-            _restore_capture_mtime(src_file, name)
         with lk: ST['transcodes'][name] = {'status': 'encoding'}
         r = run([
             'ffmpeg', '-y', '-i', src_file, '-c:v', 'libx264', '-preset', 'veryfast',
