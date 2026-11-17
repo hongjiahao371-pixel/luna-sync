@@ -201,3 +201,60 @@ class ConcatTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class EngineArchGuardTests(unittest.TestCase):
+    """detect_engine 架构守卫：错架构 ELF 跳过、脚本放行、未知主机不拦。"""
+
+    def _load(self):
+        spec = importlib.util.spec_from_file_location(
+            'concat_engine_guard', os.path.join(REPO, 'app', 'concat_engine.py'))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_mismatched_elf_skipped(self):
+        mod = self._load()
+        with tempfile.TemporaryDirectory() as d:
+            cand = os.path.join(d, 'concat')
+            # 最小合法 ELF 头：e_machine 按 host 取"非本机"值
+            host = mod._host_elf_machine()
+            other = 183 if host == 62 else 62
+            head = b'\x7fELF\x02\x01\x01\x00' + b'\x00' * 8
+            head += (3).to_bytes(2, 'little') + other.to_bytes(2, 'little') + b'\x00' * 8
+            with open(cand, 'wb') as f:
+                f.write(head + b'\x00' * 16)
+            os.chmod(cand, 0o755)
+            # 隔离内置候选与 which：错架构候选被跳过后应干净返回 None
+            orig_cands, orig_which = mod.ENGINE_CANDIDATES, mod.shutil.which
+            mod.ENGINE_CANDIDATES = []
+            mod.shutil.which = lambda name: None
+            try:
+                self.assertIsNone(mod.detect_engine(cand))
+            finally:
+                mod.ENGINE_CANDIDATES = orig_cands
+                mod.shutil.which = orig_which
+
+    def test_script_candidate_passes(self):
+        mod = self._load()
+        with tempfile.TemporaryDirectory() as d:
+            cand = os.path.join(d, 'concat')
+            with open(cand, 'w') as f:
+                f.write('#!/bin/sh\nexec true\n')
+            os.chmod(cand, 0o755)
+            # 脚本（非 ELF）不做架构判断 → 直接返回该候选
+            self.assertEqual(mod.detect_engine(cand), cand)
+
+    def test_matching_elf_passes(self):
+        mod = self._load()
+        with tempfile.TemporaryDirectory() as d:
+            cand = os.path.join(d, 'concat')
+            host = mod._host_elf_machine()
+            if host is None:
+                self.skipTest('unknown host arch')
+            head = b'\x7fELF\x02\x01\x01\x00' + b'\x00' * 8
+            head += (3).to_bytes(2, 'little') + host.to_bytes(2, 'little') + b'\x00' * 8
+            with open(cand, 'wb') as f:
+                f.write(head + b'\x00' * 16)
+            os.chmod(cand, 0o755)
+            self.assertEqual(mod.detect_engine(cand), cand)

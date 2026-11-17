@@ -10,11 +10,14 @@
 沙箱：无头模式只写 CONCAT_MCP_ROOTS 列出的目录，项目/导出/素材都必须在其中。
 """
 import json
+import logging
 import os
 import shutil
 import subprocess
 import threading
 import time
+
+log = logging.getLogger('luna.concat')
 
 ENGINE_CANDIDATES = [
     '/Applications/Concat.app/Contents/MacOS/concat',   # macOS
@@ -89,9 +92,34 @@ class ConcatEngine:
             except Exception:
                 pass
 
+def _elf_machine(path):
+    """读 ELF 头 e_machine；非 ELF（脚本/文本）返回 None。0x3E=x86_64，0xB7=AArch64。"""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(20)
+        if head[:4] != b'\x7fELF' or len(head) < 20:
+            return None
+        import struct
+        return struct.unpack_from('<H', head, 18)[0]
+    except Exception:
+        return None
+
+
+def _host_elf_machine():
+    import platform
+    return {'x86_64': 62, 'amd64': 62, 'aarch64': 183, 'arm64': 183}.get(platform.machine().lower())
+
+
 def detect_engine(explicit=None):
+    host_mach = _host_elf_machine()
     for cand in ([explicit] if explicit else []) + ENGINE_CANDIDATES:
         if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
+            # 架构守卫：错架构的引擎二进制 spawn 即死（Exec format error），
+            # 会让拼接误入兜底、编辑会话报含糊错误——直接跳过给出干净失败。
+            mach = _elf_machine(cand)
+            if mach is not None and host_mach is not None and mach != host_mach:
+                log.warning('concat engine arch mismatch, skipped: %s' % cand)
+                continue
             return cand
     which = shutil.which('concat')
     return which
